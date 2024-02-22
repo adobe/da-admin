@@ -26,7 +26,7 @@ export async function setUser(userId, expiration, headers, env) {
 }
 
 export async function getUsers(req, env) {
-  const authHeader = req.headers?.get('authorization');
+  const authHeader = req?.headers?.get('authorization');
   if (!authHeader) return [{ email: 'anonymous' }];
 
   async function parseUser(token) {

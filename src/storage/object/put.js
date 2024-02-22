@@ -28,11 +28,15 @@ function getObjectBody(data) {
 }
 
 function buildInput({
-  org, key, body, type,
+  org, key, body, type, contentLength,
 }) {
   const Bucket = `${org}-content`;
   return {
-    Bucket, Key: key, Body: body, ContentType: type,
+    Bucket,
+    Key: key,
+    Body: body,
+    ContentType: type,
+    ContentLength: contentLength,
   };
 }
 
@@ -64,11 +68,44 @@ export default async function putObject(env, daCtx, obj) {
 
   if (obj) {
     if (obj.data) {
-      const isFile = obj.data instanceof File;
-      const { body, type } = isFile ? await getFileBody(obj.data) : getObjectBody(obj.data);
-      inputs.push(buildInput({
-        org, key, body, type,
-      }));
+      if (obj.data instanceof File) {
+        const { body, type } = await getFileBody(obj.data);
+        inputs.push(
+          buildInput({
+            org, key, body, type,
+          }),
+        );
+      } else if (obj.contentType) {
+        inputs.push(
+          buildInput(
+            {
+              org,
+              key,
+              body: obj.data,
+              type: obj.contentType,
+              contentLength: obj.data.length,
+            },
+          ),
+        );
+      } else {
+        const { body, type } = getObjectBody(obj.data);
+        inputs.push(
+          buildInput({
+            org, key, body, type,
+          }),
+        );
+      }
+    }
+    if (obj.stream) {
+      inputs.push(
+        buildInput({
+          org,
+          key,
+          body: obj.stream,
+          type: obj.contentType,
+          contentLength: obj.contentLength,
+        }),
+      );
     }
     if (obj.props) {
       const { body, type } = getObjectBody(obj.props);

@@ -14,11 +14,16 @@ import { getUsers, isAuthorized } from './auth.js';
 
 /**
  * Gets Dark Alley Context
- * @param {pathname} pathname
+ * @param {Request} req The request object.
+ * @param {Object} env The DA environment object.
+ * @param {pathname} pathname if different than the pathanem of req.url
  * @returns {DaCtx} The Dark Alley Context.
  */
-export default async function getDaCtx(req, env) {
-  const { pathname } = new URL(req.url);
+export default async function getDaCtx(req, env, pathname = '') {
+  if (!pathname) {
+    // eslint-disable-next-line no-param-reassign
+    pathname = new URL(req.url).pathname;
+  }
 
   const users = await getUsers(req, env);
 

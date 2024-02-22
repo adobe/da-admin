@@ -50,6 +50,10 @@ function getFormEntries(formData) {
     entries.props = JSON.parse(formData.get('props'));
   }
 
+  if (formData.get('file')) {
+    entries.file = formData.get('file');
+  }
+
   return entries;
 }
 

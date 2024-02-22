@@ -1,6 +1,7 @@
 name = "da-admin"
 main = "src/index.js"
 compatibility_date = "2023-10-30"
+node_compat = true
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "d6217b7c63ef40889583ba5c080c3908" },

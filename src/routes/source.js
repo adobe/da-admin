@@ -14,12 +14,16 @@ import putObject from '../storage/object/put.js';
 import deleteObject from '../storage/object/delete.js';
 
 import putHelper from '../helpers/source.js';
+import putDocx2HTML from '../word/daDocx2HTML.js';
 
 export async function deleteSource({ env, daCtx }) {
   return deleteObject(env, daCtx);
 }
 
 export async function postSource({ req, env, daCtx }) {
+  if (daCtx.ext === 'docx') {
+    return putDocx2HTML(req, env, daCtx);
+  }
   const obj = await putHelper(req, env, daCtx);
   return putObject(env, daCtx, obj);
 }
