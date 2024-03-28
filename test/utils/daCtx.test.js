@@ -12,6 +12,18 @@ const getDaCtx = await esmock(
 );
 
 describe('Dark Alley context', () => {
+  describe('API context', async () => {
+    let daCtx;
+
+    before(async () => {
+      daCtx = await getDaCtx(reqs.api, env);
+    });
+
+    it('should remove api from path name', () => {
+      assert.strictEqual(daCtx.api, 'source');
+    });
+  });
+
   describe('Org context', async () => {
     let daCtx;
 

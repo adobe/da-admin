@@ -18,7 +18,9 @@ import { getUsers, isAuthorized } from './auth.js';
  * @returns {DaCtx} The Dark Alley Context.
  */
 export default async function getDaCtx(req, env) {
-  const { pathname } = new URL(req.url);
+  let { pathname } = new URL(req.url);
+  // Remove proxied api route
+  if (pathname.startsWith('/api')) pathname = pathname.replace('/api', '');
 
   const users = await getUsers(req, env);
 

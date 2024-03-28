@@ -45,6 +45,7 @@ const optsWithForceFail = {
 };
 
 const reqs = {
+  api: new Request('https://da.live/api/source/cq/', optsWithEmptyHead),
   org: new Request('https://da.live/source/cq/', optsWithEmptyHead),
   site: new Request('https://da.live/source/cq/Geometrixx', optsWithAuth),
   folder: new Request('https://da.live/source/cq/Geometrixx/NFT/', optsWithExpAuth),
