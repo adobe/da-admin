@@ -11,7 +11,7 @@
  */
 export default function daResp({
   status,
-  body = '',
+  body,
   contentType = 'application/json',
   contentLength,
 }) {

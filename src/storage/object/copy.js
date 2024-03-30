@@ -39,10 +39,6 @@ const copyFile = async (client, org, sourceKey, details) => {
     // eslint-disable-next-line no-console
     console.log(e.$metadata);
   }
-
-  // const delCommand = new DeleteObjectCommand({ Bucket: `${org}-content`, Key: sourceKey });
-  // const url = await getSignedUrl(client, delCommand, { expiresIn: 3600 });
-  // await fetch(url, { method: 'DELETE' });
 };
 
 export default async function copyObject(env, daCtx, details) {
@@ -78,5 +74,5 @@ export default async function copyObject(env, daCtx, details) {
     }
   } while (ContinuationToken);
 
-  return { body: '', status: 204 };
+  return { status: 204 };
 }

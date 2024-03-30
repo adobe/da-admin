@@ -11,12 +11,14 @@
  */
 import { postSource } from '../routes/source.js';
 import { postConfig } from '../routes/config.js';
+import copyHandler from '../routes/copy.js';
 
 export default async function postHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
   if (path.startsWith('/source')) return postSource({ req, env, daCtx });
   if (path.startsWith('/config')) return postConfig({ req, env, daCtx });
+  if (path.startsWith('/copy')) return copyHandler({ req, env, daCtx });
 
   return undefined;
 }
