@@ -42,7 +42,7 @@ export default {
         respObj = await postHandler({ req, env, daCtx });
         break;
       case 'DELETE':
-        respObj = await deleteHandler({ env, daCtx });
+        respObj = await deleteHandler({ req, env, daCtx });
         break;
       default:
         respObj = unkownHandler();
