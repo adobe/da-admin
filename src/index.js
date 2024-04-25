@@ -14,6 +14,7 @@ import daResp from './utils/daResp.js';
 
 import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
+import patchHandler from './handlers/patch.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
 import unkownHandler from './handlers/unkown.js';
@@ -43,6 +44,9 @@ export default {
         break;
       case 'DELETE':
         respObj = await deleteHandler({ env, daCtx });
+        break;
+      case 'PATCH':
+        respObj = await patchHandler({ req, env, daCtx });
         break;
       default:
         respObj = unkownHandler();
