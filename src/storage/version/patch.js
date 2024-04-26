@@ -9,37 +9,41 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-
+import getS3Config from '../utils/config.js';
 import getObject from '../object/get.js';
-import listObjects from '../object/list.js';
-import putObject from '../object/put.js';
+import { putVersion } from './put.js';
 
+function buildInput({
+  org, key, body, type,
+}) {
+  const Bucket = `${org}-content`;
+  return {
+    Bucket, Key: key, Body: body, ContentType: type,
+  };
+}
+
+// Currently only patches the display name into the version
 export async function patchObjectVersion(req, env, daCtx) {
-  const { org, key } = daCtx;
   const rb = await req.json();
 
-  const current = await getObject(env, { org, key }, true);
-  if (current.status === 404 || !current.metadata.id) {
+  const config = getS3Config(env);
+  const update = buildInput(daCtx);
+  const current = await getObject(env, daCtx);
+  if (current.status === 404 || !current.metadata?.id || !current.metadata?.version) {
     return 404;
   }
-  const resp = await listObjects(env, { org, key: `.da-versions/${current.metadata.id}` });
-  const json = JSON.parse(resp.body);
-
-  for (const entry of json) {
-    const entryURL = `/versionsource/${org}/${current.metadata.id}/${entry.name}.${entry.ext}`;
-    if (entryURL === rb.url) {
-      // Found the version entry that matches
-      const versionObj = await getObject(env, {
-        org,
-        key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
-      }, true);
-
-      // Update it with the display name (the only thing that can be patched)
-      // and store it
-      versionObj.metadata.displayName = rb.displayName;
-      return putObject(env, daCtx, versionObj);
-    }
-  }
-
-  return 404;
+  const resp = await putVersion(config, {
+    Bucket: update.Bucket,
+    Body: current.body,
+    ID: current.metadata.id,
+    Version: current.metadata.version,
+    Ext: daCtx.ext,
+    Metadata: {
+      Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
+      Timestamp: current.metadata?.timestamp || `${Date.now()}`,
+      Path: current.metadata?.path || daCtx.key,
+      Displayname: rb.displayName,
+    },
+  }, false);
+  return { status: resp.status };
 }

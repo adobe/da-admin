@@ -20,7 +20,7 @@ import {
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
-async function putVersion(config, {
+export async function putVersion(config, {
   Bucket, Body, ID, Version, Ext, Metadata,
 }, noneMatch = true) {
   const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
