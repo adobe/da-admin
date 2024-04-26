@@ -186,7 +186,15 @@ describe('Source Route', () => {
   });
 
   it('Test deleteSource', async () => {
-    const env = {};
+    const req = {
+      headers: new Map(),
+      url: 'http://somehost.com/somedoc.html'
+    };
+
+    const daCalled = []
+    const dacollab = { fetch: (u) => daCalled.push(u) };
+
+    const env = { dacollab };
     const daCtx = {};
 
     const called = [];
@@ -204,8 +212,10 @@ describe('Source Route', () => {
         }
       }
     );
-    const resp = await deleteSource({env, daCtx});
+    const resp = await deleteSource({req, env, daCtx});
     assert.equal(204, resp.status);
     assert.deepStrictEqual(called, ['deleteObject']);
+    assert.deepStrictEqual(daCalled,
+      ['https://localhost/api/v1/deleteadmin?doc=http://somehost.com/somedoc.html']);
   });
 });

@@ -16,13 +16,8 @@ import deleteObject from '../storage/object/delete.js';
 import putHelper from '../helpers/source.js';
 import { postObjectVersion } from '../storage/version/put.js';
 
-export async function deleteSource({ env, daCtx }) {
-  await postObjectVersion(env, daCtx);
-  return deleteObject(env, daCtx);
-}
-
-async function invalidateCollab(url, env) {
-  const invPath = `/api/v1/syncadmin?doc=${url}`;
+async function invalidateCollab(api, url, env) {
+  const invPath = `/api/v1/${api}?doc=${url}`;
   if (env.dacollab) {
     // service binding is configured, hostname is not relevant
     console.log('Using service binding');
@@ -39,6 +34,19 @@ async function invalidateCollab(url, env) {
   }
 }
 
+export async function deleteSource({ req, env, daCtx }) {
+  await postObjectVersion(env, daCtx);
+  const resp = await deleteObject(env, daCtx);
+
+  if (resp.status === 204) {
+    const initiator = req.headers.get('x-da-initiator');
+    if (initiator !== 'collab') {
+      await invalidateCollab('deleteadmin', req.url, env);
+    }
+  }
+  return resp;
+}
+
 export async function postSource({ req, env, daCtx }) {
   const obj = await putHelper(req, env, daCtx);
   const resp = await putObject(env, daCtx, obj);
@@ -46,7 +54,7 @@ export async function postSource({ req, env, daCtx }) {
   if (resp.status === 201 || resp.status === 200) {
     const initiator = req.headers.get('x-da-initiator');
     if (initiator !== 'collab') {
-      await invalidateCollab(req.url, env);
+      await invalidateCollab('syncadmin', req.url, env);
     }
   }
   return resp;

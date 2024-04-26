@@ -11,10 +11,10 @@
  */
 import { deleteSource } from '../routes/source.js';
 
-export default async function deleteHandler({ env, daCtx }) {
+export default async function deleteHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
-  if (path.startsWith('/source')) return deleteSource({ env, daCtx });
+  if (path.startsWith('/source')) return deleteSource({ req, env, daCtx });
 
   return undefined;
 }

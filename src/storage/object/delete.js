@@ -71,5 +71,5 @@ export default async function deleteObjects(env, daCtx) {
     }
   } while (ContinuationToken);
 
-  return { body: '', status: 204 };
+  return { body: null, status: 204 };
 }
