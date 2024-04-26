@@ -31,7 +31,7 @@ export async function patchObjectVersion(req, env, daCtx) {
   const update = buildInput(daCtx);
   const current = await getObject(env, { org, key: `.da-versions/${key}` });
   if (current.status === 404) {
-    return 404;
+    return { status: current.status };
   }
   const resp = await putVersion(config, {
     Bucket: update.Bucket,
