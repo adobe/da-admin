@@ -25,7 +25,7 @@ export async function listObjectVersions(env, { org, key }) {
     }, true);
     const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
     const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
-    const { displayName, path } = entryResp.metadata;
+    const { displayname, path } = entryResp.metadata;
 
     if (entryResp.contentLength > 0) {
       return {
@@ -33,7 +33,7 @@ export async function listObjectVersions(env, { org, key }) {
         users,
         timestamp,
         path,
-        displayName,
+        displayname,
       };
     }
     return { users, timestamp, path };

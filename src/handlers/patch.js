@@ -14,7 +14,7 @@ import { patchVersion } from '../routes/version.js';
 export default async function patchHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
-  if (path.startsWith('/version')) return patchVersion({ req, env, daCtx });
+  if (path.startsWith('/versionsource')) return patchVersion({ req, env, daCtx });
 
   return undefined;
 }

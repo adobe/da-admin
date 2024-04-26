@@ -25,24 +25,25 @@ function buildInput({
 // Currently only patches the display name into the version
 export async function patchObjectVersion(req, env, daCtx) {
   const rb = await req.json();
+  const { org, key } = daCtx;
 
   const config = getS3Config(env);
   const update = buildInput(daCtx);
-  const current = await getObject(env, daCtx);
-  if (current.status === 404 || !current.metadata?.id || !current.metadata?.version) {
+  const current = await getObject(env, { org, key: `.da-versions/${key}` });
+  if (current.status === 404) {
     return 404;
   }
   const resp = await putVersion(config, {
     Bucket: update.Bucket,
     Body: current.body,
-    ID: current.metadata.id,
-    Version: current.metadata.version,
+    ID: daCtx.site,
+    Version: daCtx.name,
     Ext: daCtx.ext,
     Metadata: {
       Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
       Timestamp: current.metadata?.timestamp || `${Date.now()}`,
       Path: current.metadata?.path || daCtx.key,
-      Displayname: rb.displayName,
+      Displayname: rb.displayname,
     },
   }, false);
   return { status: resp.status };
