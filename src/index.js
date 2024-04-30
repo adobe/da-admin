@@ -14,6 +14,7 @@ import daResp from './utils/daResp.js';
 
 import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
+import patchHandler from './handlers/patch.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
 import unkownHandler from './handlers/unkown.js';
@@ -23,7 +24,9 @@ export default {
     if (req.method === 'OPTIONS') return daResp({ status: 204 });
 
     const daCtx = await getDaCtx(req, env);
-    if (!daCtx.authorized) return daResp({ status: 401 });
+    const { authorized, key } = daCtx;
+    if (!authorized) return daResp({ status: 401 });
+    if (key?.startsWith('.da-versions')) return daResp({ status: 404 });
 
     let respObj;
     switch (req.method) {
@@ -40,7 +43,10 @@ export default {
         respObj = await postHandler({ req, env, daCtx });
         break;
       case 'DELETE':
-        respObj = await deleteHandler({ env, daCtx });
+        respObj = await deleteHandler({ req, env, daCtx });
+        break;
+      case 'PATCH':
+        respObj = await patchHandler({ req, env, daCtx });
         break;
       default:
         respObj = unkownHandler();

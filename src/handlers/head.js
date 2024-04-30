@@ -12,6 +12,7 @@
 import { getSource } from '../routes/source.js';
 import getList from '../routes/list.js';
 import { getProperties } from '../routes/properties.js';
+import { getVersionSource, getVersionList } from '../routes/version.js';
 
 function get404() {
   return { status: 404, contentLength: 0 };
@@ -22,13 +23,13 @@ function getRobots() {
   return { contentLength: body.length, status: 200 };
 }
 
-export default async function headHandler({ env, daCtx, head }) {
+export default async function headHandler({ env, daCtx }) {
   const { path } = daCtx;
 
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  if (path.startsWith('/source')) return getSource({ env, daCtx, head });
+  if (path.startsWith('/source')) return getSource({ env, daCtx, head: true });
   if (path.startsWith('/list')) {
     const { body, contentType, status } = await getList({ env, daCtx });
     return {
@@ -37,6 +38,15 @@ export default async function headHandler({ env, daCtx, head }) {
       status,
     };
   }
+  if (path.startsWith('/versionlist')) {
+    const { body, contentType, status } = await getVersionList({ env, daCtx });
+    return {
+      contentLength: body.length,
+      contentType,
+      status,
+    };
+  }
+  if (path.startsWith('/versionsource')) return getVersionSource({ env, daCtx, head: true });
   if (path.startsWith('/properties')) {
     const { body, status, contentType } = getProperties();
     return { status, contentType, contentLength: body.length };

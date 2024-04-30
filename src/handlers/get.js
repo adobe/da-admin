@@ -12,6 +12,7 @@
 import { getSource } from '../routes/source.js';
 import getList from '../routes/list.js';
 import { getConfig } from '../routes/config.js';
+import { getVersionSource, getVersionList } from '../routes/version.js';
 
 function get404() {
   return { body: '', status: 404 };
@@ -31,6 +32,8 @@ export default async function getHandler({ env, daCtx }) {
   if (path.startsWith('/source')) return getSource({ env, daCtx });
   if (path.startsWith('/list')) return getList({ env, daCtx });
   if (path.startsWith('/config')) return getConfig({ env, daCtx });
+  if (path.startsWith('/versionlist')) return getVersionList({ env, daCtx });
+  if (path.startsWith('/versionsource')) return getVersionSource({ env, daCtx });
 
   return undefined;
 }

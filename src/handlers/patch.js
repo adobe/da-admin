@@ -9,18 +9,12 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { postSource } from '../routes/source.js';
-import { postConfig } from '../routes/config.js';
-import { postVersionSource } from '../routes/version.js';
-import copyHandler from '../routes/copy.js';
+import { patchVersion } from '../routes/version.js';
 
-export default async function postHandler({ req, env, daCtx }) {
+export default async function patchHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
-  if (path.startsWith('/source')) return postSource({ req, env, daCtx });
-  if (path.startsWith('/config')) return postConfig({ req, env, daCtx });
-  if (path.startsWith('/versionsource')) return postVersionSource({ env, daCtx });
-  if (path.startsWith('/copy')) return copyHandler({ req, env, daCtx });
+  if (path.startsWith('/versionsource')) return patchVersion({ req, env, daCtx });
 
   return undefined;
 }

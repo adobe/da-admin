@@ -15,6 +15,7 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import getS3Config from '../utils/config.js';
 
 function buildInput({ org, key }) {
@@ -22,22 +23,40 @@ function buildInput({ org, key }) {
   return { Bucket, Key: key };
 }
 
-export default async function getObject(env, { org, key, head }) {
+export default async function getObject(env, { org, key }, head = false) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
   const input = buildInput({ org, key });
-  const command = head ? new HeadObjectCommand(input) : new GetObjectCommand(input);
-
-  try {
-    const resp = await client.send(command);
-    return {
-      body: resp.Body,
-      status: resp.$metadata.httpStatusCode,
-      contentType: resp.ContentType,
-      contentLength: resp.ContentLength,
-    };
-  } catch (e) {
-    return { body: '', status: 404, contentLength: 0 };
+  if (!head) {
+    try {
+      const resp = await client.send(new GetObjectCommand(input));
+      return {
+        body: resp.Body,
+        status: resp.$metadata.httpStatusCode,
+        contentType: resp.ContentType,
+        contentLength: resp.ContentLength,
+        metadata: resp.Metadata,
+        etag: resp.ETag,
+      };
+    } catch (e) {
+      return { body: '', status: e.$metadata?.httpStatusCode || 404, contentLength: 0 };
+    }
   }
+  const url = await getSignedUrl(client, new HeadObjectCommand(input), { expiresIn: 3600 });
+  const resp = await fetch(url, { method: 'HEAD' });
+  const Metadata = {};
+  resp.headers.forEach((value, key2) => {
+    if (key2.startsWith('x-amz-meta-')) {
+      Metadata[key2.substring('x-amz-meta-'.length)] = value;
+    }
+  });
+  return {
+    body: '',
+    status: resp.status,
+    contentType: resp.headers.get('content-type'),
+    contentLength: resp.headers.get('content-length'),
+    metadata: Metadata,
+    etag: resp.headers.get('etag'),
+  };
 }

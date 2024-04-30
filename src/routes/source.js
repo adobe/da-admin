@@ -14,16 +14,52 @@ import putObject from '../storage/object/put.js';
 import deleteObject from '../storage/object/delete.js';
 
 import putHelper from '../helpers/source.js';
+import { postObjectVersion } from '../storage/version/put.js';
 
-export async function deleteSource({ env, daCtx }) {
-  return deleteObject(env, daCtx);
+async function invalidateCollab(api, url, env) {
+  const invPath = `/api/v1/${api}?doc=${url}`;
+  if (env.dacollab) {
+    // service binding is configured, hostname is not relevant
+    console.log('Using service binding');
+    const invURL = `https://localhost${invPath}`;
+    await env.dacollab.fetch(invURL);
+  } else if (env.DA_COLLAB) {
+    // use internet host-port as configured via DA_COLLAB env var
+    console.log('Using service DA_COLLAB env var');
+    const invURL = `${env.DA_COLLAB}${invPath}`;
+    await fetch(invURL);
+  } else {
+    // eslint-disable-next-line no-console
+    console.log('Not invalidating collab, neither dacollab service binding nor DA_COLLAB env var set');
+  }
+}
+
+export async function deleteSource({ req, env, daCtx }) {
+  await postObjectVersion(env, daCtx);
+  const resp = await deleteObject(env, daCtx);
+
+  if (resp.status === 204) {
+    const initiator = req.headers.get('x-da-initiator');
+    if (initiator !== 'collab') {
+      await invalidateCollab('deleteadmin', req.url, env);
+    }
+  }
+  return resp;
 }
 
 export async function postSource({ req, env, daCtx }) {
   const obj = await putHelper(req, env, daCtx);
-  return putObject(env, daCtx, obj);
+  const resp = await putObject(env, daCtx, obj);
+
+  if (resp.status === 201 || resp.status === 200) {
+    const initiator = req.headers.get('x-da-initiator');
+    if (initiator !== 'collab') {
+      await invalidateCollab('syncadmin', req.url, env);
+    }
+  }
+  return resp;
 }
 
-export async function getSource({ env, daCtx }) {
-  return getObject(env, daCtx);
+export async function getSource({ env, daCtx, head }) {
+  return getObject(env, daCtx, head);
 }

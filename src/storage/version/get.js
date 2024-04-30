@@ -9,18 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { postSource } from '../routes/source.js';
-import { postConfig } from '../routes/config.js';
-import { postVersionSource } from '../routes/version.js';
-import copyHandler from '../routes/copy.js';
+import getObject from '../object/get.js';
 
-export default async function postHandler({ req, env, daCtx }) {
-  const { path } = daCtx;
-
-  if (path.startsWith('/source')) return postSource({ req, env, daCtx });
-  if (path.startsWith('/config')) return postConfig({ req, env, daCtx });
-  if (path.startsWith('/versionsource')) return postVersionSource({ env, daCtx });
-  if (path.startsWith('/copy')) return copyHandler({ req, env, daCtx });
-
-  return undefined;
+export async function getObjectVersion(env, { org, key }, head) {
+  return getObject(env, { org, key: `.da-versions/${key}` }, head);
 }
