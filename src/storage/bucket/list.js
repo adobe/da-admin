@@ -9,18 +9,12 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  ListBucketsCommand,
-} from '@aws-sdk/client-s3';
-
-import getS3Config from '../utils/config.js';
 import { isAuthorized } from '../../utils/auth.js';
 
 async function formatBuckets(env, daCtx, buckets) {
   const authedBuckets = [];
   for (const bucket of buckets) {
-    const name = bucket.Name.replace('-content', '');
+    const { name, created } = bucket;
     let auth = true;
     // check for all users in the session if they are authorized
     for (const user of daCtx.users) {
@@ -29,27 +23,20 @@ async function formatBuckets(env, daCtx, buckets) {
         break;
       }
     }
-    if (auth) {
-      authedBuckets.push({
-        name,
-        created: bucket.CreationDate,
-      });
-    }
+    if (auth) authedBuckets.push({ name, created });
   }
   return authedBuckets;
 }
 
 export default async function listBuckets(env, daCtx) {
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-
-  const command = new ListBucketsCommand({});
   try {
-    const resp = await client.send(command);
+    const orgs = await env.DA_AUTH.get('orgs', { type: 'json' });
+    const body = await formatBuckets(env, daCtx, orgs);
+
     return {
-      body: JSON.stringify(await formatBuckets(env, daCtx, resp.Buckets)),
-      status: resp.$metadata.httpStatusCode,
-      contentType: resp.ContentType,
+      body: JSON.stringify(body),
+      status: 200,
+      contentType: 'application/json',
     };
   } catch (e) {
     return { body: '', status: 404 };

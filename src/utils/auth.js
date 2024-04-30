@@ -66,10 +66,14 @@ export async function getUsers(req, env) {
 export async function isAuthorized(env, org, user) {
   if (!org) return true;
 
-  const props = await env.DA_AUTH.get(`${org}-da-props`, { type: 'json' });
+  const props = await env.DA_CONFIG.get(org, { type: 'json' });
   if (!props) return true;
 
-  const admins = props['admin.role.all'];
+  const admins = props.data.reduce((acc, data) => {
+    if (data.key === 'admin.role.all') acc.push(data.value);
+    return acc;
+  }, []);
+
   if (!admins) return true;
-  return admins.some((orgUser) => orgUser === user.email);
+  return admins.some((admin) => admin === user.email);
 }

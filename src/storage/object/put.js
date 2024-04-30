@@ -52,14 +52,33 @@ function createBucketIfMissing(client) {
   );
 }
 
+/**
+ * Check to see if the org is in the existing list of orgs
+ *
+ * @param {Object} env the cloud provider environment
+ * @param {*} org the org associated with the bucket
+ * @returns null
+ */
+async function checkOrgIndex(env, org) {
+  const orgs = await env.DA_AUTH.get('orgs', { type: 'json' });
+  if (orgs.some((existingOrg) => existingOrg.name === org)) return;
+  orgs.push({ name: org, created: new Date().toISOString() });
+  await env.DA_AUTH.put('orgs', JSON.stringify(orgs));
+}
+
 export default async function putObject(env, daCtx, obj) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  // R2 ONLY FEATURE
-  createBucketIfMissing(client);
-
   const { org, key, propsKey } = daCtx;
+
+  // Only allow creating a new bucket for orgs and repos
+  if (key.split('/').length <= 1) {
+    await checkOrgIndex(env, org);
+
+    // R2 ONLY FEATURE
+    createBucketIfMissing(client);
+  }
 
   const inputs = [];
 
@@ -71,13 +90,6 @@ export default async function putObject(env, daCtx, obj) {
       status = await putObjectWithVersion(env, daCtx, {
         org, key, body, type,
       });
-    }
-    if (obj.props) {
-      const { body, type } = getObjectBody(obj.props);
-      const inputConfig = {
-        org, key: propsKey || key, body, type,
-      };
-      inputs.push(buildInput(inputConfig));
     }
   } else {
     const { body, type } = getObjectBody({});
@@ -92,6 +104,6 @@ export default async function putObject(env, daCtx, obj) {
     await client.send(command);
   }
 
-  const body = sourceRespObject(daCtx, obj?.props);
+  const body = sourceRespObject(daCtx);
   return { body: JSON.stringify(body), status, contentType: 'application/json' };
 }
