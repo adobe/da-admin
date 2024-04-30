@@ -45,7 +45,15 @@ function buildInput({
   };
 }
 
-export async function postObjectVersion(env, daCtx) {
+export async function postObjectVersion(req, env, daCtx) {
+  let displayName;
+  try {
+    const json = await req.json();
+    displayName = json.displayname;
+  } catch (e) {
+    // no display name
+  }
+
   const config = getS3Config(env);
   const update = buildInput(daCtx);
   const current = await getObject(env, daCtx);
@@ -62,6 +70,7 @@ export async function postObjectVersion(env, daCtx) {
       Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
       Timestamp: current.metadata?.timestamp || `${Date.now()}`,
       Path: current.metadata?.path || daCtx.key,
+      Displayname: displayName || current.metadata?.displayname,
     },
   }, false);
   return { status: resp.status === 200 ? 201 : resp.status };
