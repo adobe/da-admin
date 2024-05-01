@@ -13,6 +13,61 @@ import assert from 'assert';
 import esmock from 'esmock';
 
 describe('Version Put', () => {
+  it('Put Object Version', async () => {
+    const mockGetObject = async () => {
+      const metadata = {
+        id: 'id',
+        version: '123'
+      }
+      return { metadata };
+    };
+
+    const sentToS3 = [];
+    const s3Client = {
+      send: async (c) => {
+        sentToS3.push(c);
+        return {
+          $metadata: {
+            httpStatusCode: 200
+          }
+        };
+      }
+    };
+    const mockS3Client = () => s3Client;
+
+    const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        createBucketIfMissing: mockS3Client
+      },
+    });
+
+    const dn = { displayname: 'my display name' };
+    const req = {
+      json: async () => dn
+    };
+    const env = {};
+    const daCtx = {
+      org: 'myorg',
+      key: '/a/b/c',
+      ext: 'html'
+    };
+
+    const resp = await postObjectVersion(req, env, daCtx);
+    assert.equal(201, resp.status);
+
+    assert.equal(1, sentToS3.length);
+    const input = sentToS3[0].input;
+    assert.equal('myorg-content', input.Bucket);
+    assert.equal('.da-versions/id/123.html', input.Key);
+    assert.equal('[{"email":"anonymous"}]', input.Metadata.Users);
+    assert.equal('my display name', input.Metadata.Displayname);
+    assert(input.Metadata.Timestamp > (Date.now() - 2000)); // Less than 2 seconds old
+    assert.equal('/a/b/c', input.Metadata.Path);
+  });
+
   it('Put Object Version 2', async () => {
     const mockGetObject = async () => {
       const metadata = {
@@ -68,60 +123,5 @@ describe('Version Put', () => {
     assert.equal('old displayname', input.Metadata.Displayname);
     assert.equal(999, input.Metadata.Timestamp);
     assert.equal('/y/z', input.Metadata.Path);
-  });
-
-  it('Put Object Version', async () => {
-    const mockGetObject = async () => {
-      const metadata = {
-        id: 'id',
-        version: '123'
-      }
-      return { metadata };
-    };
-
-    const sentToS3 = [];
-    const s3Client = {
-      send: async (c) => {
-        sentToS3.push(c);
-        return {
-          $metadata: {
-            httpStatusCode: 200
-          }
-        };
-      }
-    };
-    const mockS3Client = () => s3Client;
-
-    const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        createBucketIfMissing: mockS3Client
-      },
-    });
-
-    const dn = { displayname: 'my display name' };
-    const req = {
-      json: async () => dn
-    };
-    const env = {};
-    const daCtx = {
-      org: 'myorg',
-      key: '/a/b/c',
-      ext: 'html'
-    };
-
-    const resp = await postObjectVersion(req, env, daCtx);
-    assert.equal(201, resp.status);
-
-    assert.equal(1, sentToS3.length);
-    const input = sentToS3[0].input;
-    assert.equal('myorg-content', input.Bucket);
-    assert.equal('.da-versions/id/123.html', input.Key);
-    assert.equal('[{"email":"anonymous"}]', input.Metadata.Users);
-    assert.equal('my display name', input.Metadata.Displayname);
-    assert(input.Metadata.Timestamp > (Date.now() - 2000)); // Less than 2 seconds old
-    assert.equal('/a/b/c', input.Metadata.Path);
   });
 });
