@@ -15,7 +15,7 @@ import { FORM_TYPES } from '../utils/constants.js';
  * Builds a source response
  * @param {*} key
  */
-export function sourceRespObject(daCtx, props) {
+export function sourceRespObject(daCtx) {
   const {
     org, site, isFile, pathname, aemPathname,
   } = daCtx;
@@ -26,8 +26,6 @@ export function sourceRespObject(daCtx, props) {
       contentUrl: `https://content.da.live/${org}${pathname}`,
     },
   };
-
-  if (props) obj.source.props = props;
 
   if (site) {
     obj.aem = {
@@ -46,10 +44,6 @@ function getFormEntries(formData) {
     entries.data = formData.get('data');
   }
 
-  if (formData.get('props')) {
-    entries.props = JSON.parse(formData.get('props'));
-  }
-
   return entries;
 }
 
@@ -59,7 +53,7 @@ async function formPutHandler(req) {
     formData = await req.formData();
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.log('No form data', e);
+    console.log('No form data');
   }
   return formData ? getFormEntries(formData) : null;
 }
@@ -67,9 +61,9 @@ async function formPutHandler(req) {
 export default async function putHelper(req, env, daCtx) {
   const contentType = req.headers.get('content-type')?.split(';')[0];
 
-  if (FORM_TYPES.some((type) => type === contentType)) return formPutHandler(req, env, daCtx);
-
   if (!contentType) return null;
+
+  if (FORM_TYPES.some((type) => type === contentType)) return formPutHandler(req, env, daCtx);
 
   return undefined;
 }

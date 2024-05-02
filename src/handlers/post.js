@@ -13,6 +13,7 @@ import { postSource } from '../routes/source.js';
 import { postConfig } from '../routes/config.js';
 import { postVersionSource } from '../routes/version.js';
 import copyHandler from '../routes/copy.js';
+import renameHandler from '../routes/rename.js';
 
 export default async function postHandler({ req, env, daCtx }) {
   const { path } = daCtx;
@@ -21,6 +22,7 @@ export default async function postHandler({ req, env, daCtx }) {
   if (path.startsWith('/config')) return postConfig({ req, env, daCtx });
   if (path.startsWith('/versionsource')) return postVersionSource({ req, env, daCtx });
   if (path.startsWith('/copy')) return copyHandler({ req, env, daCtx });
+  if (path.startsWith('/rename')) return renameHandler({ req, env, daCtx });
 
   return undefined;
 }

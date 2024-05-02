@@ -3,7 +3,18 @@ import assert from 'assert';
 import getKv from '../../../src/storage/kv/get.js';
 import putKv from '../../../src/storage/kv/put.js';
 
-const MOCK_CONFIG = '{"mock":"data"}';
+const MOCK_CONFIG = `{
+  "total": 1,
+  "limit": 1,
+  "offset": 0,
+  "data": [
+      {
+          "key": "admin.role.all",
+          "value": "aparker@geometrixx.info"
+      }
+  ],
+  ":type": "sheet"
+}`;
 
 describe('KV storage', () => {
   describe('Get success', async () => {
