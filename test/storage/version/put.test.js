@@ -44,7 +44,7 @@ describe('Version Put', () => {
       },
     });
 
-    const dn = { displayname: 'my display name' };
+    const dn = { label: 'my label' };
     const req = {
       json: async () => dn
     };
@@ -63,7 +63,7 @@ describe('Version Put', () => {
     assert.equal('myorg-content', input.Bucket);
     assert.equal('.da-versions/id/123.html', input.Key);
     assert.equal('[{"email":"anonymous"}]', input.Metadata.Users);
-    assert.equal('my display name', input.Metadata.Displayname);
+    assert.equal('my label', input.Metadata.Label);
     assert(input.Metadata.Timestamp > (Date.now() - 2000)); // Less than 2 seconds old
     assert.equal('/a/b/c', input.Metadata.Path);
   });
@@ -71,7 +71,8 @@ describe('Version Put', () => {
   it('Put Object Version 2', async () => {
     const mockGetObject = async () => {
       const metadata = {
-        displayname: 'old displayname',
+        comment: 'my comment',
+        label: 'old label',
         id: 'idx',
         version: '456',
         path: '/y/z',
@@ -103,7 +104,7 @@ describe('Version Put', () => {
       },
     });
 
-    const dn = { displayname: 'my display name' };
+    const dn = { label: 'my label' };
     const req = {};
     const env = {};
     const daCtx = {
@@ -120,7 +121,8 @@ describe('Version Put', () => {
     assert.equal('someorg-content', input.Bucket);
     assert.equal('.da-versions/idx/456.html', input.Key);
     assert.equal('[{"email":"foo@acme.org"}]', input.Metadata.Users);
-    assert.equal('old displayname', input.Metadata.Displayname);
+    assert.equal('my comment', input.Metadata.Comment);
+    assert.equal('old label', input.Metadata.Label);
     assert.equal(999, input.Metadata.Timestamp);
     assert.equal('/y/z', input.Metadata.Path);
   });

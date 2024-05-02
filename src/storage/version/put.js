@@ -46,12 +46,11 @@ function buildInput({
 }
 
 export async function postObjectVersion(req, env, daCtx) {
-  let displayName;
+  let reqJSON;
   try {
-    const json = await req.json();
-    displayName = json.displayname;
+    reqJSON = await req.json();
   } catch (e) {
-    // no display name
+    // no label or comment
   }
 
   const config = getS3Config(env);
@@ -70,7 +69,8 @@ export async function postObjectVersion(req, env, daCtx) {
       Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
       Timestamp: current.metadata?.timestamp || `${Date.now()}`,
       Path: current.metadata?.path || daCtx.key,
-      Displayname: displayName || current.metadata?.displayname,
+      Label: reqJSON?.label || current.metadata?.label,
+      Comment: reqJSON?.comment || current.metadata?.comment,
     },
   }, false);
   return { status: resp.status === 200 ? 201 : resp.status };
