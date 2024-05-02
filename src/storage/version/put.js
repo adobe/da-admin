@@ -59,6 +59,17 @@ export async function postObjectVersion(req, env, daCtx) {
   if (current.status === 404 || !current.metadata?.id || !current.metadata?.version) {
     return 404;
   }
+
+  let existingVersion;
+  if (reqJSON?.label === undefined || reqJSON?.comment === undefined) {
+    existingVersion = await getObject(env, {
+      org: daCtx.org,
+      key: `.da-versions/${current.metadata.id}/${current.metadata.version}.${daCtx.ext}`,
+    });
+  }
+  const label = reqJSON?.label || existingVersion?.metadata?.label;
+  const comment = reqJSON?.comment || existingVersion?.metadata?.comment;
+
   const resp = await putVersion(config, {
     Bucket: update.Bucket,
     Body: current.body,
@@ -69,8 +80,8 @@ export async function postObjectVersion(req, env, daCtx) {
       Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
       Timestamp: current.metadata?.timestamp || `${Date.now()}`,
       Path: current.metadata?.path || daCtx.key,
-      Label: reqJSON?.label || current.metadata?.label,
-      Comment: reqJSON?.comment || current.metadata?.comment,
+      Label: label,
+      Comment: comment,
     },
   }, false);
   return { status: resp.status === 200 ? 201 : resp.status };

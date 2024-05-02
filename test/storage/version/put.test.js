@@ -13,7 +13,7 @@ import assert from 'assert';
 import esmock from 'esmock';
 
 describe('Version Put', () => {
-  it('Put Object Version', async () => {
+  it('Post Object Version', async () => {
     const mockGetObject = async () => {
       const metadata = {
         id: 'id',
@@ -68,7 +68,7 @@ describe('Version Put', () => {
     assert.equal('/a/b/c', input.Metadata.Path);
   });
 
-  it('Put Object Version 2', async () => {
+  it('Post Object Version 2', async () => {
     const mockGetObject = async () => {
       const metadata = {
         comment: 'my comment',
@@ -124,6 +124,69 @@ describe('Version Put', () => {
     assert.equal('my comment', input.Metadata.Comment);
     assert.equal('old label', input.Metadata.Label);
     assert.equal(999, input.Metadata.Timestamp);
+    assert.equal('/y/z', input.Metadata.Path);
+  });
+
+  it('Post Object Version where Label already exists', async () => {
+    const mockGetObject = async (e, x) => {
+      if (x.key === '.da-versions/idx/456.myext') {
+        const mdver = {
+          label: 'existing label',
+          comment: 'existing comment',
+        };
+        return { metadata: mdver };
+      }
+      const metadata = {
+        id: 'idx',
+        version: '456',
+        path: '/y/z',
+        timestamp: 999,
+        users: '[{"email":"one@acme.org"},{"email":"two@acme.org"}]',
+      }
+      return { metadata };
+    };
+
+    const sentToS3 = [];
+    const s3Client = {
+      send: async (c) => {
+        sentToS3.push(c);
+        return {
+          $metadata: {
+            httpStatusCode: 200
+          }
+        };
+      }
+    };
+    const mockS3Client = () => s3Client;
+
+    const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        createBucketIfMissing: mockS3Client
+      },
+    });
+
+    const dn = { label: 'my label' };
+    const req = {};
+    const env = {};
+    const daCtx = {
+      org: 'someorg',
+      key: '/a/b/c',
+      ext: 'myext'
+    };
+
+    const resp = await postObjectVersion(req, env, daCtx);
+    assert.equal(201, resp.status);
+
+    assert.equal(1, sentToS3.length);
+    const input = sentToS3[0].input;
+    assert.equal('someorg-content', input.Bucket);
+    assert.equal('.da-versions/idx/456.myext', input.Key);
+    assert.equal('[{"email":"one@acme.org"},{"email":"two@acme.org"}]', input.Metadata.Users);
+    assert.equal('existing label', input.Metadata.Label);
+    assert.equal('existing comment', input.Metadata.Comment);
     assert.equal('/y/z', input.Metadata.Path);
   });
 });
