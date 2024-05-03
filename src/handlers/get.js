@@ -13,6 +13,7 @@ import { getSource } from '../routes/source.js';
 import getList from '../routes/list.js';
 import { getConfig } from '../routes/config.js';
 import { getVersionSource, getVersionList } from '../routes/version.js';
+import { getBucket } from '../routes/bucket.js';
 
 function get404() {
   return { body: '', status: 404 };
@@ -29,6 +30,7 @@ export default async function getHandler({ env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
+  if (path.startsWith('/bucket')) return getBucket({ env, daCtx });
   if (path.startsWith('/source')) return getSource({ env, daCtx });
   if (path.startsWith('/list')) return getList({ env, daCtx });
   if (path.startsWith('/config')) return getConfig({ env, daCtx });
