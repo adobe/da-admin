@@ -32,7 +32,7 @@ describe('Version Patch', () => {
   })
 
   it('Patch Object Version', async () => {
-    const req = { json: async () => JSON.parse('{"comment": "comment 1"}')};
+    const req = { json: async () => JSON.parse('{}')};
     const env = {
       S3_DEF_URL: 's3def',
       S3_ACCESS_KEY_ID: 'id',
@@ -101,7 +101,6 @@ describe('Version Patch', () => {
     assert.equal('999', de.Metadata.Timestamp);
     assert.equal('mykey', de.Metadata.Path);
     assert.equal('prev label', de.Metadata.Label);
-    assert.equal('comment 1', de.Metadata.Comment);
     assert.equal(200, resp.status);
   });
 

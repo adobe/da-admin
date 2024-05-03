@@ -22,7 +22,7 @@ function buildInput({
   };
 }
 
-// Currently only patches the label or comment into the version
+// Currently only patches the label into the version
 export async function patchObjectVersion(req, env, daCtx) {
   const rb = await req.json();
   const { org, key } = daCtx;
@@ -44,7 +44,6 @@ export async function patchObjectVersion(req, env, daCtx) {
       Timestamp: current.metadata?.timestamp || `${Date.now()}`,
       Path: current.metadata?.path || daCtx.key,
       Label: rb.label || current.metadata?.label,
-      Comment: rb.comment || current.metadata?.comment,
     },
   }, false);
   return { status: resp.status };

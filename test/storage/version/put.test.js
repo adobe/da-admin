@@ -71,7 +71,6 @@ describe('Version Put', () => {
   it('Post Object Version 2', async () => {
     const mockGetObject = async () => {
       const metadata = {
-        comment: 'my comment',
         label: 'old label',
         id: 'idx',
         version: '456',
@@ -121,7 +120,6 @@ describe('Version Put', () => {
     assert.equal('someorg-content', input.Bucket);
     assert.equal('.da-versions/idx/456.html', input.Key);
     assert.equal('[{"email":"foo@acme.org"}]', input.Metadata.Users);
-    assert.equal('my comment', input.Metadata.Comment);
     assert.equal('old label', input.Metadata.Label);
     assert.equal(999, input.Metadata.Timestamp);
     assert.equal('/y/z', input.Metadata.Path);
@@ -132,7 +130,6 @@ describe('Version Put', () => {
       if (x.key === '.da-versions/idx/456.myext') {
         const mdver = {
           label: 'existing label',
-          comment: 'existing comment',
         };
         return { metadata: mdver };
       }
@@ -186,7 +183,6 @@ describe('Version Put', () => {
     assert.equal('.da-versions/idx/456.myext', input.Key);
     assert.equal('[{"email":"one@acme.org"},{"email":"two@acme.org"}]', input.Metadata.Users);
     assert.equal('existing label', input.Metadata.Label);
-    assert.equal('existing comment', input.Metadata.Comment);
     assert.equal('/y/z', input.Metadata.Path);
   });
 });

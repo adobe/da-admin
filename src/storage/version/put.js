@@ -50,7 +50,7 @@ export async function postObjectVersion(req, env, daCtx) {
   try {
     reqJSON = await req.json();
   } catch (e) {
-    // no label or comment
+    // no label
   }
 
   const config = getS3Config(env);
@@ -61,14 +61,13 @@ export async function postObjectVersion(req, env, daCtx) {
   }
 
   let existingVersion;
-  if (reqJSON?.label === undefined || reqJSON?.comment === undefined) {
+  if (reqJSON?.label === undefined) {
     existingVersion = await getObject(env, {
       org: daCtx.org,
       key: `.da-versions/${current.metadata.id}/${current.metadata.version}.${daCtx.ext}`,
     });
   }
   const label = reqJSON?.label || existingVersion?.metadata?.label;
-  const comment = reqJSON?.comment || existingVersion?.metadata?.comment;
 
   const resp = await putVersion(config, {
     Bucket: update.Bucket,
@@ -81,7 +80,6 @@ export async function postObjectVersion(req, env, daCtx) {
       Timestamp: current.metadata?.timestamp || `${Date.now()}`,
       Path: current.metadata?.path || daCtx.key,
       Label: label,
-      Comment: comment,
     },
   }, false);
   return { status: resp.status === 200 ? 201 : resp.status };
