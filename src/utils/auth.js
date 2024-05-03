@@ -77,3 +77,13 @@ export async function isAuthorized(env, org, user) {
   if (!admins) return true;
   return admins.some((admin) => admin === user.email);
 }
+
+/**
+ * Checks if any of the users within this context are anonymous
+ * @param daCtx the current context
+ * @return {boolean} true if any users are anonymous, false otherwise
+ */
+export function isAnonymous(daCtx) {
+  const { users } = daCtx;
+  return users.some((user) => user.email === 'anonymous');
+}

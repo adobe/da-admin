@@ -6,7 +6,6 @@ import env from '../../utils/mocks/env.js';
 import { mockClient } from 'aws-sdk-client-mock';
 import { S3Client } from '@aws-sdk/client-s3';
 
-const s3Mock = mockClient(S3Client);
 
 import { putObjectWithVersion, postObjectVersion } from './mocks/version/put.js';
 const putObject = await esmock('../../../src/storage/object/put.js', {
@@ -17,8 +16,10 @@ const putObject = await esmock('../../../src/storage/object/put.js', {
 });
 
 describe('Object storage', () => {
+  let s3Mock;
+
   beforeEach(() => {
-    s3Mock.reset();
+    s3Mock = mockClient(S3Client);
   });
 
   describe('Put success', async () => {

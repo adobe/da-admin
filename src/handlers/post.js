@@ -14,10 +14,12 @@ import { postConfig } from '../routes/config.js';
 import { postVersionSource } from '../routes/version.js';
 import copyHandler from '../routes/copy.js';
 import renameHandler from '../routes/rename.js';
+import { postBucket } from '../routes/bucket.js';
 
 export default async function postHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
+  if (path.startsWith('/bucket')) return postBucket({ env, daCtx });
   if (path.startsWith('/source')) return postSource({ req, env, daCtx });
   if (path.startsWith('/config')) return postConfig({ req, env, daCtx });
   if (path.startsWith('/versionsource')) return postVersionSource({ env, daCtx });

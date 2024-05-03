@@ -7,7 +7,7 @@ const NAMESPACES = {
   ]
 };
 const DA_CONFIG = {
-  'geometrixx': {
+  'geometrixx': JSON.stringify({
     "total": 1,
     "limit": 1,
     "offset": 0,
@@ -18,7 +18,7 @@ const DA_CONFIG = {
         }
     ],
     ":type": "sheet"
-  }
+  }),
 };
 
 const env = {
@@ -32,10 +32,19 @@ const env = {
     put: (kvNamespace, value, expObj) => {},
   },
   DA_CONFIG: {
-    get: (name) => {
-      return DA_CONFIG[name];
+    get: (name, opt) => {
+      const value = DA_CONFIG[name];
+      if (!value) {
+        return null;
+      }
+      if (opt.type === 'json') {
+          return JSON.parse(value);
+      }
+      return value;
     },
-    put: (name, value, expObj) => {},
+    put: (name, value, expObj) => {
+      DA_CONFIG[name] = value;
+    },
   }
 };
 

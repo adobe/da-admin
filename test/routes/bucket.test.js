@@ -11,35 +11,80 @@
  */
 
 import { strict as assert } from 'node:assert';
-import esmock from 'esmock';
+import { strict as esmock } from 'esmock';
+
+import env from '../utils/mocks/env.js';
 
 describe('bucket route', () => {
-  it('handles found bucket', async () => {
-    const bucket = { name: 'Found', created: new Date() };
-    const { getBucket } = await esmock(
-      '../../src/routes/bucket.js',
-      {
-        '../../src/storage/bucket/get.js': {
-          default: async () => bucket
-        },
-      }
-    );
-    const resp = await getBucket({ env: {}, daCtx: {} })
-    assert.strictEqual(resp.body, JSON.stringify(bucket), 'Body correct');
-    assert.equal(resp.status, 200, 'Status correct.');
+  describe('get', () => {
+    it('handles found bucket', async () => {
+      const bucket = { name: 'Found', created: new Date() };
+      const { getBucket } = await esmock(
+        '../../src/routes/bucket.js', {
+          '../../src/storage/bucket/get.js': {
+            default: async () => bucket
+          },
+        }
+      );
+      const resp = await getBucket({ env, daCtx: {} })
+      assert.strictEqual(resp.body, JSON.stringify(bucket), 'Body correct');
+      assert.strictEqual(resp.status, 200, 'Status correct.');
+    });
+
+    it('handles not found bucket', async () => {
+      const { getBucket } = await esmock(
+        '../../src/routes/bucket.js', {
+          '../../src/storage/bucket/get.js': {
+            default: async () => undefined
+          },
+        }
+      );
+      const resp = await getBucket({ env, daCtx: {} })
+      assert.ifError(resp.body);
+      assert.strictEqual(resp.status, 404, 'Status correct.');
+    });
   });
 
-  it('handles not found bucket', async () => {
-    const { getBucket } = await esmock(
-      '../../src/routes/bucket.js',
-      {
-        '../../src/storage/bucket/get.js': {
-          default: async () => undefined
-        },
+  describe('put', () => {
+    it('handles anonymous user', async () => {
+      const { postBucket } = await esmock('../../src/routes/bucket.js');
+      const daCtx = {
+        org: 'org',
+        users: [{ email: 'anonymous' }],
       }
-    );
-    const resp = await getBucket({ env: {}, daCtx: {} })
-    assert.ifError(resp.body);
-    assert.equal(resp.status, 404, 'Status correct.');
+
+      const resp = await postBucket({ env, daCtx });
+      assert.ifError(resp.body);
+      assert.strictEqual(resp.status, 401, 'Status correct.');
+    });
+
+    it('handles bucket creation error', async () => {
+      const daCtx = {
+        org: 'test-org',
+        users: [{ email: 'test@example.com' }],
+      }
+      const { postBucket } = await esmock(
+        '../../src/routes/bucket.js', {
+          '../../src/storage/bucket/put.js': {
+            default: async () => false
+          },
+        });
+      const resp = await postBucket({ env, daCtx, });
+      assert.deepStrictEqual(resp, { status: 500 }, 'Response correct.');
+    });
+    it('handles bucket creation error', async () => {
+      const daCtx = {
+        org: 'test-org',
+        users: [{ email: 'test@example.com' }],
+      }
+      const { postBucket } = await esmock(
+        '../../src/routes/bucket.js', {
+          '../../src/storage/bucket/put.js': {
+            default: async () => true
+          },
+        });
+      const resp = await postBucket({ env, daCtx, });
+      assert.deepStrictEqual(resp, { status: 201 }, 'Response correct.');
+    })
   });
 });

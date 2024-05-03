@@ -11,6 +11,8 @@
  */
 
 import get from '../storage/bucket/get.js';
+import { isAnonymous } from '../utils/auth.js';
+import put from '../storage/bucket/put.js';
 
 export async function getBucket({ env, daCtx }) {
   const bucket = await get(env, daCtx);
@@ -21,4 +23,13 @@ export async function getBucket({ env, daCtx }) {
     status,
     contentType: 'application/json',
   };
+}
+
+export async function postBucket({ env, daCtx }) {
+  if (isAnonymous(daCtx)) {
+    return { status: 401 };
+  }
+  const success = await put(env, daCtx);
+  const status = success ? 201 : 500;
+  return { status };
 }
