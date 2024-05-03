@@ -14,7 +14,7 @@ import esmock from 'esmock';
 
 describe('Version Patch', () => {
   it('Patch Object unknown', async () => {
-    const req = { json: async () => JSON.parse('{"displayname": "Some version"}')};
+    const req = { json: async () => JSON.parse('{"label": "Some version"}')};
     const { patchObjectVersion } = await esmock(
       '../../../src/storage/version/patch.js', {
         '../../../src/storage/object/get.js': {
@@ -32,7 +32,7 @@ describe('Version Patch', () => {
   })
 
   it('Patch Object Version', async () => {
-    const req = { json: async () => JSON.parse('{"displayname": "Some version"}')};
+    const req = { json: async () => JSON.parse('{}')};
     const env = {
       S3_DEF_URL: 's3def',
       S3_ACCESS_KEY_ID: 'id',
@@ -54,7 +54,7 @@ describe('Version Patch', () => {
 
     const mockedObject = {
       body: 'obj body',
-      metadata: { timestamp: '999' }
+      metadata: { timestamp: '999', label: 'prev label' }
     };
     const mockGetObject = async (e, c) => {
       if (e === env
@@ -100,12 +100,12 @@ describe('Version Patch', () => {
     assert.equal('[{"email":"anonymous"}]', de.Metadata.Users);
     assert.equal('999', de.Metadata.Timestamp);
     assert.equal('mykey', de.Metadata.Path);
-    assert.equal('Some version', de.Metadata.Displayname);
+    assert.equal('prev label', de.Metadata.Label);
     assert.equal(200, resp.status);
   });
 
   it('Patch Object Version 2', async () => {
-    const req = { json: async () => JSON.parse('{"displayname": "v999"}')};
+    const req = { json: async () => JSON.parse('{"label": "v999"}')};
     const env = {};
     const daCtx = {
       org: 'org2',
@@ -167,7 +167,7 @@ describe('Version Patch', () => {
     assert.equal('[{"email":"jbloggs@acme"},{"email":"ablah@halba"}]', de.Metadata.Users);
     assert.equal('12345', de.Metadata.Timestamp);
     assert.equal('goobar', de.Metadata.Path);
-    assert.equal('v999', de.Metadata.Displayname);
+    assert.equal('v999', de.Metadata.Label);
     assert.equal(200, resp.status);
   });
 });

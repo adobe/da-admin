@@ -22,7 +22,7 @@ function buildInput({
   };
 }
 
-// Currently only patches the display name into the version
+// Currently only patches the label into the version
 export async function patchObjectVersion(req, env, daCtx) {
   const rb = await req.json();
   const { org, key } = daCtx;
@@ -43,7 +43,7 @@ export async function patchObjectVersion(req, env, daCtx) {
       Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
       Timestamp: current.metadata?.timestamp || `${Date.now()}`,
       Path: current.metadata?.path || daCtx.key,
-      Displayname: rb.displayname,
+      Label: rb.label || current.metadata?.label,
     },
   }, false);
   return { status: resp.status };

@@ -22,7 +22,7 @@ export default async function postHandler({ req, env, daCtx }) {
   if (path.startsWith('/bucket')) return postBucket({ env, daCtx });
   if (path.startsWith('/source')) return postSource({ req, env, daCtx });
   if (path.startsWith('/config')) return postConfig({ req, env, daCtx });
-  if (path.startsWith('/versionsource')) return postVersionSource({ env, daCtx });
+  if (path.startsWith('/versionsource')) return postVersionSource({ req, env, daCtx });
   if (path.startsWith('/copy')) return copyHandler({ req, env, daCtx });
   if (path.startsWith('/rename')) return renameHandler({ req, env, daCtx });
 
