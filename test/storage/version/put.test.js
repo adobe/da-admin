@@ -12,6 +12,8 @@
 import assert from 'assert';
 import esmock from 'esmock';
 
+import { getBodyLength } from '../../../src/storage/version/put.js';
+
 describe('Version Put', () => {
   it('Post Object Version', async () => {
     const mockGetObject = async () => {
@@ -184,5 +186,32 @@ describe('Version Put', () => {
     assert.equal('[{"email":"one@acme.org"},{"email":"two@acme.org"}]', input.Metadata.Users);
     assert.equal('existing label', input.Metadata.Label);
     assert.equal('/y/z', input.Metadata.Path);
+  });
+
+  it('Test getBodyLength String', async () => {
+    const {content, length} = await getBodyLength('hello');
+    assert.equal('hello', content);
+    assert.equal(5, length);
+  });
+
+  it('Test getBodyLength with Transform to String', async () => {
+    const stream = { transformToString: () => '🥳' };
+
+    const { content, length } = await getBodyLength(stream);
+    assert.equal('🥳', content);
+    assert.equal(4, length);
+  });
+
+  it('Test getBodyLength with unknown', async () => {
+    const body = {};
+    const { content, length } = await getBodyLength(body);
+    assert.equal(body, content);
+    assert.equal(undefined, length);
+  });
+
+  it('Test getBodyLength with undefined', async () => {
+    const { content, length } = await getBodyLength(undefined);
+    assert.equal(undefined, content);
+    assert.equal(undefined, length);
   });
 });

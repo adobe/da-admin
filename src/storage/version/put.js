@@ -20,12 +20,34 @@ import {
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
+export async function getBodyLength(body) {
+  if (body === undefined) {
+    return {};
+  }
+
+  let content;
+  if (Object.hasOwn(body, 'transformToString') && typeof body.transformToString === 'function') {
+    content = await body.transformToString();
+  } else {
+    content = body;
+  }
+
+  let length;
+  if (typeof content === 'string' || content instanceof String) {
+    // get string length in bytes
+    length = new Blob([content]).size;
+  }
+  return { content, length };
+}
+
 export async function putVersion(config, {
   Bucket, Body, ID, Version, Ext, Metadata,
 }, noneMatch = true) {
+  const { content, length } = await getBodyLength(Body);
+
   const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
   const input = {
-    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata,
+    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body: content, Metadata, ContentLength: length,
   };
   const command = new PutObjectCommand(input);
   try {
@@ -36,12 +58,14 @@ export async function putVersion(config, {
   }
 }
 
-function buildInput({
+async function buildInput({
   org, key, body, type,
 }) {
+  const { content, length } = await getBodyLength(body);
+
   const Bucket = `${org}-content`;
   return {
-    Bucket, Key: key, Body: body, ContentType: type,
+    Bucket, Key: key, Body: content, ContentType: type, ContentLength: length,
   };
 }
 
@@ -54,7 +78,7 @@ export async function postObjectVersion(req, env, daCtx) {
   }
 
   const config = getS3Config(env);
-  const update = buildInput(daCtx);
+  const update = await buildInput(daCtx);
   const current = await getObject(env, daCtx);
   if (current.status === 404 || !current.metadata?.id || !current.metadata?.version) {
     return 404;
@@ -92,7 +116,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const ID = current.metadata?.id || crypto.randomUUID();
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(daCtx.users);
-  const input = buildInput(update);
+  const input = await buildInput(update);
   const Timestamp = `${Date.now()}`;
   const Path = update.key;
   if (current.status === 404) {
