@@ -89,18 +89,25 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const config = getS3Config(env);
   const current = await getObject(env, update, !body);
 
+  const lfs = current.metadata?.lastfullstore || 0;
+
+  // Store only if we requested the body and the last full store was more than an hour ago
+  const storeBody = body && (Date.now() - lfs > 1000 * 60 * 60);
+
   const ID = current.metadata?.id || crypto.randomUUID();
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(daCtx.users);
   const input = buildInput(update);
   const Timestamp = `${Date.now()}`;
   const Path = update.key;
+  const Lastfullstore = storeBody ? Timestamp : lfs;
+
   if (current.status === 404) {
     const client = ifNoneMatch(config);
     const command = new PutObjectCommand({
       ...input,
       Metadata: {
-        ID, Version, Users, Timestamp, Path,
+        ID, Version, Users, Timestamp, Path, Lastfullstore,
       },
     });
     try {
@@ -116,7 +123,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
 
   const versionResp = await putVersion(config, {
     Bucket: input.Bucket,
-    Body: current.body,
+    Body: storeBody ? current.body : '',
     ID,
     Version,
     Ext: daCtx.ext,
@@ -135,7 +142,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const command = new PutObjectCommand({
     ...input,
     Metadata: {
-      ID, Version: crypto.randomUUID(), Users, Timestamp, Path,
+      ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Lastfullstore,
     },
   });
   try {
