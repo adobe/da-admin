@@ -35,7 +35,7 @@ async function invalidateCollab(api, url, env) {
 }
 
 export async function deleteSource({ req, env, daCtx }) {
-  await postObjectVersion(env, daCtx);
+  await postObjectVersion(req, env, daCtx);
   const resp = await deleteObject(env, daCtx);
 
   if (resp.status === 204) {

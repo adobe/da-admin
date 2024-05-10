@@ -27,6 +27,6 @@ export async function patchVersion({ req, env, daCtx }) {
   return patchObjectVersion(req, env, daCtx);
 }
 
-export async function postVersionSource({ env, daCtx }) {
-  return postObjectVersion(env, daCtx);
+export async function postVersionSource({ req, env, daCtx }) {
+  return postObjectVersion(req, env, daCtx);
 }
