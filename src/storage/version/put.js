@@ -20,7 +20,7 @@ import {
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
-export async function getBodyLength(body) {
+export async function getContentAndLength(body) {
   if (body === undefined) {
     return {};
   }
@@ -43,7 +43,7 @@ export async function getBodyLength(body) {
 export async function putVersion(config, {
   Bucket, Body, ID, Version, Ext, Metadata,
 }, noneMatch = true) {
-  const { content, length } = await getBodyLength(Body);
+  const { content, length } = await getContentAndLength(Body);
 
   const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
   const input = {
@@ -61,7 +61,7 @@ export async function putVersion(config, {
 async function buildInput({
   org, key, body, type,
 }) {
-  const { content, length } = await getBodyLength(body);
+  const { content, length } = await getContentAndLength(body);
 
   const Bucket = `${org}-content`;
   return {
