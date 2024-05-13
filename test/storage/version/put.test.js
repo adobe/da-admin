@@ -185,4 +185,183 @@ describe('Version Put', () => {
     assert.equal('existing label', input.Metadata.Label);
     assert.equal('/y/z', input.Metadata.Path);
   });
+
+  it('Put Object With Version store content', async () => {
+    const mockGetObject = async (e, u, h) => {
+      if (!h) {
+        return {
+          body: 'prevbody',
+          metadata: {
+            id: 'x123',
+            version: 'aaa-bbb',
+          },
+          status: 200
+        };
+      }
+    }
+
+    const s3VersionSent = [];
+    const mockS3VersionClient = {
+      send: (c) => {
+        s3VersionSent.push(c);
+        return { $metadata: { httpStatusCode: 200 } };
+      }
+    };
+    const mockIfNoneMatch = () => mockS3VersionClient;
+
+    const s3Sent = [];
+    const mockS3Client = {
+      send: (c) => {
+        s3Sent.push(c);
+        return { $metadata: { httpStatusCode: 200 } };
+      }
+    };
+    const mockIfMatch = () => mockS3Client
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: mockIfNoneMatch,
+        ifMatch: mockIfMatch,
+      },
+    });
+
+    const env = {};
+    const daCtx= { ext: 'html' };
+    const update = { body: 'new-body', org: 'myorg', key: '/a/x.html' };
+    const resp = await putObjectWithVersion(env, daCtx, update, true);
+    assert.equal(200, resp);
+    assert.equal(1, s3VersionSent.length);
+    assert.equal('prevbody', s3VersionSent[0].input.Body);
+    assert.equal('myorg-content', s3VersionSent[0].input.Bucket);
+    assert.equal('.da-versions/x123/aaa-bbb.html', s3VersionSent[0].input.Key);
+    assert.equal('[{"email":"anonymous"}]', s3VersionSent[0].input.Metadata.Users);
+    assert.equal('/a/x.html', s3VersionSent[0].input.Metadata.Path);
+    assert(s3VersionSent[0].input.Metadata.Timestamp > 0);
+
+    assert.equal(1, s3Sent.length);
+    assert.equal('new-body', s3Sent[0].input.Body);
+    assert.equal('myorg-content', s3Sent[0].input.Bucket);
+    assert.equal('/a/x.html', s3Sent[0].input.Key);
+    assert.equal('x123', s3Sent[0].input.Metadata.ID);
+    assert.equal('/a/x.html', s3Sent[0].input.Metadata.Path);
+    assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
+    assert(s3Sent[0].input.Metadata.Timestamp > 0);
+    assert.equal(s3Sent[0].input.Metadata.Lastfullstore, s3Sent[0].input.Metadata.Timestamp);
+  });
+
+  it('Put Object With Version don\'t store content', async () => {
+    const mockGetObject = async (e, u, h) => {
+      if (!h) {
+        return {
+          body: 'prevbody',
+          metadata: {
+            id: 'q123-456',
+            lastfullstore: Date.now(),
+            version: 'ver123',
+          },
+          status: 201
+        };
+      }
+    }
+
+    const s3VersionSent = [];
+    const mockS3VersionClient = {
+      send: (c) => {
+        s3VersionSent.push(c);
+        return { $metadata: { httpStatusCode: 200 } };
+      }
+    };
+    const mockIfNoneMatch = () => mockS3VersionClient;
+
+    const s3Sent = [];
+    const mockS3Client = {
+      send: (c) => {
+        s3Sent.push(c);
+        return { $metadata: { httpStatusCode: 202 } };
+      }
+    };
+    const mockIfMatch = () => mockS3Client
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: mockIfNoneMatch,
+        ifMatch: mockIfMatch,
+      },
+    });
+
+    const env = {};
+    const daCtx= { ext: 'html', users: [{"email": "foo@acme.org"}, {"email": "bar@acme.org"}] };
+    const update = { body: 'new-body', org: 'myorg', key: '/a/x.html' };
+    const resp = await putObjectWithVersion(env, daCtx, update, true);
+    assert.equal(202, resp);
+    assert.equal(1, s3VersionSent.length);
+    assert.equal('', s3VersionSent[0].input.Body);
+    assert.equal('myorg-content', s3VersionSent[0].input.Bucket);
+    assert.equal('.da-versions/q123-456/ver123.html', s3VersionSent[0].input.Key);
+    assert.equal('[{"email":"anonymous"}]', s3VersionSent[0].input.Metadata.Users);
+    assert.equal('/a/x.html', s3VersionSent[0].input.Metadata.Path);
+    assert(s3VersionSent[0].input.Metadata.Timestamp > 0);
+
+    assert.equal(1, s3Sent.length);
+    assert.equal('new-body', s3Sent[0].input.Body);
+    assert.equal('myorg-content', s3Sent[0].input.Bucket);
+    assert.equal('/a/x.html', s3Sent[0].input.Key);
+    assert.equal('q123-456', s3Sent[0].input.Metadata.ID);
+    assert.equal('/a/x.html', s3Sent[0].input.Metadata.Path);
+    assert.equal('[{\"email\":\"foo@acme.org\"},{\"email\":\"bar@acme.org\"}]', s3Sent[0].input.Metadata.Users);
+    assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
+    assert(s3Sent[0].input.Metadata.Timestamp > 0);
+    assert.equal(s3Sent[0].input.Metadata.Lastfullstore, s3Sent[0].input.Metadata.Timestamp);
+  });
+
+  it('Put First Object With Version', async () => {
+    const mockGetObject = async (e, u, h) => {
+      if (!h) {
+        return {
+          status: 404
+        };
+      }
+    }
+
+    const s3Sent = [];
+    const mockS3Client = {
+      send: (c) => {
+        s3Sent.push(c);
+        return {
+          $metadata: {
+            httpStatusCode: 200
+          }
+        };
+      }
+    };
+    const mockIfNoneMatch = () => mockS3Client;
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: mockIfNoneMatch
+      },
+    });
+
+    const env = {};
+    const daCtx= {};
+    const update = { org: 'myorg', key: '/a/b/c' };
+    const resp = await putObjectWithVersion(env, daCtx, update, true);
+    assert.equal(201, resp);
+
+    assert.equal(1, s3Sent.length);
+    assert.equal('myorg-content', s3Sent[0].input.Bucket);
+    assert(s3Sent[0].input.Metadata.ID);
+    assert.equal('/a/b/c', s3Sent[0].input.Metadata.Path);
+    assert(s3Sent[0].input.Metadata.Timestamp > 0);
+    assert(s3Sent[0].input.Metadata.Version);
+  });
 });
