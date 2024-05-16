@@ -48,6 +48,11 @@ describe('Dark Alley auth', () => {
       assert.strictEqual(authed, true);
     });
 
+    it('authorized if org and user match - case insensitive', async () => {
+      const authed = await isAuthorized(env, 'geometrixx', { email: 'ApaRkeR@geometrixx.info' });
+      assert.strictEqual(authed, true);
+    });
+
     it('not authorized no user match', async () => {
       const authed = await isAuthorized(env, 'geometrixx', { email: 'chad@geometrixx.info' });
       assert.strictEqual(authed, false);
