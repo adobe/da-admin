@@ -108,7 +108,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
       return resp.$metadata.httpStatusCode === 200 ? 201 : resp.$metadata.httpStatusCode;
     } catch (e) {
       if (e.$metadata.httpStatusCode === 412) {
-        return putObjectWithVersion(config, update, body);
+        return putObjectWithVersion(env, daCtx, update, body);
       }
       return e.$metadata.httpStatusCode;
     }
@@ -144,7 +144,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
     return resp.$metadata.httpStatusCode;
   } catch (e) {
     if (e.$metadata.httpStatusCode === 412) {
-      return putObjectWithVersion(env, update, body);
+      return putObjectWithVersion(env, daCtx, update, body);
     }
     return e.$metadata.httpStatusCode;
   }

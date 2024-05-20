@@ -185,4 +185,128 @@ describe('Version Put', () => {
     assert.equal('existing label', input.Metadata.Label);
     assert.equal('/y/z', input.Metadata.Path);
   });
+
+  it('Test putObjectWithVersion retry on new document', async () => {
+    const getObjectCalls = []
+    const mockGetObject = async (e, u, nb) => {
+      getObjectCalls.push({e, u, nb});
+      return {
+        status: 404,
+        metadata: {}
+      };
+    };
+
+    let firstCall = true;
+    const sendCalls = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sendCalls.push(cmd);
+        const resp = {
+          $metadata: {
+            httpStatusCode: firstCall ? 412 : 200
+          }
+        };
+        if (firstCall) {
+          firstCall = false;
+          throw resp;
+        } else {
+          return resp;
+        }
+      }
+    };
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client
+      },
+    });
+
+    const mockEnv = { foo: 'bar' };
+    const mockUpdate = 'haha';
+    const mockCtx = { users: [{ email: 'foo@acme.com' }] };
+    const resp = await putObjectWithVersion(mockEnv, mockCtx, mockUpdate, false);
+
+    assert.equal(201, resp);
+    assert.equal(2, getObjectCalls.length);
+    assert.equal(getObjectCalls[0].e, mockEnv);
+    assert.equal(getObjectCalls[0].u, mockUpdate);
+    assert.equal(getObjectCalls[0].nb, true);
+    assert.equal(getObjectCalls[1].e, mockEnv);
+    assert.equal(getObjectCalls[1].u, mockUpdate);
+    assert.equal(getObjectCalls[1].nb, true);
+
+    assert.equal(2, sendCalls.length);
+    assert.strictEqual(sendCalls[0].input.Metadata.Users, JSON.stringify(mockCtx.users));
+    assert.strictEqual(sendCalls[1].input.Metadata.Users, JSON.stringify(mockCtx.users));
+  });
+
+  it('Test putObjectWithVersion retry on existing document', async () => {
+    const getObjectCalls = []
+    const mockGetObject = async (e, u, nb) => {
+      getObjectCalls.push({e, u, nb});
+      return {
+        status: 200,
+        metadata: {}
+      };
+    };
+
+    let firstCall = true;
+    const sendCalls = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sendCalls.push(cmd);
+        const resp = {
+          $metadata: {
+            httpStatusCode: firstCall ? 412 : 200
+          }
+        };
+        if (firstCall) {
+          firstCall = false;
+          throw resp;
+        } else {
+          return resp;
+        }
+      }
+    };
+    const mockS3PutClient = {
+      async send(cmd) {
+        return {
+          $metadata: {
+            httpStatusCode: 200
+          }
+        };
+      }
+    };
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: () => mockS3Client,
+        ifNoneMatch: () => mockS3PutClient
+      },
+    });
+
+    const mockEnv = { hi: 'ha' };
+    const mockUpdate = 'hoho';
+    const mockCtx = { users: [{ email: 'blah@acme.com' }] };
+    const resp = await putObjectWithVersion(mockEnv, mockCtx, mockUpdate, true);
+
+    assert.equal(200, resp);
+    assert.equal(2, getObjectCalls.length);
+    assert.equal(getObjectCalls[0].e, mockEnv);
+    assert.equal(getObjectCalls[0].u, mockUpdate);
+    assert.equal(getObjectCalls[0].nb, false);
+    assert.equal(getObjectCalls[1].e, mockEnv);
+    assert.equal(getObjectCalls[1].u, mockUpdate);
+    assert.equal(getObjectCalls[1].nb, false);
+
+    assert.equal(2, sendCalls.length);
+    assert.strictEqual(sendCalls[0].input.Metadata.Users, JSON.stringify(mockCtx.users));
+    assert.strictEqual(sendCalls[1].input.Metadata.Users, JSON.stringify(mockCtx.users));
+  });
 });
