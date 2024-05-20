@@ -249,7 +249,7 @@ describe('Version Put', () => {
     assert.equal('/a/x.html', s3Sent[0].input.Metadata.Path);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
-    assert.equal(s3Sent[0].input.Metadata.Lastfullstore, s3Sent[0].input.Metadata.Timestamp);
+    assert.equal(s3Sent[0].input.Metadata.Preparsingstore, s3Sent[0].input.Metadata.Timestamp);
   });
 
   it('Put Object With Version don\'t store content', async () => {
@@ -259,7 +259,7 @@ describe('Version Put', () => {
           body: 'prevbody',
           metadata: {
             id: 'q123-456',
-            lastfullstore: Date.now(),
+            preparsingstore: Date.now(),
             version: 'ver123',
           },
           status: 201
@@ -317,7 +317,7 @@ describe('Version Put', () => {
     assert.equal('[{\"email\":\"foo@acme.org\"},{\"email\":\"bar@acme.org\"}]', s3Sent[0].input.Metadata.Users);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
-    assert.equal(s3Sent[0].input.Metadata.Lastfullstore, s3Sent[0].input.Metadata.Timestamp);
+    assert.equal(s3Sent[0].input.Metadata.Preparsingstore, s3Sent[0].input.Metadata.Timestamp);
   });
 
   it('Put First Object With Version', async () => {
