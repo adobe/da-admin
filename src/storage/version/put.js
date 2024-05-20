@@ -115,11 +115,11 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
     }
   }
 
-  const lfs = current.metadata?.lastfullstore || '0';
+  const pps = current.metadata?.preparsingstore || '0';
 
-  // Store only if we requested the body and the last full store was more than an hour ago
-  const storeBody = body && (Date.now() - lfs > 1000 * 60 * 60);
-  const Lastfullstore = storeBody ? Timestamp : lfs;
+  // Store the body if preparsingstore is not defined, so a once-off store
+  const storeBody = body && pps === '0';
+  const Preparsingstore = storeBody ? Timestamp : pps;
 
   const versionResp = await putVersion(config, {
     Bucket: input.Bucket,
@@ -142,7 +142,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const command = new PutObjectCommand({
     ...input,
     Metadata: {
-      ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Lastfullstore,
+      ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Preparsingstore,
     },
   });
   try {
