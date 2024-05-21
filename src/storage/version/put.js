@@ -20,34 +20,28 @@ import {
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
-export async function getContentAndLength(body) {
+export function getContentLength(body) {
   if (body === undefined) {
-    return {};
+    return undefined;
   }
 
-  let content;
-  if (Object.hasOwn(body, 'transformToString') && typeof body.transformToString === 'function') {
-    content = await body.transformToString();
-  } else {
-    content = body;
-  }
-
-  let length;
-  if (typeof content === 'string' || content instanceof String) {
+  if (typeof body === 'string' || body instanceof String) {
     // get string length in bytes
-    length = new Blob([content]).size;
+    return new Blob([body]).size;
+  } else if (body instanceof File) {
+    return body.size;
   }
-  return { content, length };
+  return undefined;
 }
 
 export async function putVersion(config, {
-  Bucket, Body, ID, Version, Ext, Metadata,
+  Bucket, Body, ID, Version, Ext, Metadata, ContentLength,
 }, noneMatch = true) {
-  const { content, length } = await getContentAndLength(Body);
+  const length = ContentLength ?? getContentLength(Body);
 
   const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
   const input = {
-    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body: content, Metadata, ContentLength: length,
+    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
   };
   const command = new PutObjectCommand(input);
   try {
@@ -61,11 +55,11 @@ export async function putVersion(config, {
 async function buildInput({
   org, key, body, type,
 }) {
-  const { content, length } = await getContentAndLength(body);
+  const length = getContentLength(body);
 
   const Bucket = `${org}-content`;
   return {
-    Bucket, Key: key, Body: content, ContentType: type, ContentLength: length,
+    Bucket, Key: key, Body: body, ContentType: type, ContentLength: length,
   };
 }
 
@@ -96,6 +90,7 @@ export async function postObjectVersion(req, env, daCtx) {
   const resp = await putVersion(config, {
     Bucket: update.Bucket,
     Body: current.body,
+    ContentLength: current.contentLength,
     ID: current.metadata.id,
     Version: current.metadata.version,
     Ext: daCtx.ext,
@@ -141,6 +136,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const versionResp = await putVersion(config, {
     Bucket: input.Bucket,
     Body: current.body,
+    ContentLength: body ? current.contentLength : undefined,
     ID,
     Version,
     Ext: daCtx.ext,

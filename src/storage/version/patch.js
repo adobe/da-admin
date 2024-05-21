@@ -44,6 +44,7 @@ export async function patchObjectVersion(req, env, daCtx) {
       Timestamp: current.metadata?.timestamp || `${Date.now()}`,
       Path: current.metadata?.path || daCtx.key,
       Label: rb.label || current.metadata?.label,
+      ContentLength: current.contentLength,
     },
   }, false);
   return { status: resp.status };

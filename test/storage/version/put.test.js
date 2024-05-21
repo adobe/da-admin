@@ -12,7 +12,7 @@
 import assert from 'assert';
 import esmock from 'esmock';
 
-import { getContentAndLength } from '../../../src/storage/version/put.js';
+import { getContentLength } from '../../../src/storage/version/put.js';
 
 describe('Version Put', () => {
   it('Post Object Version', async () => {
@@ -188,30 +188,30 @@ describe('Version Put', () => {
     assert.equal('/y/z', input.Metadata.Path);
   });
 
-  it('Test getBodyLength String', async () => {
-    const {content, length} = await getContentAndLength('hello');
-    assert.equal('hello', content);
+  it('Test getContentLength String', () => {
+    const length = getContentLength('hello');
     assert.equal(5, length);
   });
 
-  it('Test getBodyLength with Transform to String', async () => {
-    const stream = { transformToString: () => '🥳' };
-
-    const { content, length } = await getContentAndLength(stream);
-    assert.equal('🥳', content);
+  it('Test getContentLength Unicode String', () => {
+    const length = getContentLength('🥳');
     assert.equal(4, length);
   });
 
-  it('Test getBodyLength with unknown', async () => {
+  it('Test getContentLength with unknown', () => {
     const body = {};
-    const { content, length } = await getContentAndLength(body);
-    assert.equal(body, content);
+    const length = getContentLength(body);
     assert.equal(undefined, length);
   });
 
-  it('Test getBodyLength with undefined', async () => {
-    const { content, length } = await getContentAndLength(undefined);
-    assert.equal(undefined, content);
+  it('Test getContentLength with undefined', () => {
+    const length = getContentLength(undefined);
     assert.equal(undefined, length);
+  });
+
+  it('Test getContentLength with File', () => {
+    const body = new File(['Some File Content'], 'foo.txt', { type: 'text/plain' });
+    const length = getContentLength(body);
+    assert.equal(17, length);
   });
 });
