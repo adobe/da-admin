@@ -11,21 +11,21 @@
  */
 import { isAuthorized } from '../../utils/auth.js';
 
+async function isBucketAuthed(env, daCtx, bucket) {
+  const { name, created } = bucket;
+  const userAuth = await Promise.all(
+    daCtx.users.map(async (user) => isAuthorized(env, name, user)),
+  );
+  const notAuthed = userAuth.some((authed) => !authed);
+  if (notAuthed) return null;
+  return { name, created };
+}
+
 async function formatBuckets(env, daCtx, buckets) {
-  const authedBuckets = [];
-  for (const bucket of buckets) {
-    const { name, created } = bucket;
-    let auth = true;
-    // check for all users in the session if they are authorized
-    for (const user of daCtx.users) {
-      if (!await isAuthorized(env, name, user)) {
-        auth = false;
-        break;
-      }
-    }
-    if (auth) authedBuckets.push({ name, created });
-  }
-  return authedBuckets;
+  const authResults = await Promise.all(
+    buckets.map((bucket) => isBucketAuthed(env, daCtx, bucket)),
+  );
+  return authResults.filter((res) => res);
 }
 
 export default async function listBuckets(env, daCtx) {
