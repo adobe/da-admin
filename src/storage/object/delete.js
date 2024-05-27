@@ -55,13 +55,7 @@ export default async function deleteObjects(env, daCtx) {
       const { Contents = [], NextContinuationToken } = resp;
       sourceKeys.push(...Contents.map(({ Key }) => Key));
 
-      await Promise.all(
-        new Array(1).fill(null).map(async () => {
-          while (sourceKeys.length) {
-            await deleteObject(client, daCtx.org, sourceKeys.pop());
-          }
-        }),
-      );
+      await Promise.all(sourceKeys.map((key) => deleteObject(client, daCtx.org, key)));
 
       ContinuationToken = NextContinuationToken;
     } catch (e) {

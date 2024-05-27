@@ -58,15 +58,10 @@ export default async function copyObject(env, daCtx, details) {
       const resp = await client.send(command);
 
       const { Contents = [], NextContinuationToken } = resp;
+
       sourceKeys.push(...Contents.map(({ Key }) => Key));
 
-      await Promise.all(
-        new Array(1).fill(null).map(async () => {
-          while (sourceKeys.length) {
-            await copyFile(client, daCtx.org, sourceKeys.pop(), details);
-          }
-        }),
-      );
+      await Promise.all(sourceKeys.map((key) => copyFile(client, daCtx.org, key, details)));
 
       ContinuationToken = NextContinuationToken;
     } catch (e) {
