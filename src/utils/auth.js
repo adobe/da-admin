@@ -75,5 +75,5 @@ export async function isAuthorized(env, org, user) {
   }, []);
 
   if (!admins) return true;
-  return admins.some((admin) => admin === user.email);
+  return admins.some((admin) => admin.toLowerCase() === user.email.toLowerCase());
 }
