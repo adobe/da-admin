@@ -61,6 +61,8 @@ export default async function copyObject(env, daCtx, details) {
 
       sourceKeys.push(...Contents.map(({ Key }) => Key));
 
+      // The first 2 elements relate to the directory, maybe do those
+      // synchrnously because this approach doesn't seem to work
       await Promise.all(sourceKeys.map((key) => copyFile(client, daCtx.org, key, details)));
 
       ContinuationToken = NextContinuationToken;
