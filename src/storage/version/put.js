@@ -120,6 +120,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   // Store the body if preparsingstore is not defined, so a once-off store
   const storeBody = body && pps === '0';
   const Preparsingstore = storeBody ? Timestamp : pps;
+  const Label = storeBody ? 'Collab Parse' : undefined;
 
   const versionResp = await putVersion(config, {
     Bucket: input.Bucket,
@@ -131,6 +132,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
       Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
       Timestamp: current.metadata?.timestamp || Timestamp,
       Path: current.metadata?.path || Path,
+      Label,
     },
   });
 
