@@ -12,7 +12,6 @@
 
 import { getObjectVersion } from '../storage/version/get.js';
 import { listObjectVersions } from '../storage/version/list.js';
-import { patchObjectVersion } from '../storage/version/patch.js';
 import { postObjectVersion } from '../storage/version/put.js';
 
 export async function getVersionList({ env, daCtx }) {
@@ -21,10 +20,6 @@ export async function getVersionList({ env, daCtx }) {
 
 export async function getVersionSource({ env, daCtx, head }) {
   return getObjectVersion(env, daCtx, head);
-}
-
-export async function patchVersion({ req, env, daCtx }) {
-  return patchObjectVersion(req, env, daCtx);
 }
 
 export async function postVersionSource({ req, env, daCtx }) {
