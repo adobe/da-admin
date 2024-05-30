@@ -135,7 +135,7 @@ export async function postObjectVersion(req, env, daCtx) {
   const { org, key } = daCtx;
 
   const resp = await putObjectWithVersion(env, daCtx, {
-    org, key, body, contentType, label,
+    org, key, body, type: contentType, label,
   }, true);
 
   return { status: resp === 200 ? 201 : resp };
