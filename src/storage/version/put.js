@@ -53,9 +53,9 @@ export async function putVersion(config, {
 }
 
 async function buildInput({
-  org, key, body, type,
+  org, key, body, type, contentLength,
 }) {
-  const length = getContentLength(body);
+  const length = contentLength ?? getContentLength(body);
 
   const Bucket = `${org}-content`;
   return {
@@ -106,7 +106,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const versionResp = await putVersion(config, {
     Bucket: input.Bucket,
     Body: (body || storeBody ? current.body : ''),
-    ContentLength: body ? current.contentLength : undefined,
+    ContentLength: (body || storeBody ? current.contentLength : undefined),
     ID,
     Version,
     Ext: daCtx.ext,
@@ -150,11 +150,11 @@ export async function postObjectVersion(req, env, daCtx) {
   }
   const label = reqJSON?.label;
 
-  const { body, contentType } = await getObject(env, daCtx);
+  const { body, contentLength, contentType } = await getObject(env, daCtx);
   const { org, key } = daCtx;
 
   const resp = await putObjectWithVersion(env, daCtx, {
-    org, key, body, type: contentType, label,
+    org, key, body, contentLength, type: contentType, label,
   }, true);
 
   return { status: resp === 200 ? 201 : resp };

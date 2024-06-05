@@ -329,9 +329,11 @@ describe('Version Put', () => {
 
     const mockGetObject = async (e, u, h) => {
       if (e === env && !h) {
+        const body = ReadableStream.from('doccontent');
         return {
-          body: 'doccontent',
+          body,
           contentType: 'text/html',
+          contentLength: 10,
         };
       }
     }
@@ -376,15 +378,16 @@ describe('Version Put', () => {
     const resp = await postObjectVersion(req, env, ctx);
     assert.equal(201, resp.status);
     assert.equal(1, s3INMSent.length);
-    assert.equal('doccontent', s3INMSent[0].input.Body);
+    assert(s3INMSent[0].input.Body instanceof ReadableStream);
     assert.equal('org123-content', s3INMSent[0].input.Bucket);
     assert.equal('/q/r/t', s3INMSent[0].input.Metadata.Path);
     assert(s3INMSent[0].input.Metadata.Timestamp > 0);
     assert.equal('[{"email":"anonymous"}]', s3INMSent[0].input.Metadata.Users);
     assert.equal('foobar', s3INMSent[0].input.Metadata.Label);
+    assert.equal(10, s3INMSent[0].input.ContentLength);
 
     assert.equal(1, s3Sent.length);
-    assert.equal('doccontent', s3Sent[0].input.Body);
+    assert(s3Sent[0].input.Body instanceof ReadableStream);
     assert.equal('org123-content', s3Sent[0].input.Bucket);
     assert.equal('/q/r/t', s3Sent[0].input.Key);
     assert.equal('/q/r/t', s3Sent[0].input.Metadata.Path);
@@ -392,6 +395,9 @@ describe('Version Put', () => {
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
     assert(s3Sent[0].input.Metadata.Version);
     assert.equal('text/html', s3Sent[0].input.ContentType);
+    assert.equal(10, s3Sent[0].input.ContentLength);
+
+    assert(s3INMSent[0].input.Body !== s3Sent[0].input.Body )
   });
 
   it('Test putObjectWithVersion HEAD', async () => {
@@ -402,6 +408,7 @@ describe('Version Put', () => {
         path: '/q',
         timestamp: 123,
         users: '[{"email":"anonymous"}]',
+        preparsingstore: 12345,
       }
       return { body: '', metadata, contentLength: 616 };
     };
