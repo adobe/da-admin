@@ -52,7 +52,7 @@ export async function putVersion(config, {
   }
 }
 
-async function buildInput({
+function buildInput({
   org, key, body, type, contentLength,
 }) {
   const length = contentLength ?? getContentLength(body);
@@ -73,7 +73,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const ID = current.metadata?.id || crypto.randomUUID();
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(daCtx.users);
-  const input = await buildInput(update);
+  const input = buildInput(update);
   const Timestamp = `${Date.now()}`;
   const Path = update.key;
 
