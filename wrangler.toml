@@ -15,6 +15,11 @@ kv_namespaces = [
 
 [env.stage]
 vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.live" }
+
+services = [
+  { binding = "dacollab", service = "da-collab-stage" }
+]
+
 kv_namespaces = [
   { binding = "DA_AUTH", id = "21693f3b20f54fcbb850ddc8947335ba" },
   { binding = "DA_CONFIG", id = "c44cb8dc69f041dc87c5aaef41b97df9" }
