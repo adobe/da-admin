@@ -14,5 +14,5 @@ import copyHelper from '../helpers/copy.js';
 
 export default async function copyHandler({ req, env, daCtx }) {
   const details = await copyHelper(req, daCtx);
-  return copyObject(env, daCtx, details);
+  return copyObject(env, daCtx, details, false);
 }

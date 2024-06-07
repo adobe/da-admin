@@ -24,24 +24,39 @@ function buildInput(org, key) {
   };
 }
 
-const copyFile = async (client, org, sourceKey, details) => {
+export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
 
+  const input = {
+    Bucket: `${daCtx.org}-content`,
+    Key,
+    CopySource: `${daCtx.org}-content/${sourceKey}`,
+  };
+
+  // We only want to keep the history if this was a rename. In case of an actual
+  // copy we should start with clean history. The history is associated with the
+  // ID of the object, so we need to generate a new ID for the object and also a
+  // new ID for the version. We set the user to the user making the copy.
+  if (!isRename) {
+    input.Metadata = {
+      ID: crypto.randomUUID(),
+      Version: crypto.randomUUID(),
+      Timestamp: `${Date.now()}`,
+      Users: JSON.stringify(daCtx.users),
+      Path: details.destination,
+    };
+    input.MetadataDirective = 'REPLACE';
+  }
+
   try {
-    await client.send(
-      new CopyObjectCommand({
-        Bucket: `${org}-content`,
-        Key,
-        CopySource: `${org}-content/${sourceKey}`,
-      }),
-    );
+    await client.send(new CopyObjectCommand(input));
   } catch (e) {
     // eslint-disable-next-line no-console
     console.log(e.$metadata);
   }
 };
 
-export default async function copyObject(env, daCtx, details) {
+export default async function copyObject(env, daCtx, details, isRename) {
   const config = getS3Config(env);
   const client = new S3Client(config);
   const input = buildInput(daCtx.org, details.source);
@@ -63,7 +78,7 @@ export default async function copyObject(env, daCtx, details) {
       await Promise.all(
         new Array(1).fill(null).map(async () => {
           while (sourceKeys.length) {
-            await copyFile(client, daCtx.org, sourceKeys.pop(), details);
+            await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
           }
         }),
       );

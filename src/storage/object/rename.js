@@ -14,7 +14,7 @@ import deleteObjects from './delete.js';
 
 const rename = async (env, daCtx, details) => {
   try {
-    await copyObject(env, daCtx, details);
+    await copyObject(env, daCtx, details, true);
     await deleteObjects(env, daCtx);
   } catch (e) {
     // eslint-disable-next-line no-console
