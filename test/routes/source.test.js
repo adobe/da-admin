@@ -14,46 +14,6 @@ import esmock from 'esmock';
 
 
 describe('Source Route', () => {
-  it('Test postSource triggers callback', async () => {
-    const env = { DA_COLLAB: 'http://localhost:1234' };
-    const daCtx = {};
-    const putResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        return { status: 201 };
-      }
-    };
-
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: putResp
-      }
-    });
-
-    const savedFetch = globalThis.fetch;
-    try {
-      const callbacks = [];
-      globalThis.fetch = async (url) => {
-        callbacks.push(url);
-      };
-
-      const headers = new Map();
-      headers.set('content-type', 'text/html');
-
-      const req = {
-        headers,
-        url: 'http://localhost:8787/source/a/b/mydoc.html'
-      };
-
-      const resp = await postSource({ req, env, daCtx });
-      assert.equal(201, resp.status);
-      assert.equal(1, callbacks.length);
-      assert.equal('http://localhost:1234/api/v1/syncadmin?doc=http://localhost:8787/source/a/b/mydoc.html', callbacks[0]);
-    } finally {
-      globalThis.fetch = savedFetch;
-    }
-  });
-
   it('Test invalidate using service binding', async () => {
     const sb_callbacks = [];
     const dacollab = {
@@ -197,10 +157,18 @@ describe('Source Route', () => {
     const env = { dacollab };
     const daCtx = {};
 
-    const called = [];
+    const postObjVerCalled = [];
+    const postObjVerResp = async (r, e, c) => {
+      if (r === req && e === env && c === daCtx) {
+        postObjVerCalled.push('postObjectVersion');
+        return {status: 201};
+      }
+    };
+
+    const deleteCalled = [];
     const deleteResp = async (e, c) => {
       if (e === env && c === daCtx) {
-        called.push('deleteObject');
+        deleteCalled.push('deleteObject');
         return {status: 204};
       }
     };
@@ -209,12 +177,16 @@ describe('Source Route', () => {
       '../../src/routes/source.js', {
         '../../src/storage/object/delete.js': {
           default: deleteResp
+        },
+        '../../src/storage/version/put.js': {
+          postObjectVersion: postObjVerResp
         }
       }
     );
     const resp = await deleteSource({req, env, daCtx});
     assert.equal(204, resp.status);
-    assert.deepStrictEqual(called, ['deleteObject']);
+    assert.deepStrictEqual(['postObjectVersion'], postObjVerCalled);
+    assert.deepStrictEqual(deleteCalled, ['deleteObject']);
     assert.deepStrictEqual(daCalled,
       ['https://localhost/api/v1/deleteadmin?doc=http://somehost.com/somedoc.html']);
   });

@@ -18,20 +18,10 @@ import { postObjectVersion } from '../storage/version/put.js';
 
 async function invalidateCollab(api, url, env) {
   const invPath = `/api/v1/${api}?doc=${url}`;
-  if (env.dacollab) {
-    // service binding is configured, hostname is not relevant
-    console.log('Using service binding');
-    const invURL = `https://localhost${invPath}`;
-    await env.dacollab.fetch(invURL);
-  } else if (env.DA_COLLAB) {
-    // use internet host-port as configured via DA_COLLAB env var
-    console.log('Using service DA_COLLAB env var');
-    const invURL = `${env.DA_COLLAB}${invPath}`;
-    await fetch(invURL);
-  } else {
-    // eslint-disable-next-line no-console
-    console.log('Not invalidating collab, neither dacollab service binding nor DA_COLLAB env var set');
-  }
+
+  // Use dacollab service binding, hostname is not relevant
+  const invURL = `https://localhost${invPath}`;
+  await env.dacollab.fetch(invURL);
 }
 
 export async function deleteSource({ req, env, daCtx }) {

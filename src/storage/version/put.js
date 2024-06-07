@@ -20,12 +20,28 @@ import {
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
+export function getContentLength(body) {
+  if (body === undefined) {
+    return undefined;
+  }
+
+  if (typeof body === 'string' || body instanceof String) {
+    // get string length in bytes
+    return new Blob([body]).size;
+  } else if (body instanceof File) {
+    return body.size;
+  }
+  return undefined;
+}
+
 export async function putVersion(config, {
-  Bucket, Body, ID, Version, Ext, Metadata,
+  Bucket, Body, ID, Version, Ext, Metadata, ContentLength,
 }, noneMatch = true) {
+  const length = ContentLength ?? getContentLength(Body);
+
   const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
   const input = {
-    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata,
+    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
   };
   const command = new PutObjectCommand(input);
   try {
@@ -37,57 +53,22 @@ export async function putVersion(config, {
 }
 
 function buildInput({
-  org, key, body, type,
+  org, key, body, type, contentLength,
 }) {
+  const length = contentLength ?? getContentLength(body);
+
   const Bucket = `${org}-content`;
   return {
-    Bucket, Key: key, Body: body, ContentType: type,
+    Bucket, Key: key, Body: body, ContentType: type, ContentLength: length,
   };
-}
-
-export async function postObjectVersion(req, env, daCtx) {
-  let reqJSON;
-  try {
-    reqJSON = await req.json();
-  } catch (e) {
-    // no label
-  }
-
-  const config = getS3Config(env);
-  const update = buildInput(daCtx);
-  const current = await getObject(env, daCtx);
-  if (current.status === 404 || !current.metadata?.id || !current.metadata?.version) {
-    return 404;
-  }
-
-  let existingVersion;
-  if (reqJSON?.label === undefined) {
-    existingVersion = await getObject(env, {
-      org: daCtx.org,
-      key: `.da-versions/${current.metadata.id}/${current.metadata.version}.${daCtx.ext}`,
-    });
-  }
-  const label = reqJSON?.label || existingVersion?.metadata?.label;
-
-  const resp = await putVersion(config, {
-    Bucket: update.Bucket,
-    Body: current.body,
-    ID: current.metadata.id,
-    Version: current.metadata.version,
-    Ext: daCtx.ext,
-    Metadata: {
-      Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
-      Timestamp: current.metadata?.timestamp || `${Date.now()}`,
-      Path: current.metadata?.path || daCtx.key,
-      Label: label,
-    },
-  }, false);
-  return { status: resp.status === 200 ? 201 : resp.status };
 }
 
 export async function putObjectWithVersion(env, daCtx, update, body) {
   const config = getS3Config(env);
-  const current = await getObject(env, update, !body);
+  // While we are automatically storing the body once for the 'Collab Parse' changes, we never
+  // do a HEAD, because we may need the content. Once we don't need to do this automatic store
+  // any more, we can change the 'false' argument in the next line back to !body.
+  const current = await getObject(env, update, false);
 
   const ID = current.metadata?.id || crypto.randomUUID();
   const Version = current.metadata?.version || crypto.randomUUID();
@@ -118,13 +99,14 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const pps = current.metadata?.preparsingstore || '0';
 
   // Store the body if preparsingstore is not defined, so a once-off store
-  const storeBody = body && pps === '0';
+  const storeBody = !body && pps === '0';
   const Preparsingstore = storeBody ? Timestamp : pps;
-  const Label = storeBody ? 'Collab Parse' : undefined;
+  const Label = storeBody ? 'Collab Parse' : update.label;
 
   const versionResp = await putVersion(config, {
     Bucket: input.Bucket,
-    Body: (storeBody ? current.body : ''),
+    Body: (body || storeBody ? current.body : ''),
+    ContentLength: (body || storeBody ? current.contentLength : undefined),
     ID,
     Version,
     Ext: daCtx.ext,
@@ -157,4 +139,23 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
     }
     return e.$metadata.httpStatusCode;
   }
+}
+
+export async function postObjectVersion(req, env, daCtx) {
+  let reqJSON;
+  try {
+    reqJSON = await req.json();
+  } catch (e) {
+    // no body
+  }
+  const label = reqJSON?.label;
+
+  const { body, contentLength, contentType } = await getObject(env, daCtx);
+  const { org, key } = daCtx;
+
+  const resp = await putObjectWithVersion(env, daCtx, {
+    org, key, body, contentLength, type: contentType, label,
+  }, true);
+
+  return { status: resp === 200 ? 201 : resp };
 }

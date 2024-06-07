@@ -89,7 +89,7 @@ export default async function putObject(env, daCtx, obj) {
       const { body, type } = isFile ? await getFileBody(obj.data) : getObjectBody(obj.data);
       status = await putObjectWithVersion(env, daCtx, {
         org, key, body, type,
-      }, true);
+      });
     }
   } else {
     const { body, type } = getObjectBody({});
