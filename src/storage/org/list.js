@@ -9,36 +9,27 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+
 import { isAuthorized } from '../../utils/auth.js';
 
-async function isBucketAuthed(env, daCtx, bucket) {
-  const { name, created } = bucket;
+async function isOrgAuthed(env, daCtx, org) {
   const userAuth = await Promise.all(
-    daCtx.users.map(async (user) => isAuthorized(env, name, user)),
+    daCtx.users.map(async (user) => isAuthorized(env, org, user)),
   );
-  const notAuthed = userAuth.some((authed) => !authed);
+  const notAuthed = userAuth.some((auth) => !auth);
   if (notAuthed) return null;
-  return { name, created };
+  return { name: org };
 }
 
-async function formatBuckets(env, daCtx, buckets) {
-  const authResults = await Promise.all(
-    buckets.map((bucket) => isBucketAuthed(env, daCtx, bucket)),
-  );
-  return authResults.filter((res) => res);
-}
-
-export default async function listBuckets(env, daCtx) {
+export default async function listOrgs(env, daCtx) {
   try {
-    const orgs = await env.DA_AUTH.get('orgs', { type: 'json' });
-    const body = await formatBuckets(env, daCtx, orgs);
-
-    return {
-      body: JSON.stringify(body),
-      status: 200,
-      contentType: 'application/json',
-    };
+    const list = await env.DA_CONTENT.list({ delimiter: '/' });
+    const orgs = list.delimitedPrefixes.map((prefix) => (prefix.endsWith('/') ? prefix.substring(0, prefix.length - 1) : prefix));
+    const authed = await Promise.all(
+      orgs.map((org) => isOrgAuthed(env, daCtx, org)),
+    );
+    return authed.filter((org) => org);
   } catch (e) {
-    return { body: '', status: 404 };
+    return [];
   }
 }
