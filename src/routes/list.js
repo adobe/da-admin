@@ -12,6 +12,20 @@
 import listObjects from '../storage/object/list.js';
 import listOrgs from '../storage/org/list.js';
 
+/**
+ * Response object for the list endpoint
+ * @typedef {Object} ListResponse
+ * @property {String} body the response body
+ * @property {Number} status the response status
+ * @property {String|undefined} contentType the response content type
+ */
+
+/**
+ * Lists the objects in the current context - either orgs or objects/folders in an context
+ * @param {Object} env the worker environment
+ * @param {Object} daCtx current context
+ * @return {Promise<ListResponse>} the list
+ */
 export default async function getList({ env, daCtx }) {
   if (!daCtx.org) {
     const orgs = await listOrgs(env, daCtx);

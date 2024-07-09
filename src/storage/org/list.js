@@ -21,6 +21,12 @@ async function isOrgAuthed(env, daCtx, org) {
   return { name: org };
 }
 
+/**
+ * List the orgs for the current context
+ * @param {Object} env the Cloudflare Environment
+ * @param {Object} daCtx the context
+ * @return {Promise<Array<Object>>} the list of orgs
+ */
 export default async function listOrgs(env, daCtx) {
   try {
     const list = await env.DA_CONTENT.list({ delimiter: '/' });
