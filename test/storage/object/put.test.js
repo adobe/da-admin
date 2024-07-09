@@ -8,6 +8,7 @@ import { S3Client } from '@aws-sdk/client-s3';
 
 const s3Mock = mockClient(S3Client);
 
+
 import { putObjectWithVersion, postObjectVersion } from './mocks/version/put.js';
 const putObject = await esmock('../../../src/storage/object/put.js', {
   '../../../src/storage/version/put.js': {
