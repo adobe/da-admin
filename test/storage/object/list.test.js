@@ -34,12 +34,15 @@ describe('list objects', () => {
   it('handles errors', async () => {
     const daCtx = { users: [{email: 'aparker@geometrixx.info'}], org: 'geometrixx', key: '' };
 
+    const input = { Bucket: 'da-content', Prefix: 'geometrixx/', Delimiter: '/' };
     s3Mock
-      .on(ListObjectsV2Command, { Bucket: 'geometrixx-content', Prefix: null, Delimiter: '/' })
+      .on(ListObjectsV2Command, input)
       .rejects(new Error('NoSuchBucket: The specified bucket does not exist.'));
     const resp = await listObjects(env, daCtx);
     assert.strictEqual(resp.status, 404);
     assert.strictEqual(resp.body, '');
+    const calls = s3Mock.commandCalls(ListObjectsV2Command, input);
+    assert(calls[0]);
   });
 
 
@@ -61,7 +64,7 @@ describe('list objects', () => {
     };
 
     s3Mock
-      .on(ListObjectsV2Command, { Bucket: 'geometrixx-content', Prefix: null, Delimiter: '/' })
+      .on(ListObjectsV2Command, { Bucket: 'da-content', Prefix: 'geometrixx/', Delimiter: '/' })
       .resolves(s3resp);
     const resp = await listObjects(env, daCtx);
     assert.strictEqual(resp.status, 200);
@@ -89,7 +92,7 @@ describe('list objects', () => {
       ContentType: 'application/json',
     };
     s3Mock
-      .on(ListObjectsV2Command, { Bucket: 'geometrixx-content', Prefix: 'outdoors/', Delimiter: '/' })
+      .on(ListObjectsV2Command, { Bucket: 'da-content', Prefix: 'geometrixx/outdoors/', Delimiter: '/' })
       .resolves(s3resp);
     const resp = await listObjects(env, daCtx);
     assert.strictEqual(resp.status, 200);

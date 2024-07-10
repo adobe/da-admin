@@ -47,6 +47,7 @@ export async function getMiniflare() {
       `,
     kvNamespaces: { DA_AUTH: 'DA_AUTH', DA_CONFIG: 'DA_CONFIG' },
     r2Buckets: { DA_CONTENT: 'DA_CONTENT' },
+    bindings: { DA_BUCKET_NAME: 'da-content' },
   });
   const env = await mf.getBindings();
   for (let name of orgs) {

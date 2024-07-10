@@ -17,10 +17,10 @@ import {
 import getS3Config from '../utils/config.js';
 import formatList from '../utils/list.js';
 
-function buildInput({ org, key }) {
+function buildInput(env, { org, key }) {
   return {
-    Bucket: `${org}-content`,
-    Prefix: key ? `${key}/` : null,
+    Bucket: env.DA_BUCKET_NAME,
+    Prefix: key ? `${org}/${key}/` : `${org}/`,
     Delimiter: '/',
   };
 }
@@ -29,7 +29,7 @@ export default async function listObjects(env, daCtx) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const input = buildInput(daCtx);
+  const input = buildInput(env, daCtx);
   const command = new ListObjectsV2Command(input);
   try {
     const resp = await client.send(command);
