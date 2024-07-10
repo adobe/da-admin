@@ -14,7 +14,8 @@ import { getUsers, isAuthorized } from './auth.js';
 
 /**
  * Gets Dark Alley Context
- * @param {pathname} pathname
+ * @param {Request} req the request object
+ * @param env the Cloudflare environment context
  * @returns {DaCtx} The Dark Alley Context.
  */
 export default async function getDaCtx(req, env) {
@@ -24,7 +25,7 @@ export default async function getDaCtx(req, env) {
 
   const users = await getUsers(req, env);
 
-  // Santitize the string
+  // Sanitize the string
   const lower = pathname.slice(1).toLowerCase();
   const sanitized = lower.endsWith('/') ? lower.slice(0, -1) : lower;
 
