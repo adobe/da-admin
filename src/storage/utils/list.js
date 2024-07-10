@@ -9,55 +9,51 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-export default function formatList(resp, daCtx) {
+export default function formatList(resp, { org }) {
   function compare(a, b) {
     if (a.name < b.name) return -1;
     if (a.name > b.name) return 1;
     return undefined;
   }
 
-  const { CommonPrefixes, Contents } = resp;
+  const { delimitedPrefixes, objects } = resp;
 
   const combined = [];
 
-  if (CommonPrefixes) {
-    CommonPrefixes.forEach((prefix) => {
-      const name = prefix.Prefix.slice(0, -1).split('/').pop();
+  if (delimitedPrefixes) {
+    delimitedPrefixes.forEach((prefix) => {
+      const name = prefix.split('/').pop();
       const splitName = name.split('.');
 
       // Do not add any extension folders
       if (splitName.length > 1) return;
 
-      const path = `/${daCtx.org}/${prefix.Prefix.slice(0, -1)}`;
+      const path = `/${prefix}`;
       combined.push({ path, name });
     });
   }
 
-  if (Contents) {
-    Contents.forEach((content) => {
-      const itemName = content.Key.split('/').pop();
+  if (objects) {
+    objects.forEach((content) => {
+      const itemName = content.key.split('/').pop();
       const splitName = itemName.split('.');
       // file.jpg.props should not be a part of the list
       // hidden files (.props) should not be a part of this list
       if (splitName.length !== 2) return;
 
-      const [name, ext, props] = splitName;
-
-      // Do not show any props sidecar files
-      if (props) return;
-
+      const [name, ext] = splitName;
       // See if the folder is already in the list
       if (ext === 'props') {
         if (combined.some((item) => item.name === name)) return;
 
         // Remove props from the key so it can look like a folder
         // eslint-disable-next-line no-param-reassign
-        content.Key = content.Key.replace('.props', '');
+        content.key = content.key.replace('.props', '');
       }
 
       // Do not show any hidden files.
       if (!name) return;
-      const item = { path: `/${daCtx.org}/${content.Key}`, name };
+      const item = { path: `/${content.key}`, name };
       if (ext !== 'props') item.ext = ext;
 
       combined.push(item);
