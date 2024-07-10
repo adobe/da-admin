@@ -48,13 +48,16 @@ describe('list objects', () => {
 
     const s3resp = {
       Contents: [
-        { Key: 'geometrixx.props', LastModified: new Date(), ETag: '1234', Size: 1234 },
+        { Key: 'shapes.props', LastModified: new Date(), ETag: '1234', Size: 1234 },
+        { Key: 'we-retail.props', LastModified: new Date(), ETag: '1234', Size: 1234 },
       ],
       CommonPrefixes: [
         { Prefix: 'shapes/' },
-        { Prefix: 'we.retail/' },
+        { Prefix: 'we-retail/' },
         { Prefix: 'outdoors/' },
       ],
+      $metadata: { httpStatusCode: 200 },
+      ContentType: 'application/json',
     };
 
     s3Mock
@@ -65,7 +68,7 @@ describe('list objects', () => {
     const data = JSON.parse(resp.body);
     assert.deepStrictEqual(data[0], { name: 'outdoors', path: '/geometrixx/outdoors' })
     assert.deepStrictEqual(data[1], { name: 'shapes', path: '/geometrixx/shapes' });
-    assert.deepStrictEqual(data[1], { name: 'we.retail', path: '/geometrixx/we.retail' });
+    assert.deepStrictEqual(data[2], { name: 'we-retail', path: '/geometrixx/we-retail' });
   });
 
   it('lists site content (e.g pages/folders/etc)', async () => {

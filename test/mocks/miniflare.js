@@ -51,7 +51,7 @@ export async function getMiniflare() {
   const env = await mf.getBindings();
   for (let name of orgs) {
     const auth = config[name];
-    await env.DA_CONTENT.put(`${name}/${name}.props`, `name=${name}`);
+    await env.DA_CONTENT.put(`${name}/index.html`, `Hello ${name}!`);
     if (auth) await env.DA_CONFIG.put(name, JSON.stringify(auth));
   }
 
