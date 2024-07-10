@@ -72,7 +72,33 @@ describe('list objects', () => {
   });
 
   it('lists site content (e.g pages/folders/etc)', async () => {
-    const orgs = await listOrgs(null, daCtx);
-    assert.strictEqual(orgs.length, 0);
+    const daCtx = { users: [{email: 'aparker@geometrixx.info'}], org: 'geometrixx', key: 'outdoors' };
+
+    const s3resp = {
+      Contents: [
+        { Key: 'outdoors/index.html', LastModified: new Date(), ETag: '1234', Size: 1234 },
+        { Key: 'outdoors/logo.jpg', LastModified: new Date(), ETag: '1234', Size: 1234 },
+        { Key: 'outdoors/hero.jpg', LastModified: new Date(), ETag: '1234', Size: 1234 },
+      ],
+      CommonPrefixes: [
+        { Prefix: 'outdoors/coats/' },
+        { Prefix: 'outdoors/pants/' },
+        { Prefix: 'outdoors/hats/' },
+      ],
+      $metadata: { httpStatusCode: 200 },
+      ContentType: 'application/json',
+    };
+    s3Mock
+      .on(ListObjectsV2Command, { Bucket: 'geometrixx-content', Prefix: 'outdoors/', Delimiter: '/' })
+      .resolves(s3resp);
+    const resp = await listObjects(env, daCtx);
+    assert.strictEqual(resp.status, 200);
+    const data = JSON.parse(resp.body);
+    assert.deepStrictEqual(data[0], { name: 'coats', path: '/geometrixx/outdoors/coats' })
+    assert.deepStrictEqual(data[1], { name: 'hats', path: '/geometrixx/outdoors/hats' });
+    assert.deepStrictEqual(data[2], { name: 'hero', ext: 'jpg', path: '/geometrixx/outdoors/hero.jpg' });
+    assert.deepStrictEqual(data[3], { name: 'index', ext: 'html', path: '/geometrixx/outdoors/index.html' });
+    assert.deepStrictEqual(data[4], { name: 'logo', ext: 'jpg', path: '/geometrixx/outdoors/logo.jpg' });
+    assert.deepStrictEqual(data[5], { name: 'pants', path: '/geometrixx/outdoors/pants' });
   });
 });
