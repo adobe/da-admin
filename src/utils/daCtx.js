@@ -32,6 +32,8 @@ export default async function getDaCtx(req, env) {
   // Get base details
   const split = sanitized.split('/');
   const api = split.shift();
+
+  // TODO: After single bucket, does full key start including the org?
   const fullKey = split.join('/');
   const [org, ...parts] = split;
 

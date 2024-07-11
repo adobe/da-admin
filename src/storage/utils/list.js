@@ -22,6 +22,8 @@ export default function formatList(resp, { org }) {
 
   if (delimitedPrefixes) {
     delimitedPrefixes.forEach((prefix) => {
+      // eslint-disable-next-line no-param-reassign
+      prefix = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
       const name = prefix.split('/').pop();
       const splitName = name.split('.');
 
@@ -35,7 +37,8 @@ export default function formatList(resp, { org }) {
 
   if (objects) {
     objects.forEach((content) => {
-      const itemName = content.key.split('/').pop();
+      let { key } = content;
+      const itemName = key.split('/').pop();
       const splitName = itemName.split('.');
       // file.jpg.props should not be a part of the list
       // hidden files (.props) should not be a part of this list
@@ -48,12 +51,12 @@ export default function formatList(resp, { org }) {
 
         // Remove props from the key so it can look like a folder
         // eslint-disable-next-line no-param-reassign
-        content.key = content.key.replace('.props', '');
+        key = key.replace('.props', '');
       }
 
       // Do not show any hidden files.
       if (!name) return;
-      const item = { path: `/${content.key}`, name };
+      const item = { path: `/${key}`, name };
       if (ext !== 'props') item.ext = ext;
 
       combined.push(item);
