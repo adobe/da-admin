@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-export default function formatList(resp, { org }) {
+export default function formatList(resp) {
   function compare(a, b) {
     if (a.name < b.name) return -1;
     if (a.name > b.name) return 1;

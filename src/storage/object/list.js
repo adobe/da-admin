@@ -19,7 +19,7 @@ export default async function listObjects(env, daCtx) {
   };
   try {
     const resp = await env.DA_CONTENT.list(input);
-    return formatList(resp, daCtx);
+    return formatList(resp);
   } catch (e) {
     return undefined;
   }
