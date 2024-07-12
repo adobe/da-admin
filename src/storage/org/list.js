@@ -22,10 +22,15 @@ async function isOrgAuthed(env, daCtx, org) {
 }
 
 /**
+ * @typedef {Object} Org
+ * @property {string} name the org name
+ */
+
+/**
  * List the orgs for the current context
  * @param {Object} env the Cloudflare Environment
  * @param {Object} daCtx the context
- * @return {Promise<Array<Object>>} the list of orgs
+ * @return {Promise<Array<Org>>} the list of orgs
  */
 export default async function listOrgs(env, daCtx) {
   try {

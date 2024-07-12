@@ -10,17 +10,17 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'node:assert';
-
+import esmock from 'esmock';
+import { S3Client, HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { mockClient } from 'aws-sdk-client-mock';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 
-import getObject from '../../../src/storage/object/get.js';
-
-import { getMiniflare, destroyMiniflare } from '../../mocks/miniflare.js';
+import { destroyMiniflare, getMiniflare } from '../../mocks/miniflare.js';
 
 const s3Mock = mockClient(S3Client);
+const url = 'http://localhost:8787/geometrixx-content/index.html';
 
-describe('get object', () => {
+describe('Get Object', () => {
+
   let mf;
   let env;
   beforeEach(async () => {
@@ -28,29 +28,110 @@ describe('get object', () => {
     env = await mf.getBindings();
     s3Mock.reset();
   });
+
   afterEach(async () => {
     await destroyMiniflare(mf);
   });
 
-  it ('handles errors', async () => {
-    const daCtx = { users: [{email: 'aparker@geometrixx.info'}], org: 'geometrixx', key: 'does-not.exist' };
+  describe('get requests', () => {
+    it('handles non-existing object', async () => {
+      const daCtx = { users: [{ email: 'aparker@geometrixx.info' }], org: 'geometrixx', key: 'does-not-exist' };
+      const getObject = (await import('../../../src/storage/object/get.js')).default;
 
-    const input = { Bucket: 'geometrixx-content', Key: 'does-not.exist' };
-    s3Mock
-      .on(GetObjectCommand, input)
-      .rejects(new Error('NoSuchBucket: The specified bucket does not exist.'));
-    const resp = await getObject(env, daCtx);
-    assert.strictEqual(resp.status, 404);
-    assert.strictEqual(resp.body, '');
-    const calls = s3Mock.commandCalls(GetObjectCommand, input);
-    assert(calls[0]);
+      const resp = await getObject(env, daCtx);
+      assert.strictEqual(resp.status, 404);
+    });
+
+    it('handles existing object', async () => {
+
+      const resp = {
+        Body: 'Hello geometrixx!',
+        $metadata: { httpStatusCode: 200 },
+        ContentType: 'text/html',
+        ContentLength: '123',
+        Metadata: { id: 'foo', version: '123' },
+        ETag: '123',
+      };
+      s3Mock
+        .on(GetObjectCommand, { Key: 'index.html', Bucket: 'geometrixx-content' })
+        .resolves(resp);
+
+      const daCtx = { users: [{ email: 'aparker@geometrixx.info' }], org: 'geometrixx', key: 'index.html' };
+      const getObject = (await import('../../../src/storage/object/get.js')).default;
+
+      const data = await getObject(env, daCtx);
+      assert.deepStrictEqual(data, {
+        body: 'Hello geometrixx!',
+        status: 200,
+        contentType: 'text/html',
+        contentLength: '123',
+        metadata: { id: 'foo', version: '123' },
+        etag: '123',
+      });
+    });
   });
 
-  it ('gets object', async () => {
+  describe('head requests', () => {
+    it('handles non-existing object', async () => {
+      const daCtx = { users: [{ email: 'aparker@geometrixx.info' }], org: 'geometrixx', key: 'does-not-exist' };
+      const fetch = async (target, opts) => {
+        assert.strictEqual(target, url);
+        assert.strictEqual(opts.method, 'HEAD');
+        return { status: 404, headers: new Map() };
+      }
+      const getObject = await esmock('../../../src/storage/object/get.js', {
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: async (client, cmd, opts) => {
+            assert(client instanceof S3Client);
+            assert(cmd instanceof HeadObjectCommand);
+            assert(opts.expiresIn);
+            return url;
+          },
+        },
+        import: { fetch }
+      });
 
-  });
+      const resp = await getObject(env, daCtx, true);
+      assert.strictEqual(resp.status, 404);
+    });
 
-  it ('heads object', async () => {
+    it('handles existing object', async () => {
+      const daCtx = { users: [{ email: 'aparker@geometrixx.info' }], org: 'geometrixx', key: 'index.html' };
+      const fetch = async (target, opts) => {
+        assert.strictEqual(target, url);
+        assert.strictEqual(opts.method, 'HEAD');
+        return {
+          status: 200,
+          headers: new Map([
+            ['content-type', 'text/html'],
+            ['content-length', '123'],
+            ['etag', '123'],
+            ['x-amz-meta-id', 'foo'],
+            ['x-amz-meta-version', '123'],
+          ]),
+        };
+      }
+      const getObject = await esmock('../../../src/storage/object/get.js', {
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: async (client, cmd, opts) => {
+            assert(client instanceof S3Client);
+            assert(cmd instanceof HeadObjectCommand);
+            assert(opts.expiresIn);
+            return url;
+          },
+        },
+        import: { fetch }
+      });
 
+      const resp = await getObject(env, daCtx, true);
+      assert.deepStrictEqual(resp, {
+        body: '',
+        status: 200,
+        contentType: 'text/html',
+        contentLength: '123',
+        metadata: { id: 'foo', version: '123' },
+        etag: '123',
+      });
+    });
   });
 });
