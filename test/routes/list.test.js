@@ -59,14 +59,26 @@ describe('list route', () => {
       { path: '/org/sheet', name: 'sheet', ext: 'json' }
     ];
 
+    it ('returns 404 for no objects', async () => {
+      const getList = await esmock(
+        '../../src/routes/list.js',
+        {
+          '../../src/storage/object/list.js': {
+            default: async () => []
+          },
+        }
+      );
+      const resp = await getList({ env: {}, daCtx: {} })
+      assert.strictEqual(resp.body, '', 'Correct response.');
+      assert.strictEqual(resp.status, 404, 'Correct status.');
+    });
+
     it('lists objects in a bucket', async () => {
       const getList = await esmock(
         '../../src/routes/list.js',
         {
           '../../src/storage/object/list.js': {
-            default: async () => {
-              return { body: JSON.stringify(objects), status: 200, contentType: 'application/json' }
-            }
+            default: async ()  => objects,
           },
         }
       );
