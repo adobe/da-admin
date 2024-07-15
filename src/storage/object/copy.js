@@ -43,7 +43,7 @@ export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
       Version: crypto.randomUUID(),
       Timestamp: `${Date.now()}`,
       Users: JSON.stringify(daCtx.users),
-      Path: details.destination,
+      Path: Key,
     };
     input.MetadataDirective = 'REPLACE';
   }
@@ -57,6 +57,10 @@ export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
 };
 
 export default async function copyObject(env, daCtx, details, isRename) {
+  if (details.source === details.destination) {
+    return { body: '', status: 409 };
+  }
+
   const config = getS3Config(env);
   const client = new S3Client(config);
   const input = buildInput(daCtx.org, details.source);
