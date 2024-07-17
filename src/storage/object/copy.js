@@ -74,20 +74,19 @@ export default async function copyObject(env, daCtx, details, isRename) {
 
       const { Contents = [], NextContinuationToken } = resp;
       sourceKeys.push(...Contents.map(({ Key }) => Key));
-
-      await Promise.all(
-        new Array(1).fill(null).map(async () => {
-          while (sourceKeys.length) {
-            await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
-          }
-        }),
-      );
-
       ContinuationToken = NextContinuationToken;
     } catch (e) {
       return { body: '', status: 404 };
     }
   } while (ContinuationToken);
+
+  await Promise.all(
+    new Array(1).fill(null).map(async () => {
+      while (sourceKeys.length) {
+        await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
+      }
+    }),
+  );
 
   return { status: 204 };
 }
