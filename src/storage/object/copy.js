@@ -9,85 +9,90 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  ListObjectsV2Command,
-  CopyObjectCommand,
-} from '@aws-sdk/client-s3';
 
-import getS3Config from '../utils/config.js';
-
-function buildInput(org, key) {
-  return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
-  };
-}
-
-export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
-  const Key = `${sourceKey.replace(details.source, details.destination)}`;
-
-  const input = {
-    Bucket: `${daCtx.org}-content`,
-    Key,
-    CopySource: `${daCtx.org}-content/${sourceKey}`,
-  };
-
-  // We only want to keep the history if this was a rename. In case of an actual
-  // copy we should start with clean history. The history is associated with the
-  // ID of the object, so we need to generate a new ID for the object and also a
-  // new ID for the version. We set the user to the user making the copy.
-  if (!isRename) {
-    input.Metadata = {
-      ID: crypto.randomUUID(),
-      Version: crypto.randomUUID(),
-      Timestamp: `${Date.now()}`,
-      Users: JSON.stringify(daCtx.users),
-      Path: details.destination,
-    };
-    input.MetadataDirective = 'REPLACE';
-  }
+export const copyFile = async (env, daCtx, sourceKey, details, isRename) => {
+  const key = `${sourceKey.replace(details.source, details.destination)}`;
 
   try {
-    await client.send(new CopyObjectCommand(input));
+    const obj = await env.DA_CONTENT.get(sourceKey);
+    if (!obj) {
+      return undefined;
+    }
+    const { body } = obj.text();
+    const { httpMetadata, customMetadata } = obj;
+    if (isRename) {
+      await env.DA_CONTENT.put(key, body, { httpMetadata, customMetadata });
+      await env.DA_CONTENT.delete(sourceKey);
+    } else {
+      await env.DA_CONTENT.put(key, body, { httpMetadata });
+    }
+    return { success: true, source: sourceKey, destination: key };
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(e.$metadata);
+    console.log(e);
+    return { success: false, source: sourceKey, destination: key };
   }
 };
 
+/**
+ * @typedef CopyResponse
+ * @property {Number} status the status code of the operation
+ * @property {String} body the body of the response
+ * @property {Array<Object>} body.results list of files to be copied
+ * @property {boolean} body.results.source source file
+ * @property {boolean} body.results.destination destination file
+ * @property {boolean} body.results.success list of files that were successfully copied
+ */
+
+/**
+ * Copy or rename object(s).
+ * @param {Object} env the Cloudflare environment
+ * @param {Object} daCtx the execution context
+ * @param {Object} details the details about the copy operation
+ * @param {String} details.source the source directory
+ * @param {String} details.destination the destination directory
+ * @param {boolean} isRename indicator if this is a rename operation
+ * @return {Promise<Object>} response status of the operation
+ */
 export default async function copyObject(env, daCtx, details, isRename) {
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
+  if (details.source === details.destination) {
+    return { body: '', status: 409 };
+  }
 
-  let ContinuationToken;
+  const input = {
+    prefix: `${details.source}/`,
+    limit: 500,
+  };
+  const results = [];
 
-  // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
-  // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [details.source, `${details.source}.props`];
+  const obj = await env.DA_CONTENT.head(details.source);
 
-  do {
-    try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
-      const resp = await client.send(command);
+  // Head won't return for a folder so this must be a file copy.
+  if (obj) {
+    await copyFile(env, daCtx, details.source, details, isRename)
+      .then((value) => results.push(value));
+  } else {
+    // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
+    // Which means the list will only pickup children. This adds to the initial list.
+    const sourceKeys = [details.source, `${details.source}.props`];
 
-      const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
+    let cursor;
+    do {
+      const r2list = await env.DA_CONTENT.list({ ...input, cursor });
+      const { objects } = r2list;
+      cursor = r2list.cursor;
+      // List of objects to copy
+      sourceKeys.push(...objects.map(({ key }) => key));
+    } while (cursor);
+    await Promise
+      .all(sourceKeys.map((key) => copyFile(env, daCtx, key, details, isRename)))
+      .then((values) => results.push(...(values.filter((value) => value))));
+  }
 
-      await Promise.all(
-        new Array(1).fill(null).map(async () => {
-          while (sourceKeys.length) {
-            await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
-          }
-        }),
-      );
-
-      ContinuationToken = NextContinuationToken;
-    } catch (e) {
-      return { body: '', status: 404 };
-    }
-  } while (ContinuationToken);
-
-  return { status: 204 };
+  if (!results.length) {
+    return { status: 404 };
+  } else if (results.some((result) => !result.success)) {
+    return { status: 200, body: JSON.stringify({ results }) };
+  } else {
+    return { status: 201, body: JSON.stringify({ results }) };
+  }
 }

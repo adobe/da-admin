@@ -1,67 +1,92 @@
-import assert from 'assert';
-import esmock from 'esmock';
-import { copyFile } from '../../../src/storage/object/copy.js';
+/*
+ * Copyright 2024 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
+import assert from 'node:assert';
+import { destroyMiniflare, getMiniflare } from '../../mocks/miniflare.js';
 
-import { mockClient } from 'aws-sdk-client-mock';
-import { S3Client } from '@aws-sdk/client-s3';
+import copyObject, { copyFile } from '../../../src/storage/object/copy.js';
 
-const s3Mock = mockClient(S3Client);
+describe('Object Copy', () => {
 
-describe('Object copy', () => {
-  it('Copies a file', async () => {
-    const s3Sent = [];
-    const mockS3Client = {
-      send(command) {
-        s3Sent.push(command);
-      }
-    };
-
-    const ctx = {
-      org: 'foo',
-      users: [{email: "haha@foo.com"}],
-    };
-    const sourceKey = 'mydir/xyz.html';
-    const details = {
-      source: 'mydir',
-      destination: 'mydir/newdir',
-    };
-    copyFile(mockS3Client, ctx, sourceKey, details, false);
-
-    assert.equal(1, s3Sent.length);
-    const input = s3Sent[0].input;
-    assert.equal('foo-content', input.Bucket);
-    assert.equal('foo-content/mydir/xyz.html', input.CopySource);
-    assert.equal('mydir/newdir/xyz.html', input.Key);
-
-    const md = input.Metadata;
-    assert(md.ID, "ID should be set");
-    assert(md.Version, "Version should be set");
-    assert.equal('string', typeof(md.Timestamp), "Timestamp should be set as a string");
-    assert.equal(md.Users, '[{"email":"haha@foo.com"}]');
-    assert.equal(md.Path, 'mydir/newdir');
+  let mf;
+  let env;
+  beforeEach(async () => {
+    mf = await getMiniflare();
+    env = await mf.getBindings();
   });
 
-  it('Copies a file for rename', async () => {
-    const s3Sent = [];
-    const mockS3Client = {
-      send(command) {
-        s3Sent.push(command);
-      }
-    };
+  afterEach(async () => {
+    await destroyMiniflare(mf);
+  });
 
-    const ctx = { org: 'testorg' };
-    const sourceKey = 'mydir/dir1/myfile.html';
+  it('does not allow copying to the same location', async () => {
     const details = {
-      source: 'mydir/dir1',
-      destination: 'mydir/dir2',
+      source: 'mydir',
+      destination: 'mydir',
     };
-    copyFile(mockS3Client, ctx, sourceKey, details, true);
+    const resp = await copyObject({}, {}, details, false);
+    assert.strictEqual(resp.status, 409);
+  });
 
-    assert.equal(1, s3Sent.length);
-    const input = s3Sent[0].input;
-    assert.equal('testorg-content', input.Bucket);
-    assert.equal('testorg-content/mydir/dir1/myfile.html', input.CopySource);
-    assert.equal('mydir/dir2/myfile.html', input.Key);
-    assert(input.Metadata === undefined, "Should not redefine metadata for rename");
+  it('Returns 404 on missing source file', async () => {
+    const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}], key: 'does-not-exist.html' };
+    const details = { source: 'wknd/does-not-exist.html', destination: 'wknd/newdir/does-not-exist.html' };
+    const resp = await copyObject(env, daCtx, details, false);
+    assert.strictEqual(resp.status, 404);
+  });
+
+  it('Copies a file', async () => {
+    const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}], key: 'index.html' };
+    const details = { source: 'wknd/index.html', destination: 'wknd/newdir/index.html'};
+    const resp = await copyObject(env, daCtx, details, false);
+    const body = JSON.parse(resp.body);
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual(body.results.length, 1);
+    let head = await env.DA_CONTENT.head('wknd/index.html');
+    assert(head);
+    head = await env.DA_CONTENT.head('wknd/newdir/index.html');
+    assert(head);
+    assert.strictEqual(Object.keys(head.customMetadata).length, 0);
+  });
+
+  it('Renames a file', async () => {
+    const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}], key: 'index.html' };
+    const details = { source: 'wknd/index.html', destination: 'wknd/newdir/index.html'};
+    const resp = await copyObject(env, daCtx, details, true);
+    const body = JSON.parse(resp.body);
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual(body.results.length, 1);
+    let head = await env.DA_CONTENT.head('wknd/index.html');
+    assert.ifError(head);
+    head = await env.DA_CONTENT.head('wknd/newdir/index.html');
+    assert(head);
+    assert.strictEqual(Object.keys(head.customMetadata).length, 5);
+  });
+
+  it('Copies a folder', async () => {
+    const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}] };
+    await env.DA_CONTENT.put('wknd/wknd.props', '{"key":"value"}');
+    const details = { source: 'wknd', destination: 'wknd/newdir'};
+    const resp = await copyObject(env, daCtx, details, false);
+    const body = JSON.parse(resp.body);
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual(body.results.length, 2);
+    let head = await env.DA_CONTENT.head('wknd/index.html');
+    assert(head);
+    head = await env.DA_CONTENT.head('wknd/wknd.props');
+    assert(head);
+    head = await env.DA_CONTENT.head('wknd/newdir/index.html');
+    assert(head);
+    head = await env.DA_CONTENT.head('wknd/newdir/wknd.props');
+    assert(head);
+    assert.strictEqual(Object.keys(head.customMetadata).length, 0);
   });
 });
