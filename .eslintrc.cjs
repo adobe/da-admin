@@ -15,5 +15,6 @@ module.exports = {
   extends: '@adobe/helix',
   rules: {
     'no-await-in-loop': 0,
+    'max-len': ["error", { "code": 200 }],
   },
 };
