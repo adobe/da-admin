@@ -11,7 +11,6 @@
  */
 
 export default async function deleteObjects(env, daCtx) {
-
   const fullKey = `${daCtx.org}/${daCtx.key}`;
   const prefix = `${fullKey}/`;
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
