@@ -13,8 +13,6 @@
 import assert from 'node:assert';
 import { destroyMiniflare, getMiniflare } from '../mocks/miniflare.js';
 import worker from '../../src/index.js';
-import { SignJWT } from 'jose';
-
 
 describe('HEAD HTTP Requests', async () => {
   let mf;
