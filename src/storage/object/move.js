@@ -11,12 +11,12 @@
  */
 import {
   S3Client,
-  DeleteObjectCommand,
   ListObjectsV2Command,
+  CopyObjectCommand,
 } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import getS3Config from '../utils/config.js';
+import { deleteObject } from './delete.js';
 
 function buildInput(org, key) {
   return {
@@ -25,28 +25,38 @@ function buildInput(org, key) {
   };
 }
 
-export async function deleteObject(client, org, Key) {
+const copyFile = async (client, org, sourceKey, details) => {
+  const Key = `${sourceKey.replace(details.source, details.destination)}`;
+
   try {
-    const delCommand = new DeleteObjectCommand({ Bucket: `${org}-content`, Key });
-    const url = await getSignedUrl(client, delCommand, { expiresIn: 3600 });
-    return fetch(url, { method: 'DELETE' });
+    const resp = await client.send(
+      new CopyObjectCommand({
+        Bucket: `${org}-content`,
+        Key,
+        CopySource: `${org}-content/${sourceKey}`,
+      }),
+    );
+    return resp;
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(`There was an error deleting ${Key}.`);
     return e;
   }
-}
+};
 
-export default async function deleteObjects(env, daCtx) {
+export default async function moveObject(env, daCtx, details) {
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const input = buildInput(daCtx.org, daCtx.key);
-
-  let ContinuationToken;
+  const input = buildInput(daCtx.org, details.source);
 
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [daCtx.key, `${daCtx.key}.props`];
+  const sourceKeys = [details.source];
+
+  // Only add .props if the source is a folder
+  // Note: this is not guaranteed to exist
+  if (!daCtx.isFile) sourceKeys.push(`${details.source}.props`);
+
+  const results = [];
+  let ContinuationToken;
 
   do {
     try {
@@ -56,21 +66,26 @@ export default async function deleteObjects(env, daCtx) {
       const { Contents = [], NextContinuationToken } = resp;
       sourceKeys.push(...Contents.map(({ Key }) => Key));
 
-      await Promise.all(
-        new Array(1).fill(null).map(async () => {
-          while (sourceKeys.length) {
-            await deleteObject(client, daCtx.org, sourceKeys.pop());
-          }
-        }),
-      );
+      const movedLoad = sourceKeys.map(async (key) => {
+        const result = { key };
+        const copied = await copyFile(client, daCtx.org, key, details);
+        // Only delete the source if the file was successfully copied
+        if (copied.$metadata.httpStatusCode === 200) {
+          const deleted = await deleteObject(client, daCtx.org, key);
+          result.status = deleted.status === 204 ? 204 : deleted.status;
+        } else {
+          result.status = copied.$metadata.httpStatusCode;
+        }
+        return result;
+      });
+
+      results.push(...await Promise.all(movedLoad));
 
       ContinuationToken = NextContinuationToken;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.log(e);
       return { body: '', status: 404 };
     }
   } while (ContinuationToken);
 
-  return { body: null, status: 204 };
+  return { status: 204 };
 }
