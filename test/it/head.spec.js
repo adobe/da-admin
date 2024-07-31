@@ -13,8 +13,10 @@
 import assert from 'node:assert';
 import { destroyMiniflare, getMiniflare } from '../mocks/miniflare.js';
 import worker from '../../src/index.js';
+import { SignJWT } from 'jose';
 
-describe('Source Requests', async () => {
+
+describe('HEAD HTTP Requests', async () => {
   let mf;
   let env;
   beforeEach(async () => {
@@ -25,14 +27,19 @@ describe('Source Requests', async () => {
     await destroyMiniflare(mf);
   });
 
-  describe('list', async() => {
-    it('lists content', async () => {
-      const req = new Request('https://admin.da.live/list/wknd');
+  describe('/source', () => {
+    it('returns 404 for non-existing object', async () => {
+      const req = new Request('https://admin.da.live/source/wknd/does-not-exist', { method: 'HEAD' });
+      const resp = await worker.fetch(req, env);
+      assert.strictEqual(resp.status, 404);
+    });
+
+    it('returns content for existing object', async () => {
+      const req = new Request('https://admin.da.live/source/wknd/index.html', { method: 'HEAD' });
       const resp = await worker.fetch(req, env);
       assert.strictEqual(resp.status, 200);
-      const body = await resp.json();
-      assert.strictEqual(body.length, 1);
-      assert.deepStrictEqual(body[0], {  name: 'index', ext: 'html', path: '/wknd/index.html' });
+      const body = await resp.text();
+      assert.strictEqual(body, '');
     });
-  })
+  });
 });
