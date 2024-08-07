@@ -19,18 +19,11 @@ export default async function deleteObjects(env, daCtx) {
 
   let truncated = false;
   do {
-    try {
-      const r2objects = await env.DA_CONTENT.list({ prefix, limit: 500 });
-      const { objects } = r2objects;
-      truncated = r2objects.truncated;
-      sourceKeys.push(...objects.map(({ key }) => key));
-      await env.DA_CONTENT.delete(sourceKeys);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.log(e);
-      return { body: '', status: 404 };
-    }
+    const r2objects = await env.DA_CONTENT.list({ prefix, limit: 500 });
+    const { objects } = r2objects;
+    truncated = r2objects.truncated;
+    sourceKeys.push(...objects.map(({ key }) => key));
+    await env.DA_CONTENT.delete(sourceKeys);
   } while (truncated);
-
   return { body: null, status: 204 };
 }
