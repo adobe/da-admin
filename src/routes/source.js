@@ -11,7 +11,7 @@
  */
 import getObject from '../storage/object/get.js';
 import putObject from '../storage/object/put.js';
-import deleteObject from '../storage/object/delete.js';
+import deleteObjects from '../storage/object/delete.js';
 
 import putHelper from '../helpers/source.js';
 import { postObjectVersion } from '../storage/version/put.js';
@@ -26,7 +26,7 @@ async function invalidateCollab(api, url, env) {
 
 export async function deleteSource({ req, env, daCtx }) {
   await postObjectVersion(req, env, daCtx);
-  const resp = await deleteObject(env, daCtx);
+  const resp = await deleteObjects(env, daCtx);
 
   if (resp.status === 204) {
     const initiator = req.headers.get('x-da-initiator');
