@@ -43,7 +43,7 @@ export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
       Version: crypto.randomUUID(),
       Timestamp: `${Date.now()}`,
       Users: JSON.stringify(daCtx.users),
-      Path: details.destination,
+      Path: Key,
     };
     input.MetadataDirective = 'REPLACE';
   }
@@ -57,6 +57,10 @@ export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
 };
 
 export default async function copyObject(env, daCtx, details, isRename) {
+  if (details.source === details.destination) {
+    return { body: '', status: 409 };
+  }
+
   const config = getS3Config(env);
   const client = new S3Client(config);
   const input = buildInput(daCtx.org, details.source);
@@ -74,20 +78,19 @@ export default async function copyObject(env, daCtx, details, isRename) {
 
       const { Contents = [], NextContinuationToken } = resp;
       sourceKeys.push(...Contents.map(({ Key }) => Key));
-
-      await Promise.all(
-        new Array(1).fill(null).map(async () => {
-          while (sourceKeys.length) {
-            await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
-          }
-        }),
-      );
-
       ContinuationToken = NextContinuationToken;
     } catch (e) {
       return { body: '', status: 404 };
     }
   } while (ContinuationToken);
+
+  await Promise.all(
+    new Array(1).fill(null).map(async () => {
+      while (sourceKeys.length) {
+        await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
+      }
+    }),
+  );
 
   return { status: 204 };
 }
