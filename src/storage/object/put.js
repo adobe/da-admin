@@ -9,12 +9,6 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  PutObjectCommand,
-} from '@aws-sdk/client-s3';
-
-import getS3Config from '../utils/config.js';
 import { sourceRespObject } from '../../helpers/source.js';
 import { putObjectWithVersion } from '../version/put.js';
 
@@ -28,30 +22,6 @@ function getObjectBody(data) {
   return { body: JSON.stringify(data), type: 'application/json' };
 }
 
-function buildInput({
-  org, key, body, type,
-}) {
-  const Bucket = `${org}-content`;
-  return {
-    Bucket, Key: key, Body: body, ContentType: type,
-  };
-}
-
-function createBucketIfMissing(client) {
-  client.middlewareStack.add(
-    (next) => async (args) => {
-      // eslint-disable-next-line no-param-reassign
-      args.request.headers['cf-create-bucket-if-missing'] = 'true';
-      return next(args);
-    },
-    {
-      step: 'build',
-      name: 'createIfMissingMiddleware',
-      tags: ['METADATA', 'CREATE-BUCKET-IF-MISSING'],
-    },
-  );
-}
-
 /**
  * Check to see if the org is in the existing list of orgs
  *
@@ -60,27 +30,20 @@ function createBucketIfMissing(client) {
  * @returns null
  */
 async function checkOrgIndex(env, org) {
-  const orgs = await env.DA_AUTH.get('orgs', { type: 'json' });
+  let orgs = await env.DA_AUTH.get('orgs', { type: 'json' });
+  if (!orgs) orgs = [];
   if (orgs.some((existingOrg) => existingOrg.name === org)) return;
   orgs.push({ name: org, created: new Date().toISOString() });
   await env.DA_AUTH.put('orgs', JSON.stringify(orgs));
 }
 
 export default async function putObject(env, daCtx, obj) {
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-
   const { org, key, propsKey } = daCtx;
 
   // Only allow creating a new bucket for orgs and repos
   if (key.split('/').length <= 1) {
     await checkOrgIndex(env, org);
-
-    // R2 ONLY FEATURE
-    createBucketIfMissing(client);
   }
-
-  const inputs = [];
 
   let status = 201;
   if (obj) {
@@ -93,15 +56,7 @@ export default async function putObject(env, daCtx, obj) {
     }
   } else {
     const { body, type } = getObjectBody({});
-    const inputConfig = {
-      org, key: propsKey, body, type,
-    };
-    inputs.push(buildInput(inputConfig));
-  }
-
-  for (const input of inputs) {
-    const command = new PutObjectCommand(input);
-    await client.send(command);
+    await env.DA_CONTENT.put(`${org}/${propsKey}`, body, { httpMetadata: { contentType: type } });
   }
 
   const body = sourceRespObject(daCtx);
