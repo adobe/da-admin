@@ -74,7 +74,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(daCtx.users);
   const input = buildInput(update);
-  const Timestamp = `${Date.now()}`;
+  const Timestamp = Date.now();
   const Path = update.key;
 
   if (current.status === 404) {
@@ -100,7 +100,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
 
   // Store the body if preparsingstore is not defined, so a once-off store
   const storeBody = !body && pps === '0';
-  const Preparsingstore = storeBody ? Timestamp : pps;
+  const Preparsingstore = storeBody ? `${Timestamp}` : pps;
   const Label = storeBody ? 'Collab Parse' : update.label;
 
   const versionResp = await putVersion(config, {

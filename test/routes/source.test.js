@@ -157,14 +157,6 @@ describe('Source Route', () => {
     const env = { dacollab };
     const daCtx = {};
 
-    const postObjVerCalled = [];
-    const postObjVerResp = async (r, e, c) => {
-      if (r === req && e === env && c === daCtx) {
-        postObjVerCalled.push('postObjectVersion');
-        return {status: 201};
-      }
-    };
-
     const deleteCalled = [];
     const deleteResp = async (e, c) => {
       if (e === env && c === daCtx) {
@@ -178,14 +170,10 @@ describe('Source Route', () => {
         '../../src/storage/object/delete.js': {
           default: deleteResp
         },
-        '../../src/storage/version/put.js': {
-          postObjectVersion: postObjVerResp
-        }
       }
     );
     const resp = await deleteSource({req, env, daCtx});
     assert.equal(204, resp.status);
-    assert.deepStrictEqual(['postObjectVersion'], postObjVerCalled);
     assert.deepStrictEqual(deleteCalled, ['deleteObject']);
     assert.deepStrictEqual(daCalled,
       ['https://localhost/api/v1/deleteadmin?doc=http://somehost.com/somedoc.html']);

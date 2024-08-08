@@ -15,7 +15,7 @@ import { destroyMiniflare, getMiniflare } from '../mocks/miniflare.js';
 import worker from '../../src/index.js';
 import { SignJWT } from 'jose';
 
-describe('GET HTTP Requests', async () => {
+describe('GET HTTP Requests', () => {
   let mf;
   let env;
   beforeEach(async () => {

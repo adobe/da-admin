@@ -16,7 +16,7 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
-import { deleteObject } from './delete.js';
+import deleteObjects from './delete.js';
 
 function buildInput(org, key) {
   return {
@@ -71,7 +71,7 @@ export default async function moveObject(env, daCtx, details) {
         const copied = await copyFile(client, daCtx.org, key, details);
         // Only delete the source if the file was successfully copied
         if (copied.$metadata.httpStatusCode === 200) {
-          const deleted = await deleteObject(client, daCtx.org, key);
+          const deleted = await deleteObjects(client, daCtx.org, key);
           result.status = deleted.status === 204 ? 204 : deleted.status;
         } else {
           result.status = copied.$metadata.httpStatusCode;

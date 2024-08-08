@@ -45,6 +45,13 @@ export async function getMiniflare() {
           }
         }
       `,
+    serviceBindings: {
+      dacollab() {
+        return {
+          fetch: () => { /* no-op fetch */ },
+        };
+      },
+    },
     kvNamespaces: { DA_AUTH: 'DA_AUTH', DA_CONFIG: 'DA_CONFIG' },
     r2Buckets: { DA_CONTENT: 'DA_CONTENT' },
     bindings: { DA_BUCKET_NAME: 'da-content' },
@@ -52,18 +59,13 @@ export async function getMiniflare() {
   const env = await mf.getBindings();
   for (let name of orgs) {
     const auth = config[name];
+    const content = `Hello ${name}!`;
     await env.DA_CONTENT.put(
       `${name}/index.html`,
-      `Hello ${name}!`,
+      content,
       {
         httpMetadata: { contentType: 'text/html' },
-        customMetadata: {
-          id: '123',
-          version: '123',
-          users: `[{"email":"user@${name}.com"}]`,
-          timestamp: '1720723249932',
-          path: `${name}/index.html`
-        }
+        customMetadata: { id: '123', version: '123', users: `[{"email":"user@${name}.com"}]`, timestamp: '1720723249932', path: `${name}/index.html` }
       }
     );
     if (auth) await env.DA_CONFIG.put(name, JSON.stringify(auth));

@@ -14,7 +14,6 @@ import putObject from '../storage/object/put.js';
 import deleteObjects from '../storage/object/delete.js';
 
 import putHelper from '../helpers/source.js';
-import { postObjectVersion } from '../storage/version/put.js';
 
 async function invalidateCollab(api, url, env) {
   const invPath = `/api/v1/${api}?doc=${url}`;
@@ -25,7 +24,6 @@ async function invalidateCollab(api, url, env) {
 }
 
 export async function deleteSource({ req, env, daCtx }) {
-  await postObjectVersion(req, env, daCtx);
   const resp = await deleteObjects(env, daCtx);
 
   if (resp.status === 204) {

@@ -9,12 +9,11 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-
-import assert from 'node:assert';
+import assert from 'node:assert'
 import { destroyMiniflare, getMiniflare } from '../mocks/miniflare.js';
 import worker from '../../src/index.js';
 
-describe('HEAD HTTP Requests', async () => {
+describe('DELETE HTTP Requests',  () => {
   let mf;
   let env;
   beforeEach(async () => {
@@ -25,19 +24,19 @@ describe('HEAD HTTP Requests', async () => {
     await destroyMiniflare(mf);
   });
 
-  describe('/source', () => {
-    it('returns 404 for non-existing object', async () => {
-      const req = new Request('https://admin.da.live/source/wknd/does-not-exist', { method: 'HEAD' });
+  describe ('/source', async () => {
+    it('handles non-existing file', async () => {
+      const req = new Request('https://admin.da.live/source/wknd/does-not-exist', { method: 'DELETE' });
       const resp = await worker.fetch(req, env);
-      assert.strictEqual(resp.status, 404);
+      assert.strictEqual(resp.status, 204);
     });
 
-    it('returns content for existing object', async () => {
-      const req = new Request('https://admin.da.live/source/wknd/index.html', { method: 'HEAD' });
+    it('handles existing file', async () => {
+      const req = new Request('https://admin.da.live/source/wknd/index.html', { method: 'DELETE' });
       const resp = await worker.fetch(req, env);
-      assert.strictEqual(resp.status, 200);
-      const body = await resp.text();
-      assert.strictEqual(body, '');
+      assert.strictEqual(resp.status, 204);
+      const obj = await env.DA_CONTENT.get('wknd/index.html');
+      assert.ifError(obj);
     });
   });
-});
+})
