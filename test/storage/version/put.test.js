@@ -172,6 +172,49 @@ describe('Version Put', () => {
       assert.strictEqual(metadata.path, 'a/b/c');
     });
 
+    it('it supports first time save (blob)', async () => {
+      const env = {
+        DA_CONTENT: {
+          put: async (k, v, opts) => {
+            assert.strictEqual(k, 'myorg/a/b/c');
+            assert(v instanceof Blob);
+            const metadata = opts.customMetadata;
+            assert(metadata.id, 'ID should be set');
+            assert(metadata.version, 'Version should be set');
+            assert.strictEqual(metadata.users, '[{"email":"anonymous"}]');
+            assert(metadata.timestamp, 'Timestamp should be set');
+            assert.strictEqual(metadata.path, 'a/b/c');
+            return mfEnv.DA_CONTENT.put(k, v, opts);
+          },
+          get: async (k) => {
+            return mfEnv.DA_CONTENT.get(k);
+          },
+          head: async (k) => {
+            return mfEnv.DA_CONTENT.head(k);
+          }
+        }
+      }
+
+      const daCtx = { org: 'myorg', users: [{ email: 'anonymous' }] };
+      const body = new File(['foo'], 'foo.txt', { type: 'text/plain' });
+      await body.text();
+      const update = { org: 'myorg', key: 'a/b/c', body, type: 'text/html' };
+      const resp = await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(resp, 201);
+
+      const r2o = await mfEnv.DA_CONTENT.get('myorg/a/b/c');
+      assert(r2o);
+      const data = await r2o.text();
+      assert.strictEqual(data, 'foo');
+      const metadata = r2o.customMetadata;
+      assert.strictEqual(r2o.httpMetadata.contentType, 'text/html');
+      assert(metadata.id);
+      assert(metadata.version);
+      assert.strictEqual(metadata.users, '[{"email":"anonymous"}]');
+      assert(metadata.timestamp);
+      assert.strictEqual(metadata.path, 'a/b/c');
+    });
+
     it('it retries on "new" document but save collision', async () => {
       // Not really sure how this could be possible - but essentially the idea is that the first
       // time through there's no "current" object, but when we try to save the new object, we get a
