@@ -44,3 +44,7 @@ kv_namespaces = [
 r2_buckets = [
   { binding = "DA_CONTENT", bucket_name = "da-content" }
 ]
+
+services = [
+  { binding = "dacollab", service = "da-collab-dev" }
+]
