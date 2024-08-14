@@ -71,6 +71,15 @@ describe('GET HTTP Requests', () => {
     });
 
     describe('objects', async () => {
+      it('lists no content', async () => {
+        const req = new Request('https://admin.da.live/list/does-not-exist');
+        const resp = await worker.fetch(req, env);
+        assert.strictEqual(resp.status, 200);
+        const body = await resp.json();
+        assert.strictEqual(body.length, 0);
+        assert.deepStrictEqual(body, []);
+      });
+
       it('lists content', async () => {
         const req = new Request('https://admin.da.live/list/wknd');
         const resp = await worker.fetch(req, env);
