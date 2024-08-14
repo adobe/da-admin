@@ -14,10 +14,10 @@
     "test": "c8 mocha --spec=test/**/*.test.js && mocha --spec=test/it/**/*.spec.js",
     "test:unit": "c8 mocha --spec=test/**/*.test.js",
     "test:it": "mocha --spec=test/it/**/*.spec.js",
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --env dev",
     "deploy:prod": "wrangler deploy",
     "deploy:stage": "wrangler deploy --env stage",
-    "start": "wrangler dev"
+    "start": "wrangler dev --env dev"
   },
   "author": "",
   "license": "Apache-2.0",

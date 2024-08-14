@@ -27,19 +27,22 @@ import listOrgs from '../storage/org/list.js';
  * @return {Promise<ListResponse>} the list
  */
 export default async function getList({ env, daCtx }) {
-  let body;
   if (!daCtx.org) {
-    body = await listOrgs(env, daCtx);
-  } else {
-    body = await listObjects(env, daCtx);
+    const body = await listOrgs(env, daCtx);
+    if (body && body.length) {
+      return {
+        body: JSON.stringify(body),
+        status: 200,
+        contentType: 'application/json',
+      };
+    } else {
+      return { body: '', status: 404 };
+    }
   }
-  if (body && body.length) {
-    return {
-      body: JSON.stringify(body),
-      status: 200,
-      contentType: 'application/json',
-    };
-  } else {
-    return { body: '', status: 404 };
-  }
+  const body = await listObjects(env, daCtx);
+  return {
+    body: JSON.stringify(body || []),
+    status: 200,
+    contentType: 'application/json',
+  };
 }
