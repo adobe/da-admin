@@ -81,18 +81,20 @@ export default async function copyObject(env, daCtx, details, isRename = false) 
     return { body: '', status: 409 };
   }
   const results = [];
-  const obj = await env.DA_CONTENT.head(details.source);
+  const src = details.source.length ? `${daCtx.org}/${details.source}` : daCtx.org;
+  const dest = `${daCtx.org}/${details.destination}`;
+  const obj = await env.DA_CONTENT.head(src);
   // Head won't return for a folder so this must be a file copy.
   if (obj) {
-    await copyFile(env, daCtx, details.source, details.destination, isRename).then((value) => results.push(value));
+    await copyFile(env, daCtx, src, dest, isRename).then((value) => results.push(value));
   } else {
     let cursor;
     // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
     // Which means the list will only pickup children. This adds to the initial list.
-    const detailsList = [{ src: `${details.source}.props`, dest: `${details.destination}.props` }];
+    const detailsList = [{ src: `${src}.props`, dest: `${dest}.props` }];
     do {
       const input = {
-        prefix: `${details.source}/`,
+        prefix: `${src}/`,
         limit,
         cursor,
       };
@@ -101,9 +103,9 @@ export default async function copyObject(env, daCtx, details, isRename = false) 
       cursor = r2list.cursor;
       // List of objects to copy
       detailsList.push(...objects
-        // Do not save root props file to new folder under *original* name.
-        .filter(({ key }) => key !== `${details.source}.props`)
-        .map(({ key }) => ({ src: key, dest: `${key.replace(details.source, details.destination)}` })));
+        // Do not save root props file to new folder under *original*
+        .filter(({ key }) => key !== `${src}.props`)
+        .map(({ key }) => ({ src: key, dest: `${key.replace(src, dest)}` })));
     } while (cursor);
     await copyFiles(env, daCtx, detailsList, isRename).then((values) => results.push(...values));
   }

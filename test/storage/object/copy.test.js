@@ -48,7 +48,7 @@ describe('Object copy', () => {
 
     it('Copies a file', async () => {
       const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], key: 'index.html' };
-      const details = { source: 'wknd/index.html', destination: 'wknd/newdir/index.html' };
+      const details = { source: 'index.html', destination: 'newdir/index.html' };
       const resp = await copyObject(env, daCtx, details);
       assert.strictEqual(resp.status, 204);
       const original = await env.DA_CONTENT.head('wknd/index.html');
@@ -66,7 +66,7 @@ describe('Object copy', () => {
     it('Copies a folder', async () => {
       const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}] };
       await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
-      const details = { source: 'wknd', destination: 'wknd/newdir'};
+      const details = { source: '', destination: 'newdir'};
       const resp = await copyObject(env, daCtx, details);
       assert.strictEqual(resp.status, 204);
       let head = await env.DA_CONTENT.head('wknd/index.html');
@@ -91,14 +91,10 @@ describe('Object copy', () => {
 
       const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}] };
       await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
-      const details = { source: 'wknd', destination: 'wknd-newdir'};
+      const details = { source: 'pages', destination: 'pages-newdir'};
       const resp = await copyObject(env, daCtx, details);
       assert.strictEqual(resp.status, 204);
-      let head = await env.DA_CONTENT.head('wknd.props');
-      assert(head);
-      head = await env.DA_CONTENT.head('wknd-newdir.props');
-      assert(head);
-      head = await env.DA_CONTENT.head('wknd-newdir/index.html');
+      const head = await env.DA_CONTENT.head('wknd/pages-newdir/index1.html');
       assert(head);
     });
   });
@@ -106,7 +102,7 @@ describe('Object copy', () => {
   describe('rename', () => {
     it('Renames a file', async () => {
       const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], key: 'index.html' };
-      const details = { source: 'wknd/index.html', destination: 'wknd/newdir/index.html' };
+      const details = { source: 'index.html', destination: 'newdir/index.html' };
       const original = await env.DA_CONTENT.head('wknd/index.html');
 
       const resp = await copyObject(env, daCtx, details, true);
@@ -126,7 +122,7 @@ describe('Object copy', () => {
     it('Renames a folder', async () => {
       const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}] };
       await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
-      const details = { source: 'wknd', destination: 'wknd/newdir'};
+      const details = { source: '', destination: 'newdir'};
       const resp = await copyObject(env, daCtx, details, true);
       assert.strictEqual(resp.status, 204);
       let r2o = await env.DA_CONTENT.list({prefix: 'wknd/', delimiter: '/'});
@@ -158,7 +154,7 @@ describe('Object copy', () => {
 
       const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}] };
       await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
-      const details = { source: 'wknd', destination: 'wknd-newdir'};
+      const details = { source: 'pages', destination: 'pages-newdir'};
       const resp = await copyObject(env, daCtx, details, true);
       assert.strictEqual(resp.status, 204);
 
@@ -168,15 +164,13 @@ describe('Object copy', () => {
       let cursor;
       let total = 0;
       do {
-        r2o = await env.DA_CONTENT.list({ prefix: 'wknd-newdir/', cursor });
+        r2o = await env.DA_CONTENT.list({ prefix: 'wknd/pages-newdir/', cursor });
         total += r2o.objects.length;
         cursor = r2o.cursor;
       } while (r2o.truncated);
 
-      assert.deepStrictEqual(total, limit + 1);
-      let renamed = await env.DA_CONTENT.head('wknd-newdir/index.html');
-      assert(renamed);
-      renamed = await env.DA_CONTENT.head('wknd-newdir.props');
+      assert.deepStrictEqual(total, limit);
+      let renamed = await env.DA_CONTENT.head('wknd/pages-newdir/index1.html');
       assert(renamed);
     });
   });
