@@ -9,88 +9,111 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  ListObjectsV2Command,
-  CopyObjectCommand,
-} from '@aws-sdk/client-s3';
 
-import getS3Config from '../utils/config.js';
+const limit = 250;
 
-function buildInput(org, key) {
-  return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
-  };
-}
-
-export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
-  const Key = `${sourceKey.replace(details.source, details.destination)}`;
-
-  const input = {
-    Bucket: `${daCtx.org}-content`,
-    Key,
-    CopySource: `${daCtx.org}-content/${sourceKey}`,
-  };
-
-  // We only want to keep the history if this was a rename. In case of an actual
-  // copy we should start with clean history. The history is associated with the
-  // ID of the object, so we need to generate a new ID for the object and also a
-  // new ID for the version. We set the user to the user making the copy.
-  if (!isRename) {
-    input.Metadata = {
-      ID: crypto.randomUUID(),
-      Version: crypto.randomUUID(),
-      Timestamp: `${Date.now()}`,
-      Users: JSON.stringify(daCtx.users),
-      Path: Key,
-    };
-    input.MetadataDirective = 'REPLACE';
-  }
-
+/**
+ * Copies the specified file from the source to the destination.
+ * @param {Object} env the CloudFlare environment
+ * @param {Object} daCtx the DA Context
+ * @param {String} sourceKey the key for the source file
+ * @param {String} destinationKey the key for the destination file
+ * @param {Boolean} isRename whether this is a rename operation
+ * @return {Promise<Object>} the status of the copy operation
+ */
+const copyFile = async (env, daCtx, sourceKey, destinationKey, isRename) => {
   try {
-    await client.send(new CopyObjectCommand(input));
+    const obj = await env.DA_CONTENT.get(sourceKey);
+    if (!obj) {
+      return { success: false, source: sourceKey, destination: destinationKey };
+    }
+
+    const body = await obj.text();
+    const { httpMetadata } = obj;
+    // We want to keep the history if this was a rename. In case of an actual
+    // copy we should start with clean history. The history is associated with the
+    // ID of the object, so we need to generate a new ID for the object and also a
+    // new ID for the version. We set the user to the user making the copy.
+    const customMetadata = {
+      id: crypto.randomUUID(),
+      version: crypto.randomUUID(),
+      timestamp: `${Date.now()}`,
+      users: JSON.stringify(daCtx.users),
+      path: destinationKey,
+    };
+    if (isRename) Object.assign(customMetadata, obj.customMetadata, { path: destinationKey });
+
+    await env.DA_CONTENT.put(destinationKey, body, { httpMetadata, customMetadata });
+    if (isRename) await env.DA_CONTENT.delete(sourceKey);
+    return { success: true, source: sourceKey, destination: destinationKey };
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.log(e.$metadata);
+    console.error(`Failed to copy: ${sourceKey} to ${destinationKey}`, e);
+    return { success: false, source: sourceKey, destination: destinationKey };
   }
 };
 
-export default async function copyObject(env, daCtx, details, isRename) {
+const copyFiles = async (env, daCtx, detailsList, isRename) => {
+  const results = [];
+  while (detailsList.length > 0) {
+    const promises = [];
+    do {
+      const { src, dest } = detailsList.shift();
+      promises.push(copyFile(env, daCtx, src, dest, isRename));
+    } while (detailsList.length > 0 && promises.length <= limit);
+    await Promise.all(promises).then((values) => results.push(...values));
+  }
+  return results;
+};
+
+/**
+ * Copies a directory (and contents) or a single file to location.
+ * @param {Object} env the CloudFlare environment
+ * @param {Object} daCtx the DA Context
+ * @param {Object} details the source & details of the copy operation
+ * @param {string} details.source the source directory or file
+ * @param {string} details.destination the destination directory or file
+ * @param {Boolean=false} isRename whether this is a rename operation
+ * @return {Promise<{ status }>}
+ */
+export default async function copyObject(env, daCtx, details, isRename = false) {
   if (details.source === details.destination) {
     return { body: '', status: 409 };
   }
+  const results = [];
+  const obj = await env.DA_CONTENT.head(details.source);
+  // Head won't return for a folder so this must be a file copy.
+  if (obj) {
+    await copyFile(env, daCtx, details.source, details.destination, isRename).then((value) => results.push(value));
+  } else {
+    let cursor;
+    // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
+    // Which means the list will only pickup children. This adds to the initial list.
+    const detailsList = [{ src: `${details.source}.props`, dest: `${details.destination}.props` }];
+    do {
+      const input = {
+        prefix: `${details.source}/`,
+        limit,
+        cursor,
+      };
+      const r2list = await env.DA_CONTENT.list(input);
+      const { objects } = r2list;
+      cursor = r2list.cursor;
+      // List of objects to copy
+      detailsList.push(...objects
+        // Do not save root props file to new folder under *original* name.
+        .filter(({ key }) => key !== `${details.source}.props`)
+        .map(({ key }) => ({ src: key, dest: `${key.replace(details.source, details.destination)}` })));
+    } while (cursor);
+    await copyFiles(env, daCtx, detailsList, isRename).then((values) => results.push(...values));
+  }
 
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
-
-  let ContinuationToken;
-
-  // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
-  // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [details.source, `${details.source}.props`];
-
-  do {
-    try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
-      const resp = await client.send(command);
-
-      const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
-      ContinuationToken = NextContinuationToken;
-    } catch (e) {
-      return { body: '', status: 404 };
-    }
-  } while (ContinuationToken);
-
-  await Promise.all(
-    new Array(1).fill(null).map(async () => {
-      while (sourceKeys.length) {
-        await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
-      }
-    }),
-  );
+  // Retry failures
+  const retries = results.filter(({ success }) => !success).map(({ source, destination }) => ({ src: source, dest: destination }));
+  if (retries.length > 0) {
+    const retryResults = await copyFiles(env, daCtx, retries, isRename);
+    results.push(...retryResults);
+  }
 
   return { status: 204 };
 }
