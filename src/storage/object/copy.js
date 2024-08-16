@@ -47,6 +47,7 @@ const copyFile = async (env, daCtx, sourceKey, destinationKey, isRename) => {
     if (isRename) await env.DA_CONTENT.delete(sourceKey);
     return { success: true, source: sourceKey, destination: destinationKey };
   } catch (e) {
+    /* c8 ignore next 4 */
     // eslint-disable-next-line no-console
     console.error(`Failed to copy: ${sourceKey} to ${destinationKey}`, e);
     return { success: false, source: sourceKey, destination: destinationKey };
