@@ -44,6 +44,21 @@ describe('delete object(s)', () => {
     assert.ifError(head);
   });
 
+  it('deletes a single object (parameter)', async () => {
+    const daCtx = { users: [{email: 'aparker@geometrixx.info'}], org: 'geometrixx', key: 'outdoors/index.html' };
+
+    await env.DA_CONTENT.put('geometrixx/shapes.props', '{"key":"value"}');
+    await env.DA_CONTENT.put('geometrixx/we-retail.props', '{"key":"value"}');
+    await env.DA_CONTENT.put('geometrixx/outdoors/index.html', 'Hello');
+
+    const resp = await deleteObjects(env, daCtx, ['shapes.props']);
+    assert.strictEqual(resp.status, 204);
+    let head = await env.DA_CONTENT.head('geometrixx/outdoors/index.html');
+    assert(head);
+    head = await env.DA_CONTENT.head('geometrixx/shapes.props');
+    assert.ifError(head);
+  });
+
   it('deletes a folder', async () => {
     await env.DA_CONTENT.put('geometrixx/outdoors/index.html', 'Hello!');
     await env.DA_CONTENT.put('geometrixx/outdoors/logo.jpg', '1234');
@@ -59,6 +74,21 @@ describe('delete object(s)', () => {
     assert.strictEqual(list.objects.length, 0);
   });
 
+  it('does not delete a folder when passed as parameter', async () => {
+    await env.DA_CONTENT.put('geometrixx/outdoors/index.html', 'Hello!');
+    await env.DA_CONTENT.put('geometrixx/outdoors/logo.jpg', '1234');
+    await env.DA_CONTENT.put('geometrixx/outdoors/hero.jpg', '1234');
+    await env.DA_CONTENT.put('geometrixx/outdoors/coats/coats.props', '{"key": "value"}');
+    await env.DA_CONTENT.put('geometrixx/outdoors/pants/pants.props', '{"key": "value"}');
+    await env.DA_CONTENT.put('geometrixx/outdoors/hats/hats.props', '{"key": "value"}');
+
+    const daCtx = { users: [{email: 'aparker@geometrixx.info'}], org: 'geometrixx', key: 'outdoors' };
+    const resp = await deleteObjects(env, daCtx, ['outdoors']);
+    assert.strictEqual(resp.status, 204);
+    const list = await env.DA_CONTENT.list({ prefix: 'geometrixx/outdoors' });
+    assert.strictEqual(list.objects.length, 6);
+  });
+
   it('deletes a folder (truncated list === true)', async function() {
     this.timeout(10000);
     await env.DA_CONTENT.put('geometrixx/outdoors/index.html', 'Hello!');
@@ -68,6 +98,29 @@ describe('delete object(s)', () => {
 
     const daCtx = { users: [{email: 'aparker@geometrixx.info'}], org: 'geometrixx', key: 'outdoors' };
     const resp = await deleteObjects(env, daCtx);
+    assert.strictEqual(resp.status, 204);
+    const list = await env.DA_CONTENT.list({ prefix: 'geometrixx/outdoors' });
+    assert.strictEqual(list.objects.length, 0);
+  });
+
+  it('deletes a list of explicit files', async () => {
+    await env.DA_CONTENT.put('geometrixx/outdoors/index.html', 'Hello!');
+    await env.DA_CONTENT.put('geometrixx/outdoors/logo.jpg', '1234');
+    await env.DA_CONTENT.put('geometrixx/outdoors/hero.jpg', '1234');
+    await env.DA_CONTENT.put('geometrixx/outdoors/coats/coats.props', '{"key": "value"}');
+    await env.DA_CONTENT.put('geometrixx/outdoors/pants/pants.props', '{"key": "value"}');
+    await env.DA_CONTENT.put('geometrixx/outdoors/hats/hats.props', '{"key": "value"}');
+
+    const keys = [
+      'outdoors/index.html',
+      'outdoors/logo.jpg',
+      'outdoors/hero.jpg',
+      'outdoors/coats/coats.props',
+      'outdoors/pants/pants.props',
+      'outdoors/hats/hats.props',
+    ];
+    const daCtx = { users: [{email: 'aparker@geometrixx.info'}], org: 'geometrixx', key: 'outdoors' };
+    const resp = await deleteObjects(env, daCtx, keys);
     assert.strictEqual(resp.status, 204);
     const list = await env.DA_CONTENT.list({ prefix: 'geometrixx/outdoors' });
     assert.strictEqual(list.objects.length, 0);

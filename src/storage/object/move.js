@@ -9,83 +9,56 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  ListObjectsV2Command,
-  CopyObjectCommand,
-} from '@aws-sdk/client-s3';
+import { copyFile, copyFiles } from '../utils/copy.js';
 
-import getS3Config from '../utils/config.js';
-import deleteObjects from './delete.js';
+const limit = 100;
 
-function buildInput(org, key) {
-  return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
-  };
-}
-
-const copyFile = async (client, org, sourceKey, details) => {
-  const Key = `${sourceKey.replace(details.source, details.destination)}`;
-
-  try {
-    const resp = await client.send(
-      new CopyObjectCommand({
-        Bucket: `${org}-content`,
-        Key,
-        CopySource: `${org}-content/${sourceKey}`,
-      }),
-    );
-    return resp;
-  } catch (e) {
-    return e;
-  }
-};
-
+/**
+ * Moves a directory (and contents) or a single file to new location.
+ * @param {Object} env the CloudFlare environment
+ * @param {Object} daCtx the DA Context
+ * @param {Object} details the source & details of the copy operation
+ * @param {string} details.source the source directory or file
+ * @param {string} details.destination the destination directory or file
+ * @return {Promise<{ status }>}
+ */
 export default async function moveObject(env, daCtx, details) {
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
+  if (daCtx.isFile) {
+    await copyFile(env, daCtx, details.source, details.destination, true);
+    return { status: 204 };
+  }
 
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [details.source];
-
-  // Only add .props if the source is a folder
-  // Note: this is not guaranteed to exist
-  if (!daCtx.isFile) sourceKeys.push(`${details.source}.props`);
-
+  const sourceList = [{ src: `${details.source}.props`, dest: `${details.destination}.props` }];
   const results = [];
-  let ContinuationToken;
-
+  let cursor;
+  const prefix = details.source.length ? `${daCtx.org}/${details.source}/` : `${daCtx.org}/`;
   do {
     try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
-      const resp = await client.send(command);
+      const input = {
+        prefix,
+        limit,
+        cursor,
+      };
+      const r2list = await env.DA_CONTENT.list(input);
+      const { objects } = r2list;
+      cursor = r2list.cursor;
 
-      const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
-
-      const movedLoad = sourceKeys.map(async (key) => {
-        const result = { key };
-        const copied = await copyFile(client, daCtx.org, key, details);
-        // Only delete the source if the file was successfully copied
-        if (copied.$metadata.httpStatusCode === 200) {
-          const deleted = await deleteObjects(client, daCtx.org, key);
-          result.status = deleted.status === 204 ? 204 : deleted.status;
-        } else {
-          result.status = copied.$metadata.httpStatusCode;
-        }
-        return result;
-      });
-
-      results.push(...await Promise.all(movedLoad));
-
-      ContinuationToken = NextContinuationToken;
+      sourceList.push(...objects
+        .filter(({ key }) => key !== `${details.source}.props`)
+        .map(({ key }) => {
+          const src = key.split('/').slice(1).join('/');
+          return {
+            src,
+            dest: src.replace(details.source, details.destination),
+          };
+        }));
+      await copyFiles(env, daCtx, sourceList, true).then((values) => results.push(...values));
     } catch (e) {
       return { body: '', status: 404 };
     }
-  } while (ContinuationToken);
+  } while (cursor);
 
   return { status: 204 };
 }
