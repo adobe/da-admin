@@ -17,31 +17,33 @@ export async function listObjectVersions(env, { org, key }) {
   if (current.status === 404 || !current.metadata.id) {
     return 404;
   }
-  const resp = await listObjects(env, { org, key: `.da-versions/${current.metadata.id}` });
-  const promises = await Promise.all(JSON.parse(resp.body).map(async (entry) => {
-    const entryResp = await getObject(env, {
-      org,
-      key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
-    }, true);
-    const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
-    const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
-    const { label, path } = entryResp.metadata;
+  const objects = await listObjects(env, { org, key: `.da-versions/${current.metadata.id}` });
+  if (objects) {
+    const promises = await Promise.all(objects.map(async (entry) => {
+      const entryResp = await getObject(env, {
+        org,
+        key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
+      }, true);
+      const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
+      const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
+      const { label, path } = entryResp.metadata;
 
-    if (entryResp.contentLength > 0) {
-      return {
-        url: `/versionsource/${org}/${current.metadata.id}/${entry.name}.${entry.ext}`,
-        users,
-        timestamp,
-        path,
-        label,
-      };
-    }
-    return { users, timestamp, path };
-  }));
-
-  return {
-    status: resp.status,
-    contentType: resp.contentType,
-    body: JSON.stringify(promises),
-  };
+      if (entryResp.contentLength > 0) {
+        return {
+          url: `/versionsource/${org}/${current.metadata.id}/${entry.name}.${entry.ext}`,
+          users,
+          timestamp,
+          path,
+          label,
+        };
+      }
+      return { users, timestamp, path };
+    }));
+    return {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(promises),
+    };
+  }
+  return { status: 404, body: '' };
 }

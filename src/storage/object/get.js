@@ -10,6 +10,14 @@
  * governing permissions and limitations under the License.
  */
 
+/**
+ * Retrieve a specified object.
+ * @param {Object} env the CloudFlare environment
+ * @param {String} org the org of the object
+ * @param {String} key the key of the object
+ * @param {boolean} head flag to only retrieve head info or body as well.
+ * @return {Promise<{Object}>} response object
+ */
 export default async function getObject(env, { org, key }, head = false) {
   const daKey = `${org}/${key}`;
 
