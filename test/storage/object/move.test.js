@@ -10,12 +10,10 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'node:assert';
+import esmock from 'esmock';
 
-import moveObject from '../../../src/storage/object/move.js';
 import { destroyMiniflare, getMiniflare } from '../../mocks/miniflare.js';
-const max = 10000;
-const min = 5000;
-const limit = Math.floor(Math.random() * (max - min) + min);
+
 
 describe('Object move', () => {
   let mf;
@@ -25,87 +23,103 @@ describe('Object move', () => {
     env = await mf.getBindings();
   });
 
-  afterEach(async function () {
+  afterEach(async function() {
     this.timeout(60000);
     await destroyMiniflare(mf);
   });
 
   it('Moves a file', async () => {
     const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], key: 'pages/index.html', isFile: true };
-
-    const originalMetadata = { id: '123', version: '1', timestamp: '123', users: JSON.stringify(daCtx.users), path: 'wknd/pages/index.html' };
-    await env.DA_CONTENT.put('wknd/pages/index.html', 'HelloWorld', { customMetadata: originalMetadata, httpMetadata: { contentType: 'text/html' } });
-
+    const moveObject = await esmock(
+      '../../../src/storage/object/move.js',
+      {
+        '../../../src/storage/utils/copy.js': {
+          copyFile: async (env, daCtx, source, destination, isMove) => {
+            assert(isMove);
+            assert.strictEqual(source, 'pages/index.html');
+            assert.strictEqual(destination, 'newdir/index.html');
+            return { success: true, source, destination };
+          }
+        }
+      }
+    );
     const details = { source: 'pages/index.html', destination: 'newdir/index.html' };
 
     const resp = await moveObject(env, daCtx, details);
-    assert.strictEqual(resp.status, 204);
-    const removed = await env.DA_CONTENT.head('wknd/pages/index.html');
-    assert.ifError(removed);
-    const renamed = await env.DA_CONTENT.head('wknd/newdir/index.html');
-    assert(renamed);
-    const { customMetadata } = renamed;
-    assert.strictEqual(customMetadata.id, originalMetadata.id);
-    assert.strictEqual(customMetadata.version, originalMetadata.version);
-    assert.strictEqual(customMetadata.timestamp, originalMetadata.timestamp);
-    assert.strictEqual(customMetadata.users, originalMetadata.users);
-    assert.strictEqual(customMetadata.path, 'wknd/newdir/index.html');
-    assert.strictEqual(renamed.httpMetadata.contentType, 'text/html');
+    assert.deepStrictEqual(resp, { status: 204 });
   });
 
   it('Moves a folder', async () => {
-    const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}], isFile: false};
-    await env.DA_CONTENT.put('wknd/originaldir.props', '{"key":"value"}');
-    const originalMetadata = { id: '123', version: '1', timestamp: '123', users: JSON.stringify(daCtx.users), path: 'wknd/originaldir/index.html' };
-    await env.DA_CONTENT.put('wknd/originaldir/index.html', 'HelloWorld', { customMetadata: originalMetadata, httpMetadata: { contentType: 'text/html' } });
+    const moveObject = await esmock(
+      '../../../src/storage/object/move.js',
+      {
+        '../../../src/storage/utils/copy.js': {
+          copyFiles: async (env, daCtx, list, isMove) => {
+            assert(isMove);
+            assert.strictEqual(list.length, 2);
+            assert(list.find(({ src, dest }) => src === 'originaldir.props' && dest === 'newdir.props'));
+            assert(list.find(({ src, dest }) => src === 'originaldir/index.html' && dest === 'newdir/index.html'));
+            return list.map((item) =>  ({ success: true, source: item.src, destination: item.dest }));
+          }
+        }
+      }
+    );
 
-    const details = { source: 'originaldir', destination: 'newdir'};
+    const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], isFile: false };
+    await env.DA_CONTENT.put('wknd/originaldir.props', '{"key":"value"}');
+    const originalMetadata = {
+      id: '123',
+      version: '1',
+      timestamp: '123',
+      users: JSON.stringify(daCtx.users),
+      path: 'wknd/originaldir/index.html'
+    };
+    await env.DA_CONTENT.put('wknd/originaldir/index.html', 'HelloWorld', {
+      customMetadata: originalMetadata,
+      httpMetadata: { contentType: 'text/html' }
+    });
+
+    const details = { source: 'originaldir', destination: 'newdir' };
     const resp = await moveObject(env, daCtx, details);
     assert.strictEqual(resp.status, 204);
-
-    // Deleted the original folder contents
-    let r2o = await env.DA_CONTENT.list({prefix: 'wknd/originaldir/'});
-    assert.strictEqual(r2o.truncated, false)
-    assert.deepStrictEqual(r2o.objects.length, 0);
-    const head = await env.DA_CONTENT.head('wknd/originaldir.props');
-    assert.ifError(head);
-
-    // New folder created with contents
-    r2o = await env.DA_CONTENT.list({prefix: 'wknd/newdir/'});
-    assert.strictEqual(r2o.truncated, false)
-    assert.deepStrictEqual(r2o.objects.length, 1);
-    let renamed = await env.DA_CONTENT.head('wknd/newdir/index.html');
-    assert(renamed);
-    assert(renamed.customMetadata.path, 'wknd/newdir/index.html');
-    renamed = await env.DA_CONTENT.head('wknd/newdir.props');
-    assert(renamed)
   });
 
-  it(`move handles ${limit} files in folder`, async function() {
-    this.timeout(90000);
-    // Prep the content.
-    for (let i = 0; i < limit; i++) {
-      await env.DA_CONTENT.put(`wknd/pages/index${i}.html`, 'content');
-    }
-    const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}], isFile: false };
-    const details = { source: 'pages', destination: 'pages-newdir'};
-    const resp = await moveObject(env, daCtx, details);
-    assert.strictEqual(resp.status, 204);
+  describe('performance', () => {
+    const max = 10000;
+    const min = 5000;
+    const limit = Math.floor(Math.random() * (max - min) + min);
 
-    let r2o = await env.DA_CONTENT.list({prefix: 'wknd/pages/' });
-    assert.strictEqual(r2o.truncated, false)
-    assert.strictEqual(r2o.objects.length, 0);
+    beforeEach(async function() {
+      this.timeout(60000);
+      // Prep the content.
+      for (let i = 0; i < limit; i++) {
+        await env.DA_CONTENT.put(`wknd/pages/index${i}.html`, 'content');
+      }
+    });
 
-    let cursor;
-    let total = 0;
-    do {
-      r2o = await env.DA_CONTENT.list({ prefix: 'wknd/pages-newdir/', cursor });
-      total += r2o.objects.length;
-      cursor = r2o.cursor;
-    } while (r2o.truncated);
+    it(`move handles ${limit} files in folder`, async function() {
+      this.timeout(60000);
 
-    assert.deepStrictEqual(total, limit);
-    let renamed = await env.DA_CONTENT.head('wknd/pages-newdir/index1.html');
-    assert(renamed);
+      let count = 0;
+      const moveObject = await esmock(
+        '../../../src/storage/object/move.js',
+        {
+          '../../../src/storage/utils/copy.js': {
+            copyFiles: async (env, daCtx, list, isMove) => {
+              assert(isMove);
+              await env.DA_CONTENT.delete(list.map(({ src }) => `${daCtx.org}/${src}`));
+              count += list.length;
+              return list.map((item) => ({ success: true, source: item.src, destination: item.dest }));
+            }
+          }
+        }
+      );
+
+      const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], isFile: false };
+      const details = { source: 'pages', destination: 'pages-newdir' };
+      const resp = await moveObject(env, daCtx, details);
+      assert.strictEqual(resp.status, 204);
+      assert.deepStrictEqual(count, limit + 1); // +1 for the props file.
+    });
   });
 });

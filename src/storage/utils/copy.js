@@ -13,6 +13,14 @@
 import deleteObjects from '../object/delete.js';
 
 /**
+ * @typedef CopyResult
+ * @type {Object}
+ * @property {Boolean} success whether the copy operation was successful
+ * @property {String} source the fully qualified source key
+ * @property {String} destination the fully qualified destination key
+ */
+
+/**
  * Copies the specified file from the source to the destination.
  *
  * @param {Object} env the CloudFlare environment
@@ -20,7 +28,7 @@ import deleteObjects from '../object/delete.js';
  * @param {String} sourceKey the key for the source file (excluding Org)
  * @param {String} destinationKey the key for the destination file (excluding Org)
  * @param {Boolean} isMove whether this is a rename operation
- * @return {Promise<Object>} the status of the copy operation
+ * @return {Promise<CopyResult>} the status of the copy operation
  */
 export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove) => {
   const source = `${daCtx.org}/${sourceKey}`;
@@ -31,8 +39,8 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove) =>
       return { success: false, source, destination };
     }
 
-    const body = await obj.text();
     const { httpMetadata } = obj;
+    const body = await obj.text();
     // We want to keep the history if this was a rename. In case of an actual
     // copy we should start with clean history. The history is associated with the
     // ID of the object, so we need to generate a new ID for the object and also a
@@ -70,17 +78,14 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove) =>
  * @param {DaCtx} daCtx the DA Context
  * @param {CopyDetails[]} detailsList the key for the source file
  * @param {Boolean} isMove whether this is a rename operation
- * @return {Promise<Object>} the status of the copy operation
+ * @return {Promise<CopyResult[]>} the status of the copy operation
  */
 export const copyFiles = async (env, daCtx, detailsList, isMove) => {
-  const results = [];
-  while (detailsList.length > 0) {
-    const promises = [];
-    do {
-      const { src, dest } = detailsList.shift();
-      promises.push(copyFile(env, daCtx, src, dest, isMove));
-    } while (detailsList.length > 0);
-    await Promise.all(promises).then((values) => results.push(...values));
+  const promises = [];
+  const copy = [...detailsList];
+  while (copy.length > 0) {
+    const { src, dest } = copy.shift();
+    promises.push(copyFile(env, daCtx, src, dest, isMove));
   }
-  return results;
+  return Promise.all(promises);
 };

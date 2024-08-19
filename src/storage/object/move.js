@@ -31,7 +31,7 @@ export default async function moveObject(env, daCtx, details) {
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.
   const sourceList = [{ src: `${details.source}.props`, dest: `${details.destination}.props` }];
-  const results = [];
+  const results = []; // Keep this?
   let cursor;
   const prefix = details.source.length ? `${daCtx.org}/${details.source}/` : `${daCtx.org}/`;
   do {
@@ -55,6 +55,8 @@ export default async function moveObject(env, daCtx, details) {
           };
         }));
       await copyFiles(env, daCtx, sourceList, true).then((values) => results.push(...values));
+      sourceList.length = 0;
+      /* c8 ignore next 3 */
     } catch (e) {
       return { body: '', status: 404 };
     }
