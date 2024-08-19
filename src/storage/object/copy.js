@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-const limit = 250;
+const limit = 100;
 
 /**
  * Copies the specified file from the source to the destination.
@@ -46,8 +46,8 @@ const copyFile = async (env, daCtx, sourceKey, destinationKey, isRename) => {
     await env.DA_CONTENT.put(destinationKey, body, { httpMetadata, customMetadata });
     if (isRename) await env.DA_CONTENT.delete(sourceKey);
     return { success: true, source: sourceKey, destination: destinationKey };
-  } catch (e) {
     /* c8 ignore next 4 */
+  } catch (e) {
     // eslint-disable-next-line no-console
     console.error(`Failed to copy: ${sourceKey} to ${destinationKey}`, e);
     return { success: false, source: sourceKey, destination: destinationKey };
