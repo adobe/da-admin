@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "test": "c8 mocha --spec=test/**/*.test.js && mocha --spec=test/it/**/*.spec.js",
     "test:unit": "c8 mocha --spec=test/**/*.test.js",
+    "test:perf": "mocha --spec=test/**/*.perf.js",
     "test:it": "mocha --spec=test/it/**/*.spec.js",
     "dev": "wrangler dev --env dev",
     "deploy:prod": "wrangler deploy",

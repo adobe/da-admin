@@ -78,32 +78,6 @@ describe('Object copy', () => {
       head = await env.DA_CONTENT.head('wknd/newdir.props');
       assert(head);
     });
-
-    describe('performance', () => {
-      const limit = 10000;
-      beforeEach(async function () {
-        this.timeout(60000);
-        // Prep the content.
-        for (let i = 0; i < limit; i += 100) {
-          for (let j = 0; j < 100; j++) {
-            const promises = [];
-            promises.push(env.DA_CONTENT.put(`wknd/pages/index${i+j}.html`, 'content'));
-            await Promise.all(promises);
-          }
-        }
-      });
-
-      it (`copy handles ${limit} files in folder`, async function () {
-        this.timeout(60000);
-        const daCtx = { org: 'wknd', users: [{email: "user@wknd.site"}] };
-        await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
-        const details = { source: 'pages', destination: 'pages-newdir'};
-        const resp = await copyObject(env, daCtx, details);
-        assert.strictEqual(resp.status, 204);
-        const head = await env.DA_CONTENT.head('wknd/pages-newdir/index1.html');
-        assert(head);
-      });
-    });
   });
 
   describe('rename', () => {
@@ -147,46 +121,6 @@ describe('Object copy', () => {
       assert(renamed);
       renamed = await env.DA_CONTENT.head('wknd/newdir.props');
       assert(renamed)
-    });
-
-    describe ('performance', () => {
-      const limit = 10000;
-      beforeEach(async function () {
-        this.timeout(60000);
-        // Prep the content.
-        for (let i = 0; i < limit; i += 100) {
-          for (let j = 0; j < 100; j++) {
-            const promises = [];
-            promises.push(env.DA_CONTENT.put(`wknd/pages/index${i+j}.html`, 'content'));
-            await Promise.all(promises);
-          }
-        }
-      });
-
-      it (`rename handles ${limit} files in folder`, async function() {
-        this.timeout(60000);
-
-        const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }] };
-        await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
-        const details = { source: 'pages', destination: 'pages-newdir' };
-        const resp = await copyObject(env, daCtx, details, true);
-        assert.strictEqual(resp.status, 204);
-
-        let r2o = await env.DA_CONTENT.list({ prefix: 'wknd/pages/' });
-        assert.strictEqual(r2o.truncated, false)
-
-        let cursor;
-        let total = 0;
-        do {
-          r2o = await env.DA_CONTENT.list({ prefix: 'wknd/pages-newdir/', cursor });
-          total += r2o.objects.length;
-          cursor = r2o.cursor;
-        } while (r2o.truncated);
-
-        assert.deepStrictEqual(total, limit);
-        let renamed = await env.DA_CONTENT.head('wknd/pages-newdir/index1.html');
-        assert(renamed);
-      });
     });
   });
 });
