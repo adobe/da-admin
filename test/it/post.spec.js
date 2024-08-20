@@ -59,6 +59,80 @@ describe('POST/PUT HTTP Requests', () => {
           assert.strictEqual(r2o.objects.length, 1);
         });
       });
+
+      describe('/copy', () => {
+        it('copies a file', async () => {
+          const body = new FormData();
+          body.append('destination', '/wknd/new-folder/index.html' );
+          const opts =  {
+            body,
+            method
+          };
+          const req = new Request('https://admin.da.live/copy/wknd/index.html', opts);
+          const resp = await worker.fetch(req, env);
+          assert.strictEqual(resp.status, 204);
+          const head = await env.DA_CONTENT.head('wknd/new-folder/index.html');
+          assert(head);
+        });
+
+        it('copies a folder', async () => {
+          for (let i = 0; i < 5; i++) {
+            await env.DA_CONTENT.put(`wknd/pages/index${i}.html`, 'Hello, World!');
+          }
+          const body = new FormData();
+          body.append('destination', '/wknd/new-folder' );
+          const opts =  {
+            body,
+            method
+          };
+          const req = new Request('https://admin.da.live/copy/wknd/pages', opts);
+          const resp = await worker.fetch(req, env);
+          assert.strictEqual(resp.status, 204);
+          for (let i = 0; i < 5; i++) {
+            const head = await env.DA_CONTENT.head(`wknd/new-folder/index${i}.html`);
+            assert(head);
+          }
+        });
+      });
+
+      describe('/rename', () => {
+        it('renames a file', async () => {
+          const body = new FormData();
+          body.append('newname', 'renamed.html' );
+          const opts =  {
+            body,
+            method
+          };
+          const req = new Request('https://admin.da.live/rename/wknd/index.html', opts);
+          const resp = await worker.fetch(req, env);
+          assert.strictEqual(resp.status, 204);
+          let head = await env.DA_CONTENT.head('wknd/renamed.html');
+          assert(head);
+          head = await env.DA_CONTENT.head('wknd/index.html');
+          assert.ifError(head);
+        });
+
+        it('renames a folder', async () => {
+          for (let i = 0; i < 5; i++) {
+            await env.DA_CONTENT.put(`wknd/pages/index${i}.html`, 'Hello, World!');
+          }
+          const body = new FormData();
+          body.append('newname', 'new-folder' );
+          const opts =  {
+            body,
+            method
+          };
+          const req = new Request('https://admin.da.live/rename/wknd/pages', opts);
+          const resp = await worker.fetch(req, env);
+          assert.strictEqual(resp.status, 204);
+          for (let i = 0; i < 5; i++) {
+            let head = await env.DA_CONTENT.head(`wknd/new-folder/index${i}.html`);
+            assert(head);
+            head = await env.DA_CONTENT.head(`wknd/pages/index${i}.html`);
+            assert.ifError(head);
+          }
+        });
+      });
     });
   }
 });
