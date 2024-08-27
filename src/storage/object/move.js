@@ -46,7 +46,6 @@ export default async function moveObject(env, daCtx, details) {
       cursor = r2list.cursor;
 
       sourceList.push(...objects
-        .filter(({ key }) => key !== `${details.source}.props`)
         .map(({ key }) => {
           const src = key.split('/').slice(1).join('/');
           return {
@@ -54,7 +53,14 @@ export default async function moveObject(env, daCtx, details) {
             dest: src.replace(details.source, details.destination),
           };
         }));
-      await copyFiles(env, daCtx, sourceList, true).then((values) => results.push(...values));
+      await copyFiles(env, daCtx, sourceList, true)
+        .then(async (values) => {
+          const successes = values
+            .filter((item) => item.success)
+            .map((item) => item.source);
+          await env.DA_CONTENT.delete(successes);
+          results.push(...values);
+        });
       sourceList.length = 0;
       /* c8 ignore next 3 */
     } catch (e) {

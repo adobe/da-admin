@@ -10,21 +10,10 @@
  * governing permissions and limitations under the License.
  */
 import copyObject from './copy.js';
-import deleteObjects from './delete.js';
-
-const rename = async (env, daCtx, details) => {
-  try {
-    await copyObject(env, daCtx, details, true);
-    await deleteObjects(env, daCtx);
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(e);
-  }
-};
 
 export default async function renameObject(env, daCtx, details) {
   try {
-    await rename(env, daCtx, details);
+    await copyObject(env, daCtx, details, true);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.log(e);

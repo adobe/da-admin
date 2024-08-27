@@ -10,11 +10,8 @@
  * governing permissions and limitations under the License.
  */
 
-import deleteObjects from '../object/delete.js';
-
 /**
  * @typedef CopyResult
- * @type {Object}
  * @property {Boolean} success whether the copy operation was successful
  * @property {String} source the fully qualified source key
  * @property {String} destination the fully qualified destination key
@@ -27,10 +24,10 @@ import deleteObjects from '../object/delete.js';
  * @param {DaCtx} daCtx the DA Context
  * @param {String} sourceKey the key for the source file (excluding Org)
  * @param {String} destinationKey the key for the destination file (excluding Org)
- * @param {Boolean} isMove whether this is a rename operation
+ * @param {Boolean=false} retainMetadata whether to retain the metadata from the source
  * @return {Promise<CopyResult>} the status of the copy operation
  */
-export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove) => {
+export const copyFile = async (env, daCtx, sourceKey, destinationKey, retainMetadata = false) => {
   const source = `${daCtx.org}/${sourceKey}`;
   const destination = `${daCtx.org}/${destinationKey}`;
   try {
@@ -52,13 +49,12 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove) =>
       users: JSON.stringify(daCtx.users),
       path: destination,
     };
-    if (isMove) Object.assign(customMetadata, obj.customMetadata, { path: destination });
+    if (retainMetadata) Object.assign(customMetadata, obj.customMetadata, { path: destination });
 
     await env.DA_CONTENT.put(destination, body, { httpMetadata, customMetadata });
-    if (isMove) await deleteObjects(env, daCtx, [sourceKey]);
     return { success: true, source, destination };
-  } catch (e) {
     /* c8 ignore next 4 */
+  } catch (e) {
     // eslint-disable-next-line no-console
     console.error(`Failed to copy: ${source} to ${destination}`, e);
     return { success: false, source, destination };
@@ -73,19 +69,21 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove) =>
  */
 
 /**
- * Copies the specified files from the source to the destination.
+ * Copies or Moves the specified files from the source to the destination.
+ * Move operation retains source metadata and deletes source files on successful copy.
+ *
  * @param {Object} env the CloudFlare environment
  * @param {DaCtx} daCtx the DA Context
  * @param {CopyDetails[]} detailsList the key for the source file
- * @param {Boolean} isMove whether this is a rename operation
+ * @param {Boolean=false} retainMetadata whether to retain the metadata from each source
  * @return {Promise<CopyResult[]>} the status of the copy operation
  */
-export const copyFiles = async (env, daCtx, detailsList, isMove) => {
+export const copyFiles = async (env, daCtx, detailsList, retainMetadata = false) => {
   const promises = [];
   const copy = [...detailsList];
   while (copy.length > 0) {
     const { src, dest } = copy.shift();
-    promises.push(copyFile(env, daCtx, src, dest, isMove));
+    promises.push(copyFile(env, daCtx, src, dest, retainMetadata));
   }
   return Promise.all(promises);
 };
