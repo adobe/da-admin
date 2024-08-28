@@ -20,6 +20,21 @@ const NO_PARENT_ERROR = {
   status: 400,
 };
 
+/**
+ * @typedef MoveDetails
+ * @property {String=} source the source path
+ * @property {String=} destination the destination path
+ * @property {Object=} error the error object
+ * @property {String=} error.body the error message
+ * @property {Number=} error.status the error status code
+ */
+
+/**
+ * Creates the copy source/dest object from the current contexts
+ * @param {Request} req the Request object
+ * @param {Object} daCtx the DA Context
+ * @return {Promise<MoveDetails>}
+ */
 export default async function moveHelper(req, daCtx) {
   try {
     const formData = await req.formData();

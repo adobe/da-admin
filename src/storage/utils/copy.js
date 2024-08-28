@@ -53,7 +53,7 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, retainMeta
 
     await env.DA_CONTENT.put(destination, body, { httpMetadata, customMetadata });
     return { success: true, source, destination };
-    /* c8 ignore next 4 */
+    /* c8 ignore next 5 */
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(`Failed to copy: ${source} to ${destination}`, e);

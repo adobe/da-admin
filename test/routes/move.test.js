@@ -13,18 +13,30 @@
 import assert from 'node:assert';
 import esmock from 'esmock';
 
-describe('Copy Route', () => {
+describe('Move Route', () => {
   const params = { req: {}, env: {}, daCtx: {} }
-  it('handles valid request', async () => {
-    const copyHandler = await esmock('../../src/routes/copy.js', {
-      '../../src/helpers/copy.js': {
-        default: async () => ({ source: 'mydir', destination: 'mydir' })
+  it('handles invalid request', async () => {
+    const expected = { status: 400 };
+    const moveHandler = await esmock('../../src/routes/move.js', {
+      '../../src/helpers/move.js': {
+        default: async () => ({ error: expected })
       },
-      '../../src/storage/object/copy.js': {
-        default: async () => ({ status: 201 })
+    });
+    const resp = await moveHandler(params);
+    assert.equal(resp, expected);
+  });
+
+  it('handles valid request', async () => {
+    const expected = { status: 201 };
+    const moveHandler = await esmock('../../src/routes/move.js', {
+      '../../src/helpers/move.js': {
+        default: async () => ({ source: 'mydir', destination: 'newdir' })
+      },
+      '../../src/storage/object/move.js': {
+        default: async () => expected
       }
     });
-    const resp = await copyHandler(params);
-    assert.deepStrictEqual(resp, { status: 201 });
+    const resp = await moveHandler(params);
+    assert.equal(resp, expected);
   });
 });

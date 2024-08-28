@@ -12,11 +12,5 @@
 import copyObject from './copy.js';
 
 export default async function renameObject(env, daCtx, details) {
-  try {
-    await copyObject(env, daCtx, details, true);
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(e);
-  }
-  return { status: 204 };
+  return copyObject(env, daCtx, details, true);
 }
