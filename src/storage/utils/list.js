@@ -58,7 +58,10 @@ export default function formatList(resp, daCtx) {
       // Do not show any hidden files.
       if (!name) return;
       const item = { path: `/${daCtx.org}/${content.Key}`, name };
-      if (ext !== 'props') item.ext = ext;
+      if (ext !== 'props') {
+        item.ext = ext;
+        item.lastModified = content.LastModified.getTime();
+      }
 
       combined.push(item);
     });
