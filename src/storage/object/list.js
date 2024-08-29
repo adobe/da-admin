@@ -12,10 +12,13 @@
 import {
   S3Client,
   ListObjectsV2Command,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
 import formatList from '../utils/list.js';
+
+const limit = 100;
 
 function buildInput({ org, key }) {
   return {
@@ -23,6 +26,34 @@ function buildInput({ org, key }) {
     Prefix: key ? `${key}/` : null,
     Delimiter: '/',
   };
+}
+
+/**
+ * Adds metadata to the list of objects specified.
+ *
+ * @param {S3Client} s3client the s3 client
+ * @param {DaCtx} daCtx the DA context
+ * @param {Object<{path: string, name: string}>} list list of entries
+ */
+async function populateMetadata(s3client, daCtx, list) {
+  let idx = 0;
+  while (idx < list.length) {
+    const promises = list.slice(idx, idx + limit)
+      .filter((item) => item.ext)
+      .map(async (item) => {
+        const Key = item.path.substring(1).split('/').slice(1).join('/');
+        const input = { Bucket: `${daCtx.org}-content`, Key };
+        const cmd = new HeadObjectCommand(input);
+        return s3client.send(cmd).then((resp) => {
+          if (resp.$metadata.httpStatusCode === 200) {
+            // eslint-disable-next-line no-param-reassign
+            item.lastModified = resp.LastModified.getTime();
+          }
+        });
+      });
+    await Promise.all(promises);
+    idx += limit;
+  }
 }
 
 export default async function listObjects(env, daCtx) {
@@ -35,6 +66,7 @@ export default async function listObjects(env, daCtx) {
     const resp = await client.send(command);
     // console.log(resp);
     const body = formatList(resp, daCtx);
+    await populateMetadata(client, daCtx, body);
     return {
       body: JSON.stringify(body),
       status: resp.$metadata.httpStatusCode,
