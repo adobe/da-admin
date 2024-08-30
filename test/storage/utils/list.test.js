@@ -11,7 +11,7 @@
  */
 import assert from 'node:assert';
 
-import formatList from '../../src/storage/utils/list.js';
+import formatList from '../../../src/storage/utils/list.js';
 
 const MOCK = {
   delimitedPrefixes: [

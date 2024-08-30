@@ -11,11 +11,11 @@
  */
 
 /**
- * Creates the copy source/dest object from the current contexts
- * @param {Request} req the Request object
- * @param {Object} daCtx the DA Context
- * @return {Promise<{destination: string, source: string}|{}>}
- */
+* Creates the copy source/dest object from the current contexts
+* @param {Request} req the Request object
+* @param {Object} daCtx the DA Context
+* @return {Promise<{destination: string, source: string}|{}>}
+*/
 export default async function copyHelper(req, daCtx) {
   const formData = await req.formData();
   if (!formData) return {};

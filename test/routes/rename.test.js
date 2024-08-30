@@ -13,18 +13,19 @@
 import assert from 'node:assert';
 import esmock from 'esmock';
 
-describe('Copy Route', () => {
+describe('Rename Route', () => {
   const params = { req: {}, env: {}, daCtx: {} }
   it('handles valid request', async () => {
-    const copyHandler = await esmock('../../src/routes/copy.js', {
-      '../../src/helpers/copy.js': {
-        default: async () => ({ source: 'mydir', destination: 'mydir' })
+    const expected = { status: 201 }
+    const renameHandler = await esmock('../../src/routes/rename.js', {
+      '../../src/helpers/rename.js': {
+        default: async () => ({ source: 'mydir', destination: 'newdir' })
       },
-      '../../src/storage/object/copy.js': {
-        default: async () => ({ status: 201 })
+      '../../src/storage/object/rename.js': {
+        default: async () => expected
       }
     });
-    const resp = await copyHandler(params);
-    assert.deepStrictEqual(resp, { status: 201 });
+    const resp = await renameHandler(params);
+    assert.equal(resp, expected);
   });
 });
