@@ -59,7 +59,7 @@ export default function formatList(resp) {
       const item = { path: `/${key}`, name };
       if (ext !== 'props') {
         item.ext = ext;
-        item.lastModified = content.uploaded;
+        item.lastModified = content.uploaded.getTime();
       }
 
       combined.push(item);

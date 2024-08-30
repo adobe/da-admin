@@ -40,7 +40,7 @@ describe('list objects', () => {
     await env.DA_CONTENT.put('geometrixx/outdoors/index.html', 'Hello');
 
     const data = await listObjects(env, daCtx);
-    assert(data[0].lastModified);
+    assert(/^\d+$/.test(data[0].lastModified));
     delete data[0].lastModified;
     assert.deepStrictEqual(data[0], { name: 'index', ext: 'html', path: '/geometrixx/index.html' }); // Default miniflare content
     assert.deepStrictEqual(data[1], { name: 'outdoors', path: '/geometrixx/outdoors' })
@@ -61,13 +61,13 @@ describe('list objects', () => {
     const data = await listObjects(env, daCtx);
     assert.deepStrictEqual(data[0], { name: 'coats', path: '/geometrixx/outdoors/coats' })
     assert.deepStrictEqual(data[1], { name: 'hats', path: '/geometrixx/outdoors/hats' });
-    assert(data[2].lastModified);
+    assert(/^\d+$/.test(data[2].lastModified));
     delete data[2].lastModified;
     assert.deepStrictEqual(data[2], { name: 'hero', ext: 'jpg', path: '/geometrixx/outdoors/hero.jpg' });
-    assert(data[3].lastModified);
+    assert(/^\d+$/.test(data[3].lastModified));
     delete data[3].lastModified;
     assert.deepStrictEqual(data[3], { name: 'index', ext: 'html', path: '/geometrixx/outdoors/index.html' });
-    assert(data[4].lastModified);
+    assert(/^\d+$/.test(data[4].lastModified));
     delete data[4].lastModified;
     assert.deepStrictEqual(data[4], { name: 'logo', ext: 'jpg', path: '/geometrixx/outdoors/logo.jpg' });
     assert.deepStrictEqual(data[5], { name: 'pants', path: '/geometrixx/outdoors/pants' });
