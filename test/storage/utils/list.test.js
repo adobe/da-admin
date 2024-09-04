@@ -25,21 +25,27 @@ const MOCK = {
   objects: [
     {
       key: 'adobe/blog.props',
+      uploaded: new Date(),
     },
     {
       key: 'adobe/da.props',
+      uploaded: new Date(),
     },
     {
       key: 'adobe/folder-only.props',
+      uploaded: new Date(),
     },
     {
       key: 'adobe/test.html',
+      uploaded: new Date(),
     },
     {
       key: 'adobe/dark-alley.jpg.props',
+      uploaded: new Date(),
     },
     {
       key: 'adobe/dark-alley.jpg',
+      uploaded: new Date(),
     }
   ],
 };

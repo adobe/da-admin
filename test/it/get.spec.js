@@ -86,6 +86,8 @@ describe('GET HTTP Requests', () => {
         assert.strictEqual(resp.status, 200);
         const body = await resp.json();
         assert.strictEqual(body.length, 1);
+        assert(/^\d+$/.test(body[0].lastModified));
+        delete body[0].lastModified;
         assert.deepStrictEqual(body[0], { name: 'index', ext: 'html', path: '/wknd/index.html' });
       });
     })
