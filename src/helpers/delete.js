@@ -9,14 +9,14 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-export default async function copyHelper(req, daCtx) {
-  const formData = await req.formData();
-  if (!formData) return {};
-  const fullDest = formData.get('destination');
-  const continuationToken = formData.get('continuation-token');
-  const lower = fullDest.slice(1).toLowerCase();
-  const sanitized = lower.endsWith('/') ? lower.slice(0, -1) : lower;
-  const destination = sanitized.split('/').slice(1).join('/');
-  const source = daCtx.key;
-  return { source, destination, continuationToken };
+
+export default async function deleteHelper(req) {
+  try {
+    const formData = await req.formData();
+    if (!formData) return {};
+    const continuationToken = formData.get('continuation-token');
+    return { continuationToken };
+  } catch {
+    return {};
+  }
 }

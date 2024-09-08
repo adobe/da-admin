@@ -12,19 +12,11 @@
 import {
   S3Client,
   DeleteObjectCommand,
-  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-
 import getS3Config from '../utils/config.js';
 import { postObjectVersionWithLabel } from '../version/put.js';
-
-function buildInput(org, key) {
-  return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
-  };
-}
+import { listCommand } from '../utils/list.js';
 
 async function invalidateCollab(api, url, env) {
   const invPath = `/api/v1/${api}?doc=${url}`;
@@ -59,40 +51,15 @@ export async function deleteObject(client, daCtx, Key, env, isMove = false) {
   return resp;
 }
 
-export default async function deleteObjects(env, daCtx) {
+export default async function deleteObjects(env, daCtx, details) {
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const input = buildInput(daCtx.org, daCtx.key);
 
-  let ContinuationToken;
+  const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
 
-  // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
-  // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [daCtx.key, `${daCtx.key}.props`];
+  await Promise.all(sourceKeys.map(async (key) => {
+    await deleteObject(client, daCtx.org, key, env);
+  }));
 
-  do {
-    try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
-      const resp = await client.send(command);
-
-      const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
-
-      await Promise.all(
-        new Array(1).fill(null).map(async () => {
-          while (sourceKeys.length) {
-            await deleteObject(client, daCtx, sourceKeys.pop(), env);
-          }
-        }),
-      );
-
-      ContinuationToken = NextContinuationToken;
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.log(e);
-      return { body: '', status: 404 };
-    }
-  } while (ContinuationToken);
-
-  return { body: null, status: 204 };
+  return { body: JSON.stringify({ continuationToken }), status: 200 };
 }
