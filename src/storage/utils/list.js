@@ -9,6 +9,10 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import {
+  ListObjectsV2Command,
+} from '@aws-sdk/client-s3';
+
 export default function formatList(resp, daCtx) {
   function compare(a, b) {
     if (a.name < b.name) return -1;
@@ -68,4 +72,38 @@ export default function formatList(resp, daCtx) {
   }
 
   return combined.sort(compare);
+}
+
+function buildInput(org, key) {
+  return {
+    Bucket: `${org}-content`,
+    Prefix: `${key}/`,
+    MaxKeys: 900,
+  };
+}
+
+export async function listCommand(daCtx, details, s3client) {
+  // There's no need to use the list command if the item has an extension
+  if (daCtx.ext) return { sourceKeys: [daCtx.key] };
+
+  const input = buildInput(daCtx.org, daCtx.key);
+  const { continuationToken } = details;
+
+  // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
+  // Which means the list will only pickup children. This adds to the initial list.
+  const sourceKeys = [];
+  if (!continuationToken) sourceKeys.push(daCtx.key, `${daCtx.key}.props`);
+
+  try {
+    const commandInput = { ...input, ContinuationToken: continuationToken };
+    const command = new ListObjectsV2Command(commandInput);
+    const resp = await s3client.send(command);
+
+    const { Contents = [], NextContinuationToken } = resp;
+    sourceKeys.push(...Contents.map(({ Key }) => Key));
+
+    return { sourceKeys, continuationToken: NextContinuationToken };
+  } catch (e) {
+    return { body: '', status: 404 };
+  }
 }

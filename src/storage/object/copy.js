@@ -11,18 +11,11 @@
  */
 import {
   S3Client,
-  ListObjectsV2Command,
   CopyObjectCommand,
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
-
-function buildInput(org, key) {
-  return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
-  };
-}
+import { listCommand } from '../utils/list.js';
 
 export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
@@ -51,46 +44,25 @@ export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
   try {
     await client.send(new CopyObjectCommand(input));
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(e.$metadata);
+    console.log({
+      code: e.$metadata.httpStatusCode,
+      dest: Key,
+      src: `${daCtx.org}-content/${sourceKey}`,
+    });
   }
 };
 
 export default async function copyObject(env, daCtx, details, isRename) {
-  if (details.source === details.destination) {
-    return { body: '', status: 409 };
-  }
+  if (details.source === details.destination) return { body: '', status: 409 };
 
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
 
-  let ContinuationToken;
+  const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
 
-  // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
-  // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [details.source, `${details.source}.props`];
+  await Promise.all(sourceKeys.map(async (key) => {
+    await copyFile(client, daCtx, key, details, isRename);
+  }));
 
-  do {
-    try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
-      const resp = await client.send(command);
-
-      const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
-      ContinuationToken = NextContinuationToken;
-    } catch (e) {
-      return { body: '', status: 404 };
-    }
-  } while (ContinuationToken);
-
-  await Promise.all(
-    new Array(1).fill(null).map(async () => {
-      while (sourceKeys.length) {
-        await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
-      }
-    }),
-  );
-
-  return { status: 204 };
+  return { body: JSON.stringify({ continuationToken }), status: 200 };
 }
