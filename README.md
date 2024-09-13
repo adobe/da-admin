@@ -1,6 +1,6 @@
-# Dark Alley Admin
+# Document Authoring Admin
 ## Introduction
-Dark Alley Admin is the API used to store and retrieve files and details from the Dark Alley content repository.
+Document Authoring Admin is the API used to store and retrieve files and details from the Document Authoring content repository.
 
 You can read the official API docs here: https://docs.da.live
 
