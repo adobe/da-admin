@@ -23,11 +23,17 @@ describe('Object copy', () => {
   });
 
   it('does not allow copying to the same location', async () => {
+    const ctx = {
+      org: 'foo',
+      key: 'mydir',
+      users: [{email: 'haha@foo.com'}],
+    };
+
     const details = {
       source: 'mydir',
       destination: 'mydir',
     };
-    const resp = await copyObject({}, {}, details, false);
+    const resp = await copyObject({}, ctx, details, false);
     assert.strictEqual(resp.status, 409);
   });
 
@@ -41,6 +47,7 @@ describe('Object copy', () => {
 
     const ctx = {
       org: 'foo',
+      key: 'mydir',
       users: [{email: 'haha@foo.com'}],
     };
     const details = {
@@ -50,7 +57,7 @@ describe('Object copy', () => {
     await copyObject({}, ctx, details, false);
 
     assert.strictEqual(s3Sent.length, 3);
-    const input = s3Sent[0];
+    const input = s3Sent[2];
     assert.strictEqual(input.Bucket, 'foo-content');
     assert.strictEqual(input.CopySource, 'foo-content/mydir/xyz.html');
     assert.strictEqual(input.Key, 'mydir/newdir/xyz.html');
@@ -71,7 +78,7 @@ describe('Object copy', () => {
       s3Sent.push(input);
     }));
 
-    const ctx = { org: 'testorg' };
+    const ctx = { key: 'mydir/dir1', org: 'testorg' };
     const details = {
       source: 'mydir/dir1',
       destination: 'mydir/dir2',
@@ -80,7 +87,7 @@ describe('Object copy', () => {
 
 
     assert.strictEqual(s3Sent.length, 3);
-    const input = s3Sent[0];
+    const input = s3Sent[2];
     assert.strictEqual(input.Bucket, 'testorg-content');
     assert.strictEqual(input.CopySource, 'testorg-content/mydir/dir1/myfile.html');
     assert.strictEqual(input.Key, 'mydir/dir2/myfile.html');
