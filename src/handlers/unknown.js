@@ -9,7 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-export default function unkownHandler() {
+
+export default function unknownHandler() {
   const body = JSON.stringify({ message: 'Unknown method. Please see: https://docs.da.live for more information.' });
   return { body, status: 501 };
 }
