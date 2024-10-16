@@ -35,13 +35,15 @@ async function invalidateCollab(api, url, env) {
 }
 
 export async function deleteObject(client, daCtx, Key, env, isMove = false) {
-  await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, daCtx);
+  if (!Key.endsWith('.props')) {
+    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, daCtx);
+  }
 
   let resp;
   try {
     const delCommand = new DeleteObjectCommand({ Bucket: `${daCtx.org}-content`, Key });
     const url = await getSignedUrl(client, delCommand, { expiresIn: 3600 });
-    resp = fetch(url, { method: 'DELETE' });
+    resp = await fetch(url, { method: 'DELETE' });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.log(`There was an error deleting ${Key}.`);
