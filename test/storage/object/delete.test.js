@@ -71,6 +71,102 @@ describe('Object delete', () => {
     }
   });
 
+  it('Delete dir', async() => {
+    const client = {};
+    const daCtx = {};
+    const env = {};
+
+    const postObjVerCalled = [];
+    const mockPostObjectVersion = async (l, e, c) => {
+      if (l === 'Moved' && e === env && c === daCtx) {
+        postObjVerCalled.push('postObjectVersionWithLabel');
+        return {status: 201};
+      }
+    };
+
+    const deleteURL = 'https://localhost:9876/a/b/c/d';
+    const mockSignedUrl = async (cl, cm) => {
+      if (cl === client
+        && cm.constructor.toString().includes('DeleteObjectCommand')) {
+        return deleteURL;
+      }
+    };
+
+    const { deleteObject } = await esmock(
+      '../../../src/storage/object/delete.js', {
+        '../../../src/storage/version/put.js': {
+          postObjectVersionWithLabel: mockPostObjectVersion,
+        },
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: mockSignedUrl,
+        }
+      }
+    );
+
+    const savedFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (url, opts) => {
+        assert.equal(deleteURL, url);
+        assert.equal('DELETE', opts.method);
+        return {status: 204};
+      };
+
+      const resp = await deleteObject(client, daCtx, 'd', env, true);
+      assert.equal(204, resp.status);
+      assert.deepStrictEqual([], postObjVerCalled);
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+  });
+
+  it('Delete properties file', async() => {
+    const client = {};
+    const daCtx = {};
+    const env = {};
+
+    const postObjVerCalled = [];
+    const mockPostObjectVersion = async (l, e, c) => {
+      if (l === 'Moved' && e === env && c === daCtx) {
+        postObjVerCalled.push('postObjectVersionWithLabel');
+        return {status: 201};
+      }
+    };
+
+    const deleteURL = 'https://localhost:9876/a/b/c/d.props';
+    const mockSignedUrl = async (cl, cm) => {
+      if (cl === client
+        && cm.constructor.toString().includes('DeleteObjectCommand')) {
+        return deleteURL;
+      }
+    };
+
+    const { deleteObject } = await esmock(
+      '../../../src/storage/object/delete.js', {
+        '../../../src/storage/version/put.js': {
+          postObjectVersionWithLabel: mockPostObjectVersion,
+        },
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: mockSignedUrl,
+        }
+      }
+    );
+
+    const savedFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (url, opts) => {
+        assert.equal(deleteURL, url);
+        assert.equal('DELETE', opts.method);
+        return {status: 204};
+      };
+
+      const resp = await deleteObject(client, daCtx, 'd.props', env, true);
+      assert.equal(204, resp.status);
+      assert.deepStrictEqual([], postObjVerCalled);
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+  });
+
   it('Move a non-doc resource', async () => {
     const client = {};
     const daCtx = {};
