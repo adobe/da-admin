@@ -17,7 +17,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import getS3Config from '../utils/config.js';
-import { postObjectVersion } from '../version/put.js';
+import { postObjectVersionWithLabel } from '../version/put.js';
 
 function buildInput(org, key) {
   return {
@@ -34,10 +34,8 @@ async function invalidateCollab(api, url, env) {
   await env.dacollab.fetch(invURL);
 }
 
-export async function deleteObject(client, daCtx, Key, env) {
-  if (Key.endsWith('.html')) {
-    await postObjectVersion('Deleted', env, daCtx);
-  }
+export async function deleteObject(client, daCtx, Key, env, isMove = false) {
+  await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, daCtx);
 
   let resp;
   try {

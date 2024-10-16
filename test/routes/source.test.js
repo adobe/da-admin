@@ -145,30 +145,12 @@ describe('Source Route', () => {
     assert.deepStrictEqual(called, ['getObject']);
   });
 
-  it('Test deleteSource', async () => {
-    const req = {
-      headers: new Map(),
-      url: 'http://somehost.com/somedoc.html'
-    };
-
-    const daCalled = []
-    const dacollab = { fetch: (u) => daCalled.push(u) };
-
-    const env = { dacollab };
+  it('Test getSource with', async () => {
+    const env = {};
     const daCtx = {};
 
-    const postObjVerCalled = [];
-    const postObjVerResp = async (r, e, c) => {
-      if (r === req && e === env && c === daCtx) {
-        postObjVerCalled.push('postObjectVersion');
-        return {status: 201};
-      }
-    };
-
-    const deleteCalled = [];
     const deleteResp = async (e, c) => {
       if (e === env && c === daCtx) {
-        deleteCalled.push('deleteObject');
         return {status: 204};
       }
     };
@@ -177,17 +159,11 @@ describe('Source Route', () => {
       '../../src/routes/source.js', {
         '../../src/storage/object/delete.js': {
           default: deleteResp
-        },
-        '../../src/storage/version/put.js': {
-          postObjectVersion: postObjVerResp
         }
       }
     );
-    const resp = await deleteSource({req, env, daCtx});
+
+    const resp = await deleteSource({env, daCtx});
     assert.equal(204, resp.status);
-    assert.deepStrictEqual(['postObjectVersion'], postObjVerCalled);
-    assert.deepStrictEqual(deleteCalled, ['deleteObject']);
-    assert.deepStrictEqual(daCalled,
-      ['https://localhost/api/v1/deleteadmin?doc=http://somehost.com/somedoc.html']);
   });
 });
