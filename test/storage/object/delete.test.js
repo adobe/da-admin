@@ -9,209 +9,184 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+
 import assert from 'node:assert';
 import esmock from 'esmock';
+import { mockClient } from 'aws-sdk-client-mock';
+import { DeleteObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
+
+const s3Mock = mockClient(S3Client);
 
 describe('Object delete', () => {
-  it('Delete a file', async () => {
-    const collabCalled = []
-    const dacollab = { fetch: (u) => collabCalled.push(u) };
+  beforeEach(() => {
+    s3Mock.reset();
+  });
 
-    const client = {};
-    const env = { dacollab };
-    const daCtx = {
-      origin: 'https://admin.da.live',
-      org: 'testorg',
-    };
+  describe('Single context', () => {
+    it('Delete a file', async () => {
+      const collabCalled = []
+      const dacollab = { fetch: (u) => collabCalled.push(u) };
 
-    const postObjVerCalled = [];
-    const mockPostObjectVersion = async (l, e, c) => {
-      if (l === 'Deleted' && e === env && c === daCtx) {
-        postObjVerCalled.push('postObjectVersionWithLabel');
-        return {status: 201};
-      }
-    };
-
-    const deleteURL = 'https://localhost:9876/foo/bar.html';
-    const mockSignedUrl = async (cl, cm) => {
-      if (cl === client
-        && cm.constructor.toString().includes('DeleteObjectCommand')) {
-        return deleteURL;
-      }
-    };
-
-    const { deleteObject } = await esmock(
-      '../../../src/storage/object/delete.js', {
-        '../../../src/storage/version/put.js': {
-          postObjectVersionWithLabel: mockPostObjectVersion,
-        },
-        '@aws-sdk/s3-request-presigner': {
-          getSignedUrl: mockSignedUrl,
-        }
-      }
-    );
-
-    const savedFetch = globalThis.fetch;
-    try {
-      globalThis.fetch = async (url, opts) => {
-        assert.equal(deleteURL, url);
-        assert.equal('DELETE', opts.method);
-        return {status: 204};
+      const env = { dacollab };
+      const daCtx = {
+        origin: 'https://admin.da.live',
+        org: 'testorg',
       };
 
-      const resp = await deleteObject(client, daCtx, 'foo/bar.html', env);
+      const postObjVerCalled = [];
+      const mockPostObjectVersion = async (l, e, c) => {
+        if (l === 'Deleted' && e === env && c === daCtx) {
+          postObjVerCalled.push('postObjectVersionWithLabel');
+          return { status: 201 };
+        }
+      };
+
+      const { deleteObject } = await esmock(
+        '../../../src/storage/object/delete.js', {
+          '../../../src/storage/version/put.js': {
+            postObjectVersionWithLabel: mockPostObjectVersion,
+          },
+        }
+      );
+      s3Mock
+        .on(DeleteObjectCommand, { Bucket: 'testorg-content', Key: 'foo/bar.html' })
+        .resolves({ $metadata: { httpStatusCode: 204 } });
+
+      const resp = await deleteObject(s3Mock, daCtx, 'foo/bar.html', env);
       assert.equal(204, resp.status);
       assert.deepStrictEqual(['postObjectVersionWithLabel'], postObjVerCalled);
       assert.deepStrictEqual(
         ['https://localhost/api/v1/deleteadmin?doc=https://admin.da.live/source/testorg/foo/bar.html'],
         collabCalled
       );
-    } finally {
-      globalThis.fetch = savedFetch;
-    }
-  });
+    });
 
-  it('Delete dir', async() => {
-    const client = {};
-    const daCtx = {};
-    const env = {};
+    it('Delete properties file', async () => {
+      const daCtx = { org: 'testorg' };
+      const env = {};
 
-    const postObjVerCalled = [];
-    const mockPostObjectVersion = async (l, e, c) => {
-      if (l === 'Moved' && e === env && c === daCtx) {
-        postObjVerCalled.push('postObjectVersionWithLabel');
-        return {status: 201};
-      }
-    };
-
-    const deleteURL = 'https://localhost:9876/a/b/c/d';
-    const mockSignedUrl = async (cl, cm) => {
-      if (cl === client
-        && cm.constructor.toString().includes('DeleteObjectCommand')) {
-        return deleteURL;
-      }
-    };
-
-    const { deleteObject } = await esmock(
-      '../../../src/storage/object/delete.js', {
-        '../../../src/storage/version/put.js': {
-          postObjectVersionWithLabel: mockPostObjectVersion,
-        },
-        '@aws-sdk/s3-request-presigner': {
-          getSignedUrl: mockSignedUrl,
+      const postObjVerCalled = [];
+      const mockPostObjectVersion = async (l, e, c) => {
+        if (l === 'Moved' && e === env && c === daCtx) {
+          postObjVerCalled.push('postObjectVersionWithLabel');
+          return { status: 201 };
         }
-      }
-    );
-
-    const savedFetch = globalThis.fetch;
-    try {
-      globalThis.fetch = async (url, opts) => {
-        assert.equal(deleteURL, url);
-        assert.equal('DELETE', opts.method);
-        return {status: 204};
       };
+      const { deleteObject } = await esmock(
+        '../../../src/storage/object/delete.js', {
+          '../../../src/storage/version/put.js': {
+            postObjectVersionWithLabel: mockPostObjectVersion,
+          },
+        }
+      );
+      s3Mock
+        .on(DeleteObjectCommand, { Bucket: 'testorg-content', Key: 'foo/bar.props' })
+        .resolves({ $metadata: { httpStatusCode: 204 } });
 
-      const resp = await deleteObject(client, daCtx, 'd', env, true);
+      const resp = await deleteObject(s3Mock, daCtx, 'foo/bar.props', env, true);
       assert.equal(204, resp.status);
       assert.deepStrictEqual([], postObjVerCalled);
-    } finally {
-      globalThis.fetch = savedFetch;
-    }
-  });
+    });
 
-  it('Delete properties file', async() => {
-    const client = {};
-    const daCtx = {};
-    const env = {};
+    it('Move a non-doc resource', async () => {
+      const daCtx = { org: 'testorg' };
+      const env = {};
 
-    const postObjVerCalled = [];
-    const mockPostObjectVersion = async (l, e, c) => {
-      if (l === 'Moved' && e === env && c === daCtx) {
-        postObjVerCalled.push('postObjectVersionWithLabel');
-        return {status: 201};
-      }
-    };
-
-    const deleteURL = 'https://localhost:9876/a/b/c/d.props';
-    const mockSignedUrl = async (cl, cm) => {
-      if (cl === client
-        && cm.constructor.toString().includes('DeleteObjectCommand')) {
-        return deleteURL;
-      }
-    };
-
-    const { deleteObject } = await esmock(
-      '../../../src/storage/object/delete.js', {
-        '../../../src/storage/version/put.js': {
-          postObjectVersionWithLabel: mockPostObjectVersion,
-        },
-        '@aws-sdk/s3-request-presigner': {
-          getSignedUrl: mockSignedUrl,
+      const postObjVerCalled = [];
+      const mockPostObjectVersion = async (l, e, c) => {
+        if (l === 'Moved' && e === env && c === daCtx) {
+          postObjVerCalled.push('postObjectVersionWithLabel');
+          return { status: 201 };
         }
-      }
-    );
-
-    const savedFetch = globalThis.fetch;
-    try {
-      globalThis.fetch = async (url, opts) => {
-        assert.equal(deleteURL, url);
-        assert.equal('DELETE', opts.method);
-        return {status: 204};
       };
 
-      const resp = await deleteObject(client, daCtx, 'd.props', env, true);
-      assert.equal(204, resp.status);
-      assert.deepStrictEqual([], postObjVerCalled);
-    } finally {
-      globalThis.fetch = savedFetch;
-    }
-  });
-
-  it('Move a non-doc resource', async () => {
-    const client = {};
-    const daCtx = {};
-    const env = {};
-
-    const postObjVerCalled = [];
-    const mockPostObjectVersion = async (l, e, c) => {
-      if (l === 'Moved' && e === env && c === daCtx) {
-        postObjVerCalled.push('postObjectVersionWithLabel');
-        return {status: 201};
-      }
-    };
-
-    const deleteURL = 'https://localhost:9876/aha.png';
-    const mockSignedUrl = async (cl, cm) => {
-      if (cl === client
-        && cm.constructor.toString().includes('DeleteObjectCommand')) {
-        return deleteURL;
-      }
-    };
-
-    const { deleteObject } = await esmock(
-      '../../../src/storage/object/delete.js', {
-        '../../../src/storage/version/put.js': {
-          postObjectVersionWithLabel: mockPostObjectVersion,
-        },
-        '@aws-sdk/s3-request-presigner': {
-          getSignedUrl: mockSignedUrl,
+      const { deleteObject } = await esmock(
+        '../../../src/storage/object/delete.js', {
+          '../../../src/storage/version/put.js': {
+            postObjectVersionWithLabel: mockPostObjectVersion,
+          },
         }
-      }
-    );
+      );
+      s3Mock
+        .on(DeleteObjectCommand, { Bucket: 'testorg-content', Key: 'foo/aha.png' })
+        .resolves({ $metadata: { httpStatusCode: 204 } });
 
-    const savedFetch = globalThis.fetch;
-    try {
-      globalThis.fetch = async (url, opts) => {
-        assert.equal(deleteURL, url);
-        assert.equal('DELETE', opts.method);
-        return {status: 204};
-      };
-
-      const resp = await deleteObject(client, daCtx, 'aha.png', env, true);
+      const resp = await deleteObject(s3Mock, daCtx, 'foo/aha.png', env, true);
       assert.equal(204, resp.status);
       assert.deepStrictEqual(['postObjectVersionWithLabel'], postObjVerCalled);
-    } finally {
-      globalThis.fetch = savedFetch;
-    }
+    });
   });
+
+  describe('multiple file context', () => {
+    it('Handles no continuation', async () => {
+      const daCtx = {
+        org: 'testorg',
+        key: 'foo/bar.html',
+      };
+      const env = {
+        dacollab: {
+          fetch: () => {
+          }
+        },
+      };
+      const postObjVerCalled = [];
+      const mockPostObjectVersion = async (l, e, c) => {
+        if (l === 'Deleted' && e === env && c === daCtx) {
+          postObjVerCalled.push('postObjectVersionWithLabel');
+          return { status: 201 };
+        }
+      };
+
+      const deleteObjects = await esmock(
+        '../../../src/storage/object/delete.js', {
+          '../../../src/storage/version/put.js': {
+            postObjectVersionWithLabel: mockPostObjectVersion,
+          },
+        }
+      );
+      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }] });
+      s3Mock
+        .on(DeleteObjectCommand)
+        .resolves({ $metadata: { httpStatusCode: 204 } });
+      const resp = await deleteObjects(env, daCtx);
+      assert.strictEqual(resp.status, 204);
+      assert.deepStrictEqual(postObjVerCalled.length, 2);
+    });
+
+    it('Handles continuation', async () => {
+      const daCtx = {
+        org: 'testorg',
+        key: 'foo/bar.html',
+      };
+      const env = {
+        dacollab: {
+          fetch: () => {
+          }
+        },
+      };
+      const postObjVerCalled = [];
+      const mockPostObjectVersion = async (l, e, c) => {
+        if (l === 'Deleted' && e === env && c === daCtx) {
+          postObjVerCalled.push('postObjectVersionWithLabel');
+          return { status: 201 };
+        }
+      };
+
+      const deleteObjects = await esmock(
+        '../../../src/storage/object/delete.js', {
+          '../../../src/storage/version/put.js': {
+            postObjectVersionWithLabel: mockPostObjectVersion,
+          },
+        }
+      );
+      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }], NextContinuationToken: 'token' });
+      s3Mock
+        .on(DeleteObjectCommand)
+        .resolves({ $metadata: { httpStatusCode: 204 } });
+      const resp = await deleteObjects(env, daCtx);
+      assert.strictEqual(resp.status, 206);
+      assert.deepStrictEqual(postObjVerCalled.length, 2);
+    });
+  });
+
 });

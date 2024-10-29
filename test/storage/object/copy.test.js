@@ -22,68 +22,202 @@ describe('Object copy', () => {
     s3Mock.reset();
   });
 
-  it('does not allow copying to the same location', async () => {
-    const details = {
-      source: 'mydir',
-      destination: 'mydir',
-    };
-    const resp = await copyObject({}, {}, details, false);
-    assert.strictEqual(resp.status, 409);
+  describe('Copies a single file', async () => {
+    it('does not allow copying to the same location', async () => {
+      const details = {
+        source: 'mydir',
+        destination: 'mydir',
+      };
+      const resp = await copyObject({}, {}, details, false);
+      assert.strictEqual(resp.status, 409);
+    });
+
+    it('Copies a file', async () => {
+      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'mydir/xyz.html' }] });
+
+      const s3Sent = [];
+      s3Mock.on(CopyObjectCommand).callsFake((input => {
+        s3Sent.push(input);
+      }));
+
+      const ctx = {
+        org: 'foo',
+        users: [{ email: 'haha@foo.com' }],
+      };
+      const details = {
+        source: 'mydir',
+        destination: 'mydir/newdir',
+      };
+      await copyObject({}, ctx, details, false);
+
+      assert.strictEqual(s3Sent.length, 3);
+      const input = s3Sent[0];
+      assert.strictEqual(input.Bucket, 'foo-content');
+      assert.strictEqual(input.CopySource, 'foo-content/mydir/xyz.html');
+      assert.strictEqual(input.Key, 'mydir/newdir/xyz.html');
+
+      const md = input.Metadata;
+      assert(md.ID, "ID should be set");
+      assert(md.Version, "Version should be set");
+      assert.strictEqual(typeof (md.Timestamp), 'string', 'Timestamp should be set as a string');
+      assert.strictEqual(md.Users, '[{"email":"haha@foo.com"}]');
+      assert.strictEqual(md.Path, 'mydir/newdir/xyz.html');
+    });
+
+    it('Copies a file for rename', async () => {
+      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'mydir/dir1/myfile.html' }] });
+
+      const s3Sent = [];
+      s3Mock.on(CopyObjectCommand).callsFake((input => {
+        s3Sent.push(input);
+      }));
+
+      const ctx = { org: 'testorg' };
+      const details = {
+        source: 'mydir/dir1',
+        destination: 'mydir/dir2',
+      };
+      await copyObject({}, ctx, details, true);
+
+
+      assert.strictEqual(s3Sent.length, 3);
+      const input = s3Sent[0];
+      assert.strictEqual(input.Bucket, 'testorg-content');
+      assert.strictEqual(input.CopySource, 'testorg-content/mydir/dir1/myfile.html');
+      assert.strictEqual(input.Key, 'mydir/dir2/myfile.html');
+      assert.ifError(input.Metadata);
+    });
+
   });
 
-  it('Copies a file', async () => {
-    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'mydir/xyz.html' }] });
+  describe('Copies a list of files', async () => {
+    it('handles no continuation token', async () => {
+      s3Mock.on(ListObjectsV2Command).resolves({
+        Contents: [{ Key: 'mydir/xyz.html' }],
+      });
 
-    const s3Sent = [];
-    s3Mock.on(CopyObjectCommand).callsFake((input => {
-      s3Sent.push(input);
-    }));
+      const s3Sent = [];
+      s3Mock.on(CopyObjectCommand).callsFake((input => {
+        s3Sent.push(input);
+      }));
 
-    const ctx = {
-      org: 'foo',
-      users: [{email: 'haha@foo.com'}],
-    };
-    const details = {
-      source: 'mydir',
-      destination: 'mydir/newdir',
-    };
-    await copyObject({}, ctx, details, false);
+      const ctx = {
+        org: 'foo',
+        users: [{ email: 'haha@foo.com' }],
+      };
+      const details = {
+        source: 'mydir',
+        destination: 'mydir/newdir',
+      };
+      const resp = await copyObject({}, ctx, details, false);
+      assert.strictEqual(resp.status, 204);
+      assert.strictEqual(resp.body, undefined);
 
-    assert.strictEqual(s3Sent.length, 3);
-    const input = s3Sent[0];
-    assert.strictEqual(input.Bucket, 'foo-content');
-    assert.strictEqual(input.CopySource, 'foo-content/mydir/xyz.html');
-    assert.strictEqual(input.Key, 'mydir/newdir/xyz.html');
+      assert.strictEqual(s3Sent.length, 3);
+      const input = s3Sent[0];
+      assert.strictEqual(input.Bucket, 'foo-content');
+      assert.strictEqual(input.CopySource, 'foo-content/mydir/xyz.html');
+      assert.strictEqual(input.Key, 'mydir/newdir/xyz.html');
 
-    const md = input.Metadata;
-    assert(md.ID, "ID should be set");
-    assert(md.Version, "Version should be set");
-    assert.strictEqual(typeof(md.Timestamp), 'string', 'Timestamp should be set as a string');
-    assert.strictEqual(md.Users, '[{"email":"haha@foo.com"}]');
-    assert.strictEqual(md.Path, 'mydir/newdir/xyz.html');
-  });
+      const md = input.Metadata;
+      assert(md.ID, "ID should be set");
+      assert(md.Version, "Version should be set");
+      assert.strictEqual(typeof (md.Timestamp), 'string', 'Timestamp should be set as a string');
+      assert.strictEqual(md.Users, '[{"email":"haha@foo.com"}]');
+      assert.strictEqual(md.Path, 'mydir/newdir/xyz.html');
+    });
 
-  it('Copies a file for rename', async () => {
-    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'mydir/dir1/myfile.html' }] });
+    it('handles continuation token', async () => {
+      s3Mock.on(ListObjectsV2Command)
+        .resolves({
+          Contents: [{ Key: 'mydir/xyz.html' }],
+          NextContinuationToken: 'token',
+        });
 
-    const s3Sent = [];
-    s3Mock.on(CopyObjectCommand).callsFake((input => {
-      s3Sent.push(input);
-    }));
-
-    const ctx = { org: 'testorg' };
-    const details = {
-      source: 'mydir/dir1',
-      destination: 'mydir/dir2',
-    };
-    await copyObject({}, ctx, details, true);
+      s3Mock.on(ListObjectsV2Command, { ContinuationToken: 'token' })
+        .resolves({
+          Contents: [{ Key: 'mydir/abc.html' }],
+        });
 
 
-    assert.strictEqual(s3Sent.length, 3);
-    const input = s3Sent[0];
-    assert.strictEqual(input.Bucket, 'testorg-content');
-    assert.strictEqual(input.CopySource, 'testorg-content/mydir/dir1/myfile.html');
-    assert.strictEqual(input.Key, 'mydir/dir2/myfile.html');
-    assert.ifError(input.Metadata);
+      const s3Sent = [];
+      s3Mock.on(CopyObjectCommand).callsFake((input => {
+        s3Sent.push(input);
+      }));
+
+      const ctx = {
+        org: 'foo',
+        users: [{ email: 'haha@foo.com' }],
+      };
+      const details = {
+        source: 'mydir',
+        destination: 'mydir/newdir',
+      };
+      const resp = await copyObject({}, ctx, details, false);
+      assert.strictEqual(resp.status, 206);
+      assert.deepStrictEqual(JSON.parse(resp.body), { remaining: ['mydir/abc.html'] });
+
+      assert.strictEqual(s3Sent.length, 3);
+      const input = s3Sent[0];
+      assert.strictEqual(input.Bucket, 'foo-content');
+      assert.strictEqual(input.CopySource, 'foo-content/mydir/xyz.html');
+      assert.strictEqual(input.Key, 'mydir/newdir/xyz.html');
+
+      const md = input.Metadata;
+      assert(md.ID, "ID should be set");
+      assert(md.Version, "Version should be set");
+      assert.strictEqual(typeof (md.Timestamp), 'string', 'Timestamp should be set as a string');
+      assert.strictEqual(md.Users, '[{"email":"haha@foo.com"}]');
+      assert.strictEqual(md.Path, 'mydir/newdir/xyz.html');
+    });
+
+    it('handles a provided list of files', async () => {
+      const ctx = {
+        org: 'foo',
+        users: [{ email: 'haha@foo.com' }],
+      };
+      const details = {
+        source: 'mydir',
+        destination: 'mydir/newdir',
+        remaining: ['mydir/xyz.html', 'mydir/abc.html'],
+      };
+      const s3Sent = [];
+      s3Mock.on(CopyObjectCommand).callsFake((input => {
+        s3Sent.push(input);
+      }));
+
+
+      const resp = await copyObject({}, ctx, details, false);
+      assert.strictEqual(resp.status, 204);
+      assert.deepStrictEqual(resp.body, undefined);
+      assert.strictEqual(s3Sent.length, 2);
+    });
+
+    it('handles a provided list of files > Max', async () => {
+      const remaining = [];
+      for (let i = 0; i < 1000; i++) {
+        remaining.push(`mydir/file${i}.html`);
+      }
+
+      const ctx = {
+        org: 'foo',
+        users: [{ email: 'haha@foo.com' }],
+      };
+      const details = {
+        source: 'mydir',
+        destination: 'mydir/newdir',
+        remaining,
+      };
+      const s3Sent = [];
+      s3Mock.on(CopyObjectCommand).callsFake((input => {
+        s3Sent.push(input);
+      }));
+
+
+      const resp = await copyObject({}, ctx, details, false);
+      assert.strictEqual(resp.status, 206);
+      assert.deepStrictEqual(JSON.parse(resp.body).remaining.length, 500);
+      assert.strictEqual(s3Sent.length, 500);
+    });
   });
 });

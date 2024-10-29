@@ -17,6 +17,8 @@ import {
 
 import getS3Config from '../utils/config.js';
 
+const MaxKeys = 500;
+
 function buildInput(org, key) {
   return {
     Bucket: `${org}-content`,
@@ -60,20 +62,25 @@ export default async function copyObject(env, daCtx, details, isRename) {
   if (details.source === details.destination) {
     return { body: '', status: 409 };
   }
-
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
 
-  let ContinuationToken;
+  const sourceKeys = [];
+  const remaining = [];
 
-  // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
-  // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [details.source, `${details.source}.props`];
+  if (details.remaining) {
+    sourceKeys.push(...details.remaining.splice(0, MaxKeys));
+    remaining.push(...details.remaining);
+  } else {
+    const input = buildInput(daCtx.org, details.source);
 
-  do {
+    // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
+    // Which means the list will only pickup children. This adds to the initial list.
+    sourceKeys.push(details.source, `${details.source}.props`);
+    let ContinuationToken;
+
     try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
+      const command = new ListObjectsV2Command({ ...input }, MaxKeys);
       const resp = await client.send(command);
 
       const { Contents = [], NextContinuationToken } = resp;
@@ -82,7 +89,15 @@ export default async function copyObject(env, daCtx, details, isRename) {
     } catch (e) {
       return { body: '', status: 404 };
     }
-  } while (ContinuationToken);
+
+    while (ContinuationToken) {
+      const command = new ListObjectsV2Command({ ...input, ContinuationToken, MaxKeys });
+      const resp = await client.send(command);
+      const { Contents = [], NextContinuationToken } = resp;
+      remaining.push(...Contents.map(({ Key }) => Key));
+      ContinuationToken = NextContinuationToken;
+    }
+  }
 
   await Promise.all(
     new Array(1).fill(null).map(async () => {
@@ -92,5 +107,7 @@ export default async function copyObject(env, daCtx, details, isRename) {
     }),
   );
 
-  return { status: 204 };
+  return remaining.length > 0
+    ? { status: 206, body: JSON.stringify({ remaining }) }
+    : { status: 204 };
 }
