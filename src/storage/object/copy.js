@@ -67,7 +67,6 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
     );
     const resp = await client.send(new CopyObjectCommand(input));
     return resp;
-    // return /* await */ client.send(new CopyObjectCommand(input));
   } catch (e) {
     if (e.$metadata.httpStatusCode === 412) {
       // Not the happy path - something is at the destination already.
@@ -131,7 +130,6 @@ export default async function copyObject(env, daCtx, details, isRename) {
   await Promise.all(
     new Array(1).fill(null).map(async () => {
       while (sourceKeys.length) {
-        console.log('*** sourcekeys', sourceKeys);
         await copyFile(config, env, daCtx, sourceKeys.pop(), details, isRename);
       }
     }),
