@@ -16,6 +16,9 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
+import { postObjectVersionWithLabel, putObjectWithVersion } from '../version/put.js';
+import getObject from './get.js';
+import { invalidateCollab } from '../utils/object.js';
 
 function buildInput(org, key) {
   return {
@@ -24,7 +27,7 @@ function buildInput(org, key) {
   };
 }
 
-export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
+export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
 
   const input = {
@@ -49,10 +52,51 @@ export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
   }
 
   try {
-    await client.send(new CopyObjectCommand(input));
+    const client = new S3Client(config);
+    client.middlewareStack.add(
+      (next) => async (args) => {
+        // eslint-disable-next-line no-param-reassign
+        args.request.headers['cf-copy-destination-if-none-match'] = '*';
+        return next(args);
+      },
+      {
+        step: 'build',
+        name: 'ifNoneMatchMiddleware',
+        tags: ['METADATA', 'IF-NONE-MATCH'],
+      },
+    );
+    const resp = await client.send(new CopyObjectCommand(input));
+    return resp;
+    // return /* await */ client.send(new CopyObjectCommand(input));
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(e.$metadata);
+    if (e.$metadata.httpStatusCode === 412) {
+      // Not the happy path - something is at the destination already.
+      if (!isRename) {
+        // This is a copy so just put the source into the target to keep the history.
+
+        const original = await getObject(env, { org: daCtx.org, key: sourceKey });
+        return /* await */ putObjectWithVersion(env, daCtx, {
+          org: daCtx.org,
+          key: Key,
+          body: original.body,
+          contentLength: original.contentLength,
+          type: original.contentType,
+        });
+      }
+      await postObjectVersionWithLabel('Moved', env, daCtx);
+
+      const client = new S3Client(config);
+      // This is a move so copy to the new location
+      return /* await */ client.send(new CopyObjectCommand(input));
+    } else if (e.$metadata.httpStatusCode === 404) {
+      return { $metadata: e.$metadata };
+    }
+    throw e;
+  } finally {
+    if (Key.endsWith('.html')) {
+      // Reset the collab cached state for the copied object
+      await invalidateCollab('syncAdmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+    }
   }
 };
 
@@ -87,7 +131,8 @@ export default async function copyObject(env, daCtx, details, isRename) {
   await Promise.all(
     new Array(1).fill(null).map(async () => {
       while (sourceKeys.length) {
-        await copyFile(client, daCtx, sourceKeys.pop(), details, isRename);
+        console.log('*** sourcekeys', sourceKeys);
+        await copyFile(config, env, daCtx, sourceKeys.pop(), details, isRename);
       }
     }),
   );
