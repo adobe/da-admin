@@ -39,15 +39,23 @@ describe('Object copy', () => {
       s3Sent.push(input);
     }));
 
+    const collabcalls = [];
+    const dacollab = {
+      fetch: (url) => {
+        collabcalls.push(url);
+      }
+    }
+    const env = { dacollab };
     const ctx = {
       org: 'foo',
+      origin: 'somehost.sometld',
       users: [{email: 'haha@foo.com'}],
     };
     const details = {
       source: 'mydir',
       destination: 'mydir/newdir',
     };
-    await copyObject({}, ctx, details, false);
+    await copyObject(env, ctx, details, false);
 
     assert.strictEqual(s3Sent.length, 3);
     const input = s3Sent[0];
@@ -61,6 +69,10 @@ describe('Object copy', () => {
     assert.strictEqual(typeof(md.Timestamp), 'string', 'Timestamp should be set as a string');
     assert.strictEqual(md.Users, '[{"email":"haha@foo.com"}]');
     assert.strictEqual(md.Path, 'mydir/newdir/xyz.html');
+
+    assert.strictEqual(1, collabcalls.length);
+    assert.deepStrictEqual(collabcalls,
+      ['https://localhost/api/v1/syncAdmin?doc=somehost.sometld/source/foo/mydir/newdir/xyz.html']);
   });
 
   it('Copies a file for rename', async () => {
@@ -71,13 +83,19 @@ describe('Object copy', () => {
       s3Sent.push(input);
     }));
 
-    const ctx = { org: 'testorg' };
+    const collabcalls = [];
+    const dacollab = {
+      fetch: (url) => {
+        collabcalls.push(url);
+      }
+    }
+    const env = { dacollab };
+    const ctx = { org: 'testorg', origin: 'http://localhost:3000' };
     const details = {
       source: 'mydir/dir1',
       destination: 'mydir/dir2',
     };
-    await copyObject({}, ctx, details, true);
-
+    await copyObject(env, ctx, details, true);
 
     assert.strictEqual(s3Sent.length, 3);
     const input = s3Sent[0];
@@ -85,5 +103,8 @@ describe('Object copy', () => {
     assert.strictEqual(input.CopySource, 'testorg-content/mydir/dir1/myfile.html');
     assert.strictEqual(input.Key, 'mydir/dir2/myfile.html');
     assert.ifError(input.Metadata);
+
+    assert.deepStrictEqual(collabcalls,
+      ['https://localhost/api/v1/syncAdmin?doc=http://localhost:3000/source/testorg/mydir/dir2/myfile.html']);
   });
 });

@@ -15,10 +15,10 @@ import {
   CopyObjectCommand,
 } from '@aws-sdk/client-s3';
 
-import getS3Config from '../utils/config.js';
-import { postObjectVersionWithLabel, putObjectWithVersion } from '../version/put.js';
 import getObject from './get.js';
+import getS3Config from '../utils/config.js';
 import { invalidateCollab } from '../utils/object.js';
+import { postObjectVersionWithLabel, putObjectWithVersion } from '../version/put.js';
 
 function buildInput(org, key) {
   return {
