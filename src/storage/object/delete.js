@@ -17,6 +17,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import getS3Config from '../utils/config.js';
+import { postObjectVersionWithLabel } from '../version/put.js';
 
 function buildInput(org, key) {
   return {
@@ -25,16 +26,37 @@ function buildInput(org, key) {
   };
 }
 
-export async function deleteObject(client, org, Key) {
+async function invalidateCollab(api, url, env) {
+  const invPath = `/api/v1/${api}?doc=${url}`;
+
+  // Use dacollab service binding, hostname is not relevant
+  const invURL = `https://localhost${invPath}`;
+  await env.dacollab.fetch(invURL);
+}
+
+export async function deleteObject(client, daCtx, Key, env, isMove = false) {
+  const fname = Key.split('/').pop();
+
+  if (fname.includes('.') && !Key.endsWith('.props')) {
+    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, daCtx);
+  }
+
+  let resp;
   try {
-    const delCommand = new DeleteObjectCommand({ Bucket: `${org}-content`, Key });
+    const delCommand = new DeleteObjectCommand({ Bucket: `${daCtx.org}-content`, Key });
     const url = await getSignedUrl(client, delCommand, { expiresIn: 3600 });
-    return fetch(url, { method: 'DELETE' });
+    resp = await fetch(url, { method: 'DELETE' });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.log(`There was an error deleting ${Key}.`);
     return e;
   }
+
+  if (Key.endsWith('.html')) {
+    await invalidateCollab('deleteadmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+  }
+
+  return resp;
 }
 
 export default async function deleteObjects(env, daCtx) {
@@ -59,7 +81,7 @@ export default async function deleteObjects(env, daCtx) {
       await Promise.all(
         new Array(1).fill(null).map(async () => {
           while (sourceKeys.length) {
-            await deleteObject(client, daCtx.org, sourceKeys.pop());
+            await deleteObject(client, daCtx, sourceKeys.pop(), env);
           }
         }),
       );

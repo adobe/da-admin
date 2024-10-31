@@ -14,7 +14,6 @@ import putObject from '../storage/object/put.js';
 import deleteObjects from '../storage/object/delete.js';
 
 import putHelper from '../helpers/source.js';
-import { postObjectVersion } from '../storage/version/put.js';
 
 async function invalidateCollab(api, url, env) {
   const invPath = `/api/v1/${api}?doc=${url}`;
@@ -24,17 +23,8 @@ async function invalidateCollab(api, url, env) {
   await env.dacollab.fetch(invURL);
 }
 
-export async function deleteSource({ req, env, daCtx }) {
-  await postObjectVersion(req, env, daCtx);
-  const resp = await deleteObjects(env, daCtx);
-
-  if (resp.status === 204) {
-    const initiator = req.headers.get('x-da-initiator');
-    if (initiator !== 'collab') {
-      await invalidateCollab('deleteadmin', req.url, env);
-    }
-  }
-  return resp;
+export async function deleteSource({ env, daCtx }) {
+  return /* await */ deleteObjects(env, daCtx);
 }
 
 export async function postSource({ req, env, daCtx }) {

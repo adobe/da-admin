@@ -41,6 +41,7 @@ export default async function getDaCtx(req, env) {
     org,
     users,
     fullKey,
+    origin: new URL(req.url).origin,
   };
 
   // Get org properties

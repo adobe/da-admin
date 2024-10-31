@@ -141,15 +141,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   }
 }
 
-export async function postObjectVersion(req, env, daCtx) {
-  let reqJSON;
-  try {
-    reqJSON = await req.json();
-  } catch (e) {
-    // no body
-  }
-  const label = reqJSON?.label;
-
+export async function postObjectVersionWithLabel(label, env, daCtx) {
   const { body, contentLength, contentType } = await getObject(env, daCtx);
   const { org, key } = daCtx;
 
@@ -158,4 +150,15 @@ export async function postObjectVersion(req, env, daCtx) {
   }, true);
 
   return { status: resp === 200 ? 201 : resp };
+}
+
+export async function postObjectVersion(req, env, daCtx) {
+  let reqJSON;
+  try {
+    reqJSON = await req.json();
+  } catch (e) {
+    // no body
+  }
+  const label = reqJSON?.label;
+  return /* await */ postObjectVersionWithLabel(label, env, daCtx);
 }

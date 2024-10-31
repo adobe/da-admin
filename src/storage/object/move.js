@@ -71,7 +71,7 @@ export default async function moveObject(env, daCtx, details) {
         const copied = await copyFile(client, daCtx.org, key, details);
         // Only delete the source if the file was successfully copied
         if (copied.$metadata.httpStatusCode === 200) {
-          const deleted = await deleteObject(client, daCtx.org, key);
+          const deleted = await deleteObject(client, daCtx, key, env, true);
           result.status = deleted.status === 204 ? 204 : deleted.status;
         } else {
           result.status = copied.$metadata.httpStatusCode;
