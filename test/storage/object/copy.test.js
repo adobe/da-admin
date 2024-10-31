@@ -246,4 +246,41 @@ describe('Object copy', () => {
     assert.strictEqual(puwv[0].u.org, 'xorg');
     assert.strictEqual(puwv[0].u.type, 'text/html');
   });
+
+  it('Copy content when origin does not exists', async () => {
+    const error = {
+      $metadata: { httpStatusCode: 404, hi: 'ha' },
+    };
+
+    const mockS3Client = class {
+      send() {
+        throw error;
+      }
+      middlewareStack = { add: () => {} };
+    };
+
+    const { copyFile } = await esmock(
+      '../../../src/storage/object/copy.js', {
+        '@aws-sdk/client-s3': {
+          S3Client: mockS3Client,
+        },
+      },
+    );
+
+    const collabCalled = [];
+    const env = {
+      dacollab: {
+        fetch: (x) => { collabCalled.push(x); },
+      },
+    };
+    const daCtx = { org: 'qqqorg', origin: 'http://qqq' };
+    const details = {
+      source: 'qqqsrc',
+      destination: 'qqqdst',
+    };
+    const resp = await copyFile({}, env, daCtx, 'qqqsrc/abc/def.html', details, false);
+    assert.strictEqual(resp.$metadata, error.$metadata);
+    assert.deepStrictEqual(collabCalled,
+      ['https://localhost/api/v1/syncAdmin?doc=http://qqq/source/qqqorg/qqqdst/abc/def.html']);
+  });
 });
