@@ -65,18 +65,19 @@ export default async function copyObject(env, daCtx, details, isRename) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const sourceKeys = [];
-  const remaining = [];
+  let sourceKeys;
+  let remaining;
 
   if (details.remaining) {
-    sourceKeys.push(...details.remaining.splice(0, MaxKeys));
-    remaining.push(...details.remaining);
+    sourceKeys = details.remaining.splice(0, MaxKeys);
+    remaining = details.remaining;
   } else {
     const input = buildInput(daCtx.org, details.source);
 
     // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
     // Which means the list will only pickup children. This adds to the initial list.
-    sourceKeys.push(details.source, `${details.source}.props`);
+    sourceKeys = [details.source, `${details.source}.props`];
+    remaining = [];
     let ContinuationToken;
 
     try {
