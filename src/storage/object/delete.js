@@ -17,6 +17,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import getS3Config from '../utils/config.js';
+import { invalidateCollab } from '../utils/object.js';
 import { postObjectVersionWithLabel } from '../version/put.js';
 
 function buildInput(org, key) {
@@ -24,14 +25,6 @@ function buildInput(org, key) {
     Bucket: `${org}-content`,
     Prefix: `${key}/`,
   };
-}
-
-async function invalidateCollab(api, url, env) {
-  const invPath = `/api/v1/${api}?doc=${url}`;
-
-  // Use dacollab service binding, hostname is not relevant
-  const invURL = `https://localhost${invPath}`;
-  await env.dacollab.fetch(invURL);
 }
 
 export async function deleteObject(client, daCtx, Key, env, isMove = false) {

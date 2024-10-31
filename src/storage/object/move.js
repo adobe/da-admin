@@ -12,11 +12,11 @@
 import {
   S3Client,
   ListObjectsV2Command,
-  CopyObjectCommand,
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
 import { deleteObject } from './delete.js';
+import { copyFile } from './copy.js';
 
 function buildInput(org, key) {
   return {
@@ -24,23 +24,6 @@ function buildInput(org, key) {
     Prefix: `${key}/`,
   };
 }
-
-const copyFile = async (client, org, sourceKey, details) => {
-  const Key = `${sourceKey.replace(details.source, details.destination)}`;
-
-  try {
-    const resp = await client.send(
-      new CopyObjectCommand({
-        Bucket: `${org}-content`,
-        Key,
-        CopySource: `${org}-content/${sourceKey}`,
-      }),
-    );
-    return resp;
-  } catch (e) {
-    return e;
-  }
-};
 
 export default async function moveObject(env, daCtx, details) {
   const config = getS3Config(env);
@@ -68,7 +51,7 @@ export default async function moveObject(env, daCtx, details) {
 
       const movedLoad = sourceKeys.map(async (key) => {
         const result = { key };
-        const copied = await copyFile(client, daCtx.org, key, details);
+        const copied = await copyFile(config, env, daCtx, key, details, true);
         // Only delete the source if the file was successfully copied
         if (copied.$metadata.httpStatusCode === 200) {
           const deleted = await deleteObject(client, daCtx, key, env, true);
