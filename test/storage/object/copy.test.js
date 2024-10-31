@@ -184,4 +184,66 @@ describe('Object copy', () => {
     assert.deepStrictEqual(collabCalled,
       ['https://localhost/api/v1/syncAdmin?doc=https://blahblah:7890/source/myorg/mydst/abc/def.html']);
   });
+
+  it('Copy content when destination already exists', async () => {
+    const error = {
+      $metadata: { httpStatusCode: 412 },
+    };
+
+    const mockS3Client = class {
+      send() {
+        throw error;
+      }
+      middlewareStack = { add: () => {} };
+    };
+    const mockGetObject = async (e, u, h) => {
+      return {
+        body: 'original body',
+        contentLength: 42,
+        contentType: 'text/html',
+      }
+    };
+    const puwv = []
+    const mockPutObjectWithVersion = async (e, c, u) => {
+      puwv.push({e, c, u});
+      return 'beuaaark!';
+    };
+
+    const { copyFile } = await esmock(
+      '../../../src/storage/object/copy.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject,
+        },
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+        },
+        '@aws-sdk/client-s3': {
+          S3Client: mockS3Client,
+        },
+      },
+    );
+
+    const collabCalled = [];
+    const env = {
+      dacollab: {
+        fetch: (x) => { collabCalled.push(x); },
+      },
+    };
+    const daCtx = { org: 'xorg' };
+    const details = {
+      source: 'xsrc',
+      destination: 'xdst',
+    };
+    const resp = await copyFile({}, env, daCtx, 'xsrc/abc/def.html', details, false);
+    assert.strictEqual(resp, 'beuaaark!');
+
+    assert.strictEqual(puwv.length, 1);
+    assert.strictEqual(puwv[0].c, daCtx);
+    assert.strictEqual(puwv[0].e, env);
+    assert.strictEqual(puwv[0].u.body, 'original body');
+    assert.strictEqual(puwv[0].u.contentLength, 42);
+    assert.strictEqual(puwv[0].u.key, 'xdst/abc/def.html');
+    assert.strictEqual(puwv[0].u.org, 'xorg');
+    assert.strictEqual(puwv[0].u.type, 'text/html');
+  });
 });
