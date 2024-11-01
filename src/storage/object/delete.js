@@ -61,5 +61,8 @@ export default async function deleteObjects(env, daCtx, details) {
     await deleteObject(client, daCtx.org, key, env);
   }));
 
-  return { body: JSON.stringify({ continuationToken }), status: 200 };
+  if (continuationToken) {
+    return { body: JSON.stringify({ continuationToken }), status: 206 };
+  }
+  return { status: 204 };
 }
