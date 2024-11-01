@@ -55,14 +55,17 @@ export default async function deleteObjects(env, daCtx, details) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
+  try {
+    const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
+    await Promise.all(sourceKeys.map(async (key) => {
+      await deleteObject(client, daCtx.org, key, env);
+    }));
 
-  await Promise.all(sourceKeys.map(async (key) => {
-    await deleteObject(client, daCtx.org, key, env);
-  }));
-
-  if (continuationToken) {
-    return { body: JSON.stringify({ continuationToken }), status: 206 };
+    if (continuationToken) {
+      return { body: JSON.stringify({ continuationToken }), status: 206 };
+    }
+    return { status: 204 };
+  } catch (e) {
+    return { body: '', status: 404 };
   }
-  return { status: 204 };
 }

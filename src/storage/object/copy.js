@@ -17,6 +17,8 @@ import {
 import getS3Config from '../utils/config.js';
 import { listCommand } from '../utils/list.js';
 
+const MaxKeys = 900;
+
 export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
 
@@ -58,11 +60,38 @@ export default async function copyObject(env, daCtx, details, isRename) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
+  let sourceKeys;
+  let remainingKeys = [];
+  let continuationToken;
 
-  await Promise.all(sourceKeys.map(async (key) => {
-    await copyFile(client, daCtx, key, details, isRename);
-  }));
+  try {
+    if (details.continuationToken) {
+      continuationToken = details.continuationToken;
+      remainingKeys = await env.DA_JOBS.get(continuationToken, { type: 'json' });
+      sourceKeys = remainingKeys.splice(0, MaxKeys);
+    } else {
+      let resp = await listCommand(daCtx, details, client);
+      sourceKeys = resp.sourceKeys;
+      if (resp.continuationToken) {
+        continuationToken = `copy-${details.source}-${details.destination}-${crypto.randomUUID()}`;
+        while (resp.continuationToken) {
+          resp = await listCommand(daCtx, { continuationToken: resp.continuationToken }, client);
+          remainingKeys.push(...resp.sourceKeys);
+        }
+      }
+    }
+    await Promise.all(sourceKeys.map(async (key) => {
+      await copyFile(client, daCtx, key, details, isRename);
+    }));
 
-  return { body: JSON.stringify({ continuationToken }), status: 200 };
+    if (remainingKeys.length) {
+      await env.DA_JOBS.put(continuationToken, JSON.stringify(remainingKeys));
+      return { body: JSON.stringify({ continuationToken }), status: 206 };
+    } else if (continuationToken) {
+      await env.DA_JOBS.delete(continuationToken);
+    }
+    return { status: 204 };
+  } catch (e) {
+    return { body: '', status: 404 };
+  }
 }

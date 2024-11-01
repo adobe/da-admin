@@ -82,6 +82,13 @@ function buildInput(org, key) {
   };
 }
 
+/**
+ * Lists a files in a bucket under the specified key.
+ * @param {DaCtx} daCtx the DA Context
+ * @param {Object} details contains any prevous Continuation token
+ * @param s3client
+ * @return {Promise<{sourceKeys: String[], continuationToken: String}>}
+ */
 export async function listCommand(daCtx, details, s3client) {
   // There's no need to use the list command if the item has an extension
   if (daCtx.ext) return { sourceKeys: [daCtx.key] };
@@ -94,16 +101,12 @@ export async function listCommand(daCtx, details, s3client) {
   const sourceKeys = [];
   if (!continuationToken) sourceKeys.push(daCtx.key, `${daCtx.key}.props`);
 
-  try {
-    const commandInput = { ...input, ContinuationToken: continuationToken };
-    const command = new ListObjectsV2Command(commandInput);
-    const resp = await s3client.send(command);
+  const commandInput = { ...input, ContinuationToken: continuationToken };
+  const command = new ListObjectsV2Command(commandInput);
+  const resp = await s3client.send(command);
 
-    const { Contents = [], NextContinuationToken } = resp;
-    sourceKeys.push(...Contents.map(({ Key }) => Key));
+  const { Contents = [], NextContinuationToken } = resp;
+  sourceKeys.push(...Contents.map(({ Key }) => Key));
 
-    return { sourceKeys, continuationToken: NextContinuationToken };
-  } catch (e) {
-    return { body: '', status: 404 };
-  }
+  return { sourceKeys, continuationToken: NextContinuationToken };
 }
