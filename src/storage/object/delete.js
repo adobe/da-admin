@@ -31,7 +31,7 @@ export async function deleteObject(client, daCtx, Key, env, isMove = false) {
   const fname = Key.split('/').pop();
 
   if (fname.includes('.') && !Key.endsWith('.props')) {
-    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, daCtx);
+    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, daCtx, true);
   }
 
   let resp;
