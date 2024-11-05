@@ -17,7 +17,7 @@ import {
 import getS3Config from '../utils/config.js';
 import { listCommand } from '../utils/list.js';
 
-const MaxKeys = 900;
+const MAX_KEYS = 900;
 
 export const copyFile = async (client, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
