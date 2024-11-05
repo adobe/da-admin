@@ -214,4 +214,63 @@ describe('Object delete', () => {
       globalThis.fetch = savedFetch;
     }
   });
+
+  it('Delete a document', async () => {
+    const povwlCalled = [];
+    const mockPOVWL = async (l, e, c, d) => {
+      povwlCalled.push({l, e, c, d});
+    };
+    const icCalled = [];
+    const mockInvalidateCollab = async (u, d, e) => {
+      icCalled.push({u, d, e});
+    };
+
+    const mockSignedUrl = async (cl, cm) => {
+      if (cm.constructor.toString().includes('DeleteObjectCommand')) {
+        return 'https://localhost:333/aha.html';
+      }
+    };
+
+    const { deleteObject } = await esmock(
+      '../../../src/storage/object/delete.js', {
+        '../../../src/storage/version/put.js': {
+          postObjectVersionWithLabel: mockPOVWL,
+        },
+        '../../../src/storage/utils/object.js': {
+          invalidateCollab: mockInvalidateCollab,
+        },
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: mockSignedUrl,
+        }
+      }
+    );
+
+    const env = { mykey: 'myval' };
+    const daCtx = { org: 'testorg', origin: 'https://admin.da.live' };
+
+    const savedFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (u, o) => {
+        if (u === 'https://localhost:333/aha.html'
+          && o.method === 'DELETE') {
+          return {status: 204};
+        }
+      };
+
+      const resp = await deleteObject({}, daCtx, 'foo/bar.html', env);
+      assert.strictEqual(204, resp.status);
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+    assert.strictEqual(1, povwlCalled.length);
+    assert.strictEqual('Deleted', povwlCalled[0].l);
+    assert.strictEqual(env, povwlCalled[0].e);
+    assert.strictEqual(daCtx, povwlCalled[0].c);
+    assert.strictEqual(true, povwlCalled[0].d);
+
+    assert.strictEqual(1, icCalled.length);
+    assert.strictEqual('deleteadmin', icCalled[0].u);
+    assert.strictEqual('https://admin.da.live/source/testorg/foo/bar.html', icCalled[0].d);
+    assert.strictEqual(env, icCalled[0].e);
+  });
 });

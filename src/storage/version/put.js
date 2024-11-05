@@ -10,13 +10,12 @@
  * governing permissions and limitations under the License.
  */
 import {
-  S3Client,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
 import {
-  createBucketIfMissing, ifMatch, ifNoneMatch,
+  ifMatch, ifNoneMatch,
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
