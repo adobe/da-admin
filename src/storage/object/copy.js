@@ -68,7 +68,7 @@ export default async function copyObject(env, daCtx, details, isRename) {
     if (details.continuationToken) {
       continuationToken = details.continuationToken;
       remainingKeys = await env.DA_JOBS.get(continuationToken, { type: 'json' });
-      sourceKeys = remainingKeys.splice(0, MaxKeys);
+      sourceKeys = remainingKeys.splice(0, MAX_KEYS);
     } else {
       let resp = await listCommand(daCtx, details, client);
       sourceKeys = resp.sourceKeys;
