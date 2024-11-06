@@ -519,4 +519,65 @@ describe('Version Put', () => {
     assert.equal('[{"email":"hi@acme.com"}]', input2.Metadata.Users);
     assert(input2.Metadata.Version && input2.Metadata.Version !== 101);
   });
+
+  it('Delete object', async () => {
+    const env = { a: 123 };
+    const daCtx = { org: 'fooorg', key: 'a/b/c.html' };
+
+    const mockGetObject = (e, c) => {
+      if (e === env && c === daCtx) {
+        return {
+          body: 'test body',
+          contentLength: 9,
+          contentType: 'text/html',
+        }
+      } else if (e === env && c.org === 'fooorg' && c.key === 'a/b/c.html' ) {
+        return {
+          body: 'other body',
+          contentLength: 10,
+          contentType: 'text/html',
+          metadata: {
+            id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+            version: '11111111-1111-1111-1111-111111111111',
+          }
+        }
+      }
+      return null;
+    };
+
+    const clientSent = [];
+    const mockClient = {
+      send: async (c) => {
+        clientSent.push(c);
+        return { $metadata: { httpStatusCode: 1234 } };
+      }
+    }
+
+    const mockIfNoneMatch = (c) => {
+      return mockClient;
+    };
+
+    const { postObjectVersionWithLabel } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: mockIfNoneMatch,
+      },
+    });
+
+    const resp = await postObjectVersionWithLabel('My Label', env, daCtx, true);
+    assert.strictEqual(1234, resp.status);
+
+    assert.strictEqual(1, clientSent.length);
+    assert(clientSent[0].constructor.toString().includes('PutObjectCommand'));
+    assert.strictEqual(clientSent[0].input.Key, '.da-deleted/a/b/c.html/ffffffff-ffff-ffff-ffff-ffffffffffff');
+    assert.strictEqual(clientSent[0].input.Body, 'other body');
+    assert.strictEqual(clientSent[0].input.Bucket, 'fooorg-content');
+    assert.strictEqual(clientSent[0].input.ContentLength, 10);
+    assert.strictEqual(clientSent[0].input.Metadata.Path, 'a/b/c.html');
+    assert.strictEqual(clientSent[0].input.Metadata.Label, 'My Label');
+    assert(Number(clientSent[0].input.Metadata.Timestamp) > Date.now() - 1000,
+      'Timestamp should be within a second of now');
+  });
 });
