@@ -58,7 +58,7 @@ export default async function deleteObjects(env, daCtx, details) {
   try {
     const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
     await Promise.all(sourceKeys.map(async (key) => {
-      await deleteObject(client, daCtx.org, key, env);
+      await deleteObject(client, daCtx, key, env);
     }));
 
     if (continuationToken) {
