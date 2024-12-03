@@ -9,7 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { copyFile, copyFiles } from '../utils/copy.js';
+import { copyFile } from '../utils/copy.js';
+import { deleteObject } from './delete.js';
 
 const limit = 100;
 
@@ -24,7 +25,10 @@ const limit = 100;
  */
 export default async function moveObject(env, daCtx, details) {
   if (daCtx.isFile) {
-    await copyFile(env, daCtx, details.source, details.destination, true);
+    const res = await copyFile(env, daCtx, details.source, details.destination, true);
+    if (res.success) {
+      await deleteObject(env, daCtx, details.source, true);
+    }
     return { status: 204 };
   }
 
@@ -53,14 +57,21 @@ export default async function moveObject(env, daCtx, details) {
             dest: src.replace(details.source, details.destination),
           };
         }));
-      await copyFiles(env, daCtx, sourceList, true)
-        .then(async (values) => {
-          const successes = values
-            .filter((item) => item.success)
-            .map((item) => item.source);
-          await env.DA_CONTENT.delete(successes);
-          results.push(...values);
-        });
+
+      const promises = [];
+      sourceList.forEach(({ src, dest }) => {
+        promises.push(
+          copyFile(env, daCtx, src, dest, true)
+            .then(async (res) => {
+              if (res.success) {
+                await deleteObject(env, daCtx, src, true);
+              }
+              return res;
+            })
+            .then((res) => results.push(res)),
+        );
+      });
+      await Promise.allSettled(promises);
       sourceList.length = 0;
       /* c8 ignore next 3 */
     } catch (e) {

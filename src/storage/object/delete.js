@@ -12,10 +12,10 @@
 import { deleteFromCollab } from '../utils/collab.js';
 import { postObjectVersionWithLabel } from '../version/put.js';
 
-async function deleteObject(env, daCtx, key) {
+export async function deleteObject(env, daCtx, key, isMove = false) {
   const fname = key.split('/').pop();
   if (fname.includes('.') && !key.endsWith('.props')) {
-    await postObjectVersionWithLabel(env, daCtx, 'Deleted');
+    await postObjectVersionWithLabel(env, daCtx, isMove ? 'Moved' : 'Deleted');
   }
   await env.DA_CONTENT.delete(key);
   await deleteFromCollab(env, daCtx, key);
