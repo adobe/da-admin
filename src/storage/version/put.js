@@ -129,6 +129,24 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
 
 /**
  * Create a version of an object in its current state, with an optional label.
+ * @param {Object} env the CloudFlare environment
+ * @param {Object} daCtx the DA context
+ * @param {String} label the label for the version
+ * @return {Promise<{status: number}>} the response object
+ */
+export async function postObjectVersionWithLabel(env, daCtx, label) {
+  const { body, contentType } = await getObject(env, daCtx);
+  const { key } = daCtx;
+
+  const resp = await putObjectWithVersion(env, daCtx, {
+    key, body, type: contentType, label,
+  }, true);
+
+  return { status: resp };
+}
+
+/**
+ * Create a version of an object in its current state, with an optional label.
  * @param {Request} req request object
  * @param {Object} env the CloudFlare environment
  * @param {Object} daCtx the DA context
@@ -143,12 +161,5 @@ export async function postObjectVersion(req, env, daCtx) {
   }
   const label = reqJSON?.label;
 
-  const { body, contentType } = await getObject(env, daCtx);
-  const { key } = daCtx;
-
-  const resp = await putObjectWithVersion(env, daCtx, {
-    key, body, type: contentType, label,
-  }, true);
-
-  return { status: resp };
+  return postObjectVersionWithLabel(env, daCtx, label);
 }

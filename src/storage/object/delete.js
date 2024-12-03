@@ -9,23 +9,27 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { deleteFromCollab } from '../utils/collab.js';
+import { postObjectVersionWithLabel } from '../version/put.js';
 
+async function deleteObject(env, daCtx, key) {
+  const fname = key.split('/').pop();
+  if (fname.includes('.') && !key.endsWith('.props')) {
+    await postObjectVersionWithLabel(env, daCtx, 'Deleted');
+  }
+  await env.DA_CONTENT.delete(key);
+  await deleteFromCollab(env, daCtx, key);
+}
 /**
  * Deletes one or more objects in the storage. Object is specified by the key in the daCtx or a list passed in.
  * Note: folders can not be specified in the `keys` list.
  *
  * @param {Object} env the CloudFlare environment
  * @param {DaCtx} daCtx the DA Context
- * @param {String[]} [keys=[]] the list of keys to delete (excluding the Org)
  * @return {Promise<{body: null, status: number}>}
  */
-export default async function deleteObjects(env, daCtx, keys = []) {
-  if (keys.length) {
-    const fullKeys = keys.map((key) => `${daCtx.org}/${key}`);
-    await env.DA_CONTENT.delete(fullKeys);
-    return { body: null, status: 204 };
-  }
-
+export default async function deleteObjects(env, daCtx) {
+  const keys = [];
   const fullKey = `${daCtx.org}/${daCtx.key}`;
   const prefix = `${fullKey}/`;
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
@@ -33,11 +37,16 @@ export default async function deleteObjects(env, daCtx, keys = []) {
   keys.push(fullKey, `${fullKey}.props`);
   let truncated = false;
   do {
-    const r2objects = await env.DA_CONTENT.list({ prefix, limit: 500 });
+    const r2objects = await env.DA_CONTENT.list({ prefix, limit: 100 });
     const { objects } = r2objects;
     truncated = r2objects.truncated;
     keys.push(...objects.map(({ key }) => key));
-    await env.DA_CONTENT.delete(keys);
+    const promises = [];
+    keys.forEach((k) => {
+      promises.push(deleteObject(env, daCtx, k));
+    });
+    await Promise.all(promises);
+    keys.length = 0;
   } while (truncated);
   return { body: null, status: 204 };
 }

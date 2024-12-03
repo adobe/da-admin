@@ -9,173 +9,109 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
+import assert from 'node:assert';
 import esmock from 'esmock';
 
 
 describe('Source Route', () => {
-  it('Test invalidate using service binding', async () => {
-    const sb_callbacks = [];
-    const dacollab = {
-      fetch: async (url) => sb_callbacks.push(url)
-    };
-    const env = {
-      dacollab,
-      DA_COLLAB: 'http://localhost:4444'
-    };
-
-    const daCtx = {};
-    const putResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        return { status: 200 };
-      }
-    };
-
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: putResp
-      }
-    });
-
-    const headers = new Map();
-    headers.set('x-da-initiator', 'blah');
-
-    const req = {
-      headers,
-      url: 'http://localhost:9876/source/somedoc.html'
-    };
-
-    const resp = await postSource({ req, env, daCtx });
-    assert.equal(200, resp.status);
-    assert.deepStrictEqual(['https://localhost/api/v1/syncadmin?doc=http://localhost:9876/source/somedoc.html'], sb_callbacks);
-  });
-
-  it('Test postSource from collab does not trigger invalidate callback', async () => {
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: async () => ({ status: 201 })
-      }
-    });
-
-    const savedFetch = globalThis.fetch;
-    try {
-      const callbacks = [];
-      globalThis.fetch = async (url) => {
-        callbacks.push(url);
-      };
-
-      const headers = new Map();
-      headers.set('content-type', 'text/html');
-      headers.set('x-da-initiator', 'collab');
-
-      const req = {
-        headers,
-        url: 'http://localhost:8787/source/a/b/mydoc.html'
-      };
-
-      const env = { DA_COLLAB: 'http://localhost:1234' };
-      const daCtx = {};
-
-      const resp = await postSource({ req, env, daCtx });
-      assert.equal(201, resp.status);
-      assert.equal(0, callbacks.length);
-    } finally {
-      globalThis.fetch = savedFetch;
+  describe('postSource', () => {
+    for (const status of [200, 201]) {
+      it(`invalidates collab w/ put status === ${status}`, async () => {
+        const called = [];
+        const req = undefined
+        const env = {};
+        const daCtx = {
+          key: 'wknd/index.html',
+        };
+        const { postSource } = await esmock(
+          '../../src/routes/source.js', {
+            '../../src/helpers/source.js': {
+              default: async () => undefined,
+            },
+            '../../src/storage/object/put.js': {
+              default: async (e, d, o) => {
+                assert.deepStrictEqual(e, env);
+                assert.deepStrictEqual(d, daCtx);
+                assert.ifError(o);
+                return { status: status }
+              }
+            },
+            '../../src/storage/utils/collab.js': {
+              syncCollab: async (e, c, k) => {
+                assert.deepStrictEqual(e, env);
+                assert.deepStrictEqual(c, daCtx);
+                assert.deepStrictEqual(k, 'wknd/index.html');
+                called.push(k);
+              },
+            }
+          });
+        const resp = await postSource({ req, env, daCtx });
+        assert.strictEqual(status, resp.status);
+        assert.deepStrictEqual(called, ['wknd/index.html'])
+      });
     }
-  });
-
-  it('Test failing postSource does not trigger callback', async () => {
-    const callbacks = [];
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: async () => ({ status: 500 })
-      }
-    });
-
-    const savedFetch = globalThis.fetch;
-    try {
-      const callbacks = [];
-      globalThis.fetch = async (url) => {
-        callbacks.push(url);
-      };
-
-      const headers = new Map();
-      headers.set('content-type', 'text/html');
-
-      const req = {
-        headers,
-        url: 'http://localhost:8787/source/a/b/mydoc.html'
-      };
-
-      const env = { DA_COLLAB: 'http://localhost:1234' };
+    it('does not invalidate collab on put failure', async () => {
+      const req = undefined
+      const env = {};
       const daCtx = {};
-
+      const { postSource } = await esmock(
+        '../../src/routes/source.js', {
+          '../../src/helpers/source.js': {
+            default: async () => undefined,
+          },
+          '../../src/storage/object/put.js': {
+            default: async (e, d, o) => {
+              assert.deepStrictEqual(e, env);
+              assert.deepStrictEqual(d, daCtx);
+              assert.ifError(o);
+              return { status: 500 }
+            }
+          },
+          '../../src/storage/utils/collab.js': {
+            syncCollab: async () => assert.fail('should not call syncCollab'),
+          }
+        });
       const resp = await postSource({ req, env, daCtx });
-      assert.equal(500, resp.status);
-      assert.equal(0, callbacks.length);
-    } finally {
-      globalThis.fetch = savedFetch;
-    }
+      assert.strictEqual(500, resp.status);
+    });
   });
-
-  it('Test getSource', async () => {
-    const env = {};
-    const daCtx = {};
-
-    const called = [];
-    const getResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        called.push('getObject');
-        return {status: 200};
-      }
-    };
-
-    const { getSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/get.js': {
-          default: getResp
-        }
-      }
-    );
-    const resp = await getSource({env, daCtx});
-    assert.equal(200, resp.status);
-    assert.deepStrictEqual(called, ['getObject']);
-  });
-
-  it('Test deleteSource', async () => {
-    const req = {
-      headers: new Map(),
-      url: 'http://somehost.com/somedoc.html'
-    };
-
-    const daCalled = []
-    const dacollab = { fetch: (u) => daCalled.push(u) };
-
-    const env = { dacollab };
-    const daCtx = {};
-
-    const deleteCalled = [];
-    const deleteResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        deleteCalled.push('deleteObject');
-        return {status: 204};
-      }
-    };
-
-    const { deleteSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/delete.js': {
-          default: deleteResp
+  describe('getSource', () => {
+    it('succeeds', async () => {
+      const env = {};
+      const daCtx = {};
+      const { getSource } = await esmock(
+        '../../src/routes/source.js', {
+          '../../src/storage/object/get.js': {
+            default: (e, c) => {
+              assert.deepStrictEqual(e, env);
+              assert.deepStrictEqual(c, daCtx);
+              return { status: 200 };
+            },
+          },
         },
-      }
-    );
-    const resp = await deleteSource({req, env, daCtx});
-    assert.equal(204, resp.status);
-    assert.deepStrictEqual(deleteCalled, ['deleteObject']);
-    assert.deepStrictEqual(daCalled,
-      ['https://localhost/api/v1/deleteadmin?doc=http://somehost.com/somedoc.html']);
+      );
+      const resp = await getSource({ env, daCtx });
+      assert.strictEqual(200, resp.status);
+    });
+  });
+
+  describe('deleteSource', () => {
+    it('succeeds', async () => {
+      const env = {};
+      const daCtx = {};
+      const { deleteSource } = await esmock(
+        '../../src/routes/source.js', {
+          '../../src/storage/object/delete.js': {
+            default: (e, c) => {
+              assert.deepStrictEqual(e, env);
+              assert.deepStrictEqual(c, daCtx);
+              return { status: 200 };
+            },
+          },
+        },
+      );
+      const resp = await deleteSource({ env, daCtx });
+      assert.strictEqual(200, resp.status);
+    });
   });
 });
