@@ -12,6 +12,14 @@
 import { deleteFromCollab } from '../utils/collab.js';
 import { postObjectVersionWithLabel } from '../version/put.js';
 
+async function deleteObject(env, daCtx, key) {
+  const fname = key.split('/').pop();
+  if (fname.includes('.') && !key.endsWith('.props')) {
+    await postObjectVersionWithLabel(env, daCtx, 'Deleted');
+  }
+  await env.DA_CONTENT.delete(key);
+  await deleteFromCollab(env, daCtx, key);
+}
 /**
  * Deletes an object in the storage, creating a version of it if necessary.
  *
@@ -41,7 +49,8 @@ export async function deleteObject(env, daCtx, key, isMove = false) {
  */
 export default async function deleteObjects(env, daCtx) {
   const keys = [];
-  const prefix = `${daCtx.org}/${daCtx.key}/`;
+  const fullKey = `${daCtx.org}/${daCtx.key}`;
+  const prefix = `${fullKey}/`;
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.
   keys.push(daCtx.key, `${daCtx.key}.props`);
@@ -50,7 +59,7 @@ export default async function deleteObjects(env, daCtx) {
     const r2objects = await env.DA_CONTENT.list({ prefix, limit: 100 });
     const { objects } = r2objects;
     truncated = r2objects.truncated;
-    keys.push(...objects.map(({ key }) => key.split('/').slice(1).join('/')));
+    keys.push(...objects.map(({ key }) => key));
     const promises = [];
     keys.forEach((k) => {
       promises.push(deleteObject(env, daCtx, k));

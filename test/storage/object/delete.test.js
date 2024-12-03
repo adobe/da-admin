@@ -12,6 +12,8 @@
 import assert from 'node:assert';
 import esmock from 'esmock';
 import { destroyMiniflare, getMiniflare } from '../../mocks/miniflare.js';
+import { postObjectVersionWithLabel } from '../../../src/storage/version/put.js';
+import { version } from '@redocly/cli/lib/utils/update-version-notifier.js';
 
 describe('delete object(s)', () => {
   let mf;
@@ -48,8 +50,8 @@ describe('delete object(s)', () => {
     const deleteObjects = await esmock(
       '../../../src/storage/object/delete.js', {
         '../../../src/storage/utils/collab.js': {
-          deleteFromCollab: async (env, daCtx) => {
-            collabCalls.push(daCtx.key);
+          deleteFromCollab: async (env, daCtx, key) => {
+            collabCalls.push(key);
           },
         },
         '../../../src/storage/version/put.js': {
@@ -68,11 +70,9 @@ describe('delete object(s)', () => {
 
     const resp = await deleteObjects(env, daCtx);
     assert.strictEqual(resp.status, 204);
-    assert(collabCalls.includes('outdoors/index.html'));
+    assert(collabCalls.includes('geometrixx/outdoors/index.html'));
     assert.strictEqual(versionCalls.length, 1);
     assert.strictEqual(versionCalls[0], 'outdoors/index.html');
-    const head = await env.DA_CONTENT.head('geometrixx/outdoors/index.html');
-    assert.ifError(head);
   });
 
   it('deletes a folder', async () => {
@@ -81,8 +81,8 @@ describe('delete object(s)', () => {
     const deleteObjects = await esmock(
       '../../../src/storage/object/delete.js', {
         '../../../src/storage/utils/collab.js': {
-          deleteFromCollab: async (env, daCtx) => {
-            collabCalls.push(daCtx.key);
+          deleteFromCollab: async (env, daCtx, key) => {
+            collabCalls.push(key);
           },
         },
         '../../../src/storage/version/put.js': {

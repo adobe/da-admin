@@ -10,11 +10,11 @@
  * governing permissions and limitations under the License.
  */
 
-async function invalidateCollab(env, daCtx, api) {
-  if (daCtx.initiator === 'collab' || !daCtx.key.endsWith('.html')) {
+async function invalidateCollab(env, daCtx, api, key) {
+  if (daCtx.initiator === 'collab' || !key.endsWith('.html')) {
     return;
   }
-  const invPath = `/api/v1/${api}?doc=${daCtx.origin}/${daCtx.api}/${daCtx.org}/${daCtx.key}`;
+  const invPath = `/api/v1/${api}?doc=${daCtx.origin}/${daCtx.api}/${daCtx.org}/${key}`;
   // Use dacollab service binding, hostname is not relevant
   const invURL = `https://localhost${invPath}`;
   await env.dacollab.fetch(invURL);
@@ -24,18 +24,20 @@ async function invalidateCollab(env, daCtx, api) {
  * Removes the specified URL from the Collab cache.
  * @param {Object} env the CloudFlare environment
  * @param {DaCtx} daCtx the DA Context
+ * @param {String} key the source to remove from the cache
  * @return {Promise<void>}
  */
-export async function deleteFromCollab(env, daCtx) {
-  await invalidateCollab(env, daCtx, 'deleteadmin');
+export async function deleteFromCollab(env, daCtx, key) {
+  await invalidateCollab(env, daCtx, 'deleteadmin', key);
 }
 
 /**
  * Forces a sync in DaCollab for the specified URL.
  * @param {Object} env the CloudFlare environment
  * @param {DaCtx} daCtx the DA Context
+ * @param {String} key the source to sync in the cache
  * @return {Promise<void>}
  */
-export async function syncCollab(env, daCtx) {
-  await invalidateCollab(env, daCtx, 'syncadmin');
+export async function syncCollab(env, daCtx, key) {
+  await invalidateCollab(env, daCtx, 'syncadmin', key);
 }
