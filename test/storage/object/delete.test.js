@@ -36,7 +36,7 @@ describe('Object delete', () => {
 
       const postObjVerCalled = [];
       const mockPostObjectVersion = async (l, e, c) => {
-        if (l === 'Deleted' && e === env && c === daCtx) {
+        if (l === 'Deleted' && e === env && c.key === 'foo/bar.html' && c.org === 'testorg') {
           postObjVerCalled.push('postObjectVersionWithLabel');
           return { status: 201 };
         }
@@ -184,7 +184,7 @@ describe('Object delete', () => {
 
       const postObjVerCalled = [];
       const mockPostObjectVersion = async (l, e, c) => {
-        if (l === 'Moved' && e === env && c === daCtx) {
+        if (l === 'Moved' && e === env && c.key === 'aha.png') {
           postObjVerCalled.push('postObjectVersionWithLabel');
           return { status: 201 };
         }

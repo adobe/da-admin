@@ -29,8 +29,8 @@ async function invalidateCollab(api, url, env) {
 export async function deleteObject(client, daCtx, Key, env, isMove = false) {
   const fname = Key.split('/').pop();
 
-  if (fname.includes('.') && !Key.endsWith('.props')) {
-    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, daCtx);
+  if (fname.includes('.') && !fname.startsWith('.') && !fname.endsWith('.props')) {
+    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, { org: daCtx.org, key: Key });
   }
 
   let resp;
