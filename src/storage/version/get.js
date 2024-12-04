@@ -11,6 +11,14 @@
  */
 import getObject from '../object/get.js';
 
-export async function getObjectVersion(env, { org, key }, head) {
-  return getObject(env, { org, key: `.da-versions/${key}` }, head);
+/**
+ * Gets a specified object version.
+ * @param {Object} env the CloudFlare environment
+ * @param {DaCtx} daCtx the DA Context
+ * @param {Boolean} head only retrieve the head info
+ * @return {Promise<Promise<{Object}>|*>}
+ */
+export async function getObjectVersion(env, daCtx, head) {
+  const tmpCtx = { ...daCtx, key: `.da-versions/${daCtx.key}` };
+  return getObject(env, tmpCtx, head);
 }

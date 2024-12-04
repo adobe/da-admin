@@ -71,6 +71,8 @@ describe('delete object(s)', () => {
     assert(collabCalls.includes('outdoors/index.html'));
     assert.strictEqual(versionCalls.length, 1);
     assert.strictEqual(versionCalls[0], 'outdoors/index.html');
+    const head = await env.DA_CONTENT.head('geometrixx/outdoors/index.html');
+    assert.ifError(head);
   });
 
   it('deletes a folder', async () => {

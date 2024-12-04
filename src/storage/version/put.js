@@ -61,7 +61,8 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   // While we are automatically storing the body once for the 'Collab Parse' changes, we never
   // do a HEAD, because we may need the content. Once we don't need to do this automatic store
   // any more, we can change the 'false' argument in the next line back to !body.
-  const current = await getObject(env, { org: daCtx.org, key: update.key }, false);
+  const tmpCtx = { ...daCtx, key: update.key };
+  const current = await getObject(env, tmpCtx, false);
   const id = current.metadata?.id || crypto.randomUUID();
   const version = current.metadata?.version || crypto.randomUUID();
   const users = JSON.stringify(daCtx.users);

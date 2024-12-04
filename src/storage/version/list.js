@@ -12,18 +12,24 @@
 import getObject from '../object/get.js';
 import listObjects from '../object/list.js';
 
-export async function listObjectVersions(env, { org, key }) {
-  const current = await getObject(env, { org, key }, true);
+/**
+ * Lists all versions of an object.
+ *
+ * @param {Object} env the CloudFlare environment
+ * @param {DaCtx} daCtx the DA Context
+ * @return {Promise<{body: string, status: number}|{body: string, contentType: string, status: number}|number>}
+ */
+export async function listObjectVersions(env, daCtx) {
+  const { org } = daCtx;
+  const current = await getObject(env, daCtx, true);
   if (current.status === 404 || !current.metadata.id) {
     return 404;
   }
   const objects = await listObjects(env, { org, key: `.da-versions/${current.metadata.id}` });
   if (objects) {
     const promises = await Promise.all(objects.map(async (entry) => {
-      const entryResp = await getObject(env, {
-        org,
-        key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
-      }, true);
+      const tmpCtx = { ...daCtx, key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}` };
+      const entryResp = await getObject(env, tmpCtx, true);
       const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
       const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
       const { label, path } = entryResp.metadata;

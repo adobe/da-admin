@@ -15,7 +15,7 @@ import { getUsers, isAuthorized } from './auth.js';
 /**
  * Gets Dark Alley Context
  * @param {Request} req the request object
- * @param env the Cloudflare environment context
+ * @param {Object} env the Cloudflare environment context
  * @returns {DaCtx} The Dark Alley Context.
  */
 export default async function getDaCtx(req, env) {

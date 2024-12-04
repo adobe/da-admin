@@ -23,7 +23,7 @@ export async function postSource({ req, env, daCtx }) {
   const obj = await putHelper(req, env, daCtx);
   const resp = await putObject(env, daCtx, obj);
   if (resp.status === 200 || resp.status === 201) {
-    await syncCollab(env, daCtx, daCtx.key);
+    await syncCollab(env, daCtx);
   }
   return resp;
 }

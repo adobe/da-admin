@@ -37,11 +37,10 @@ describe('Source Route', () => {
               }
             },
             '../../src/storage/utils/collab.js': {
-              syncCollab: async (e, c, k) => {
+              syncCollab: async (e, c) => {
                 assert.deepStrictEqual(e, env);
                 assert.deepStrictEqual(c, daCtx);
-                assert.deepStrictEqual(k, 'wknd/index.html');
-                called.push(k);
+                called.push(c.key);
               },
             }
           });
