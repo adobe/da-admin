@@ -23,7 +23,8 @@ import { postObjectVersionWithLabel } from '../version/put.js';
  */
 export async function deleteObject(env, daCtx, key, isMove = false) {
   const fname = key.split('/').pop();
-  const tmpCtx = { ...daCtx, key }; // For next calls, ctx needs the passed key, as it could contain a folder
+
+  const tmpCtx = { ...daCtx, key: key.replace(`${daCtx.org}/`, '') }; // For next calls, ctx needs the passed key, as it could contain a folder
   if (fname.includes('.') && !key.endsWith('.props')) {
     await postObjectVersionWithLabel(env, tmpCtx, isMove ? 'Moved' : 'Deleted');
   }
