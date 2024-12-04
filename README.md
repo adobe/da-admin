@@ -29,7 +29,10 @@ KV is used for high-performance R/W operations. This value is stored locally.
 ```bash
 npx wrangler kv:key put orgs '[{"name":"aemsites","created":"2023-10-31T17:43:13.390Z"}]' --binding=DA_AUTH --local
 ```
-#### 5. Validate
+#### 5. Start the local server
+At the root of the project folder, run `npm run dev`.
+
+#### 6. Validate
 Browse to `http://localhost:8787/list` to ensure you see the expected buckets.
 
 ### Additional details

@@ -15,9 +15,11 @@ import deleteObjects from '../storage/object/delete.js';
 import { invalidateCollab } from '../storage/utils/object.js';
 
 import putHelper from '../helpers/source.js';
+import deleteHelper from '../helpers/delete.js';
 
-export async function deleteSource({ env, daCtx }) {
-  return /* await */ deleteObjects(env, daCtx);
+export async function deleteSource({ req, env, daCtx }) {
+  const details = await deleteHelper(req);
+  return /* await */ deleteObjects(env, daCtx, details);
 }
 
 export async function postSource({ req, env, daCtx }) {

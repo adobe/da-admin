@@ -12,26 +12,19 @@
 import {
   S3Client,
   DeleteObjectCommand,
-  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-
 import getS3Config from '../utils/config.js';
 import { invalidateCollab } from '../utils/object.js';
 import { postObjectVersionWithLabel } from '../version/put.js';
-
-function buildInput(org, key) {
-  return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
-  };
-}
+import { listCommand } from '../utils/list.js';
 
 export async function deleteObject(client, daCtx, Key, env, isMove = false) {
   const fname = Key.split('/').pop();
 
-  if (fname.includes('.') && !Key.endsWith('.props')) {
-    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, daCtx);
+  if (fname.includes('.') && !fname.startsWith('.') && !fname.endsWith('.props')) {
+    const tmpCtx = { ...daCtx, key: Key }; // For next calls, ctx needs the passed
+    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, tmpCtx);
   }
 
   let resp;
@@ -52,40 +45,21 @@ export async function deleteObject(client, daCtx, Key, env, isMove = false) {
   return resp;
 }
 
-export default async function deleteObjects(env, daCtx) {
+export default async function deleteObjects(env, daCtx, details) {
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const input = buildInput(daCtx.org, daCtx.key);
 
-  let ContinuationToken;
+  try {
+    const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
+    await Promise.all(sourceKeys.map(async (key) => {
+      await deleteObject(client, daCtx, key, env);
+    }));
 
-  // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
-  // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [daCtx.key, `${daCtx.key}.props`];
-
-  do {
-    try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
-      const resp = await client.send(command);
-
-      const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
-
-      await Promise.all(
-        new Array(1).fill(null).map(async () => {
-          while (sourceKeys.length) {
-            await deleteObject(client, daCtx, sourceKeys.pop(), env);
-          }
-        }),
-      );
-
-      ContinuationToken = NextContinuationToken;
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.log(e);
-      return { body: '', status: 404 };
+    if (continuationToken) {
+      return { body: JSON.stringify({ continuationToken }), status: 206 };
     }
-  } while (ContinuationToken);
-
-  return { body: null, status: 204 };
+    return { status: 204 };
+  } catch (e) {
+    return { body: '', status: 404 };
+  }
 }

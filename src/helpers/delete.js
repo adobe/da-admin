@@ -9,25 +9,14 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import copyObject from './copy.js';
-import deleteObjects from './delete.js';
 
-const rename = async (env, daCtx, details) => {
+export default async function deleteHelper(req) {
   try {
-    await copyObject(env, daCtx, details, true);
-    await deleteObjects(env, daCtx);
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(e);
+    const formData = await req.formData();
+    if (!formData) return {};
+    const continuationToken = formData.get('continuation-token');
+    return { continuationToken };
+  } catch {
+    return {};
   }
-};
-
-export default async function renameObject(env, daCtx, details) {
-  try {
-    await rename(env, daCtx, details);
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(e);
-  }
-  return { status: 204 };
 }

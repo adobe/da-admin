@@ -11,7 +11,6 @@
  */
 import {
   S3Client,
-  ListObjectsV2Command,
   CopyObjectCommand,
 } from '@aws-sdk/client-s3';
 
@@ -19,13 +18,9 @@ import getObject from './get.js';
 import getS3Config from '../utils/config.js';
 import { invalidateCollab } from '../utils/object.js';
 import { postObjectVersionWithLabel, putObjectWithVersion } from '../version/put.js';
+import { listCommand } from '../utils/list.js';
 
-function buildInput(org, key) {
-  return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
-  };
-}
+const MAX_KEYS = 900;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
@@ -100,40 +95,43 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
 };
 
 export default async function copyObject(env, daCtx, details, isRename) {
-  if (details.source === details.destination) {
-    return { body: '', status: 409 };
-  }
+  if (details.source === details.destination) return { body: '', status: 409 };
 
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
 
-  let ContinuationToken;
+  let sourceKeys;
+  let remainingKeys = [];
+  let continuationToken;
 
-  // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
-  // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [details.source, `${details.source}.props`];
-
-  do {
-    try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
-      const resp = await client.send(command);
-
-      const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
-      ContinuationToken = NextContinuationToken;
-    } catch (e) {
-      return { body: '', status: 404 };
-    }
-  } while (ContinuationToken);
-
-  await Promise.all(
-    new Array(1).fill(null).map(async () => {
-      while (sourceKeys.length) {
-        await copyFile(config, env, daCtx, sourceKeys.pop(), details, isRename);
+  try {
+    if (details.continuationToken) {
+      continuationToken = details.continuationToken;
+      remainingKeys = await env.DA_JOBS.get(continuationToken, { type: 'json' });
+      sourceKeys = remainingKeys.splice(0, MAX_KEYS);
+    } else {
+      let resp = await listCommand(daCtx, details, client);
+      sourceKeys = resp.sourceKeys;
+      if (resp.continuationToken) {
+        continuationToken = `copy-${details.source}-${details.destination}-${crypto.randomUUID()}`;
+        while (resp.continuationToken) {
+          resp = await listCommand(daCtx, { continuationToken: resp.continuationToken }, client);
+          remainingKeys.push(...resp.sourceKeys);
+        }
       }
-    }),
-  );
+    }
+    await Promise.all(sourceKeys.map(async (key) => {
+      await copyFile(config, env, daCtx, key, details, isRename);
+    }));
 
-  return { status: 204 };
+    if (remainingKeys.length) {
+      await env.DA_JOBS.put(continuationToken, JSON.stringify(remainingKeys));
+      return { body: JSON.stringify({ continuationToken }), status: 206 };
+    } else if (continuationToken) {
+      await env.DA_JOBS.delete(continuationToken);
+    }
+    return { status: 204 };
+  } catch (e) {
+    return { body: '', status: 404 };
+  }
 }

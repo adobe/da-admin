@@ -9,10 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import renameObject from '../storage/object/rename.js';
-import renameHelper from '../helpers/rename.js';
 
-export default async function renameHandler({ req, env, daCtx }) {
-  const details = await renameHelper(req, daCtx);
-  return renameObject(env, daCtx, details);
+export default function unknownHandler() {
+  const body = JSON.stringify({ message: 'Unknown method. Please see: https://docs.da.live for more information.' });
+  return { body, status: 501 };
 }
