@@ -17,7 +17,7 @@ import {
 import getObject from './get.js';
 import getS3Config from '../utils/config.js';
 import { invalidateCollab } from '../utils/object.js';
-import { postObjectVersionWithLabel, putObjectWithVersion } from '../version/put.js';
+import { putObjectWithVersion } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
 
 const MAX_KEYS = 900;
