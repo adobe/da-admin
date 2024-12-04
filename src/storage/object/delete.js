@@ -27,12 +27,13 @@ async function invalidateCollab(api, url, env) {
 }
 
 export async function deleteObject(client, daCtx, Key, env, isMove = false) {
-  const fname = Key.split('/').pop();
+  // const fname = Key.split('/').pop();
 
-  if (fname.includes('.') && !fname.startsWith('.') && !fname.endsWith('.props')) {
-    const tmpCtx = { ...daCtx, key: Key }; // For next calls, ctx needs the passed
-    await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, tmpCtx);
-  }
+  // if (fname.includes('.') && !fname.startsWith('.') && !fname.endsWith('.props')) {
+  //   const tmpCtx = { ...daCtx, key: Key }; // For next calls, ctx needs the passed
+  //   note the Ext also needs to be set ^^^
+  //   await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, tmpCtx);
+  // }
 
   let resp;
   try {
