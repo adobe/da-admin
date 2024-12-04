@@ -77,7 +77,10 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
           type: original.contentType,
         });
       }
-      await postObjectVersionWithLabel('Moved', env, daCtx);
+      // We're doing a rename
+
+      // TODO when storing the version make sure to do it from the file that was where there before
+      // await postObjectVersionWithLabel('Moved', env, daCtx);
 
       const client = new S3Client(config);
       // This is a move so copy to the new location
