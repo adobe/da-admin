@@ -26,7 +26,8 @@ describe('Object delete', () => {
 
     const postObjVerCalled = [];
     const mockPostObjectVersion = async (l, e, c) => {
-      if (l === 'Deleted' && e === env && c.key === 'foo/bar.html' && c.org ==='testorg') {
+      if (l === 'Deleted' && e === env
+        && c.key === 'foo/bar.html' && c.org ==='testorg' && c.origin === 'https://admin.da.live') {
         postObjVerCalled.push('postObjectVersionWithLabel');
         return {status: 201};
       }
