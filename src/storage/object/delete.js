@@ -12,13 +12,23 @@
 import { deleteFromCollab } from '../utils/collab.js';
 import { postObjectVersionWithLabel } from '../version/put.js';
 
+/**
+ * Deletes an object in the storage, creating a version of it if necessary.
+ *
+ * @param {Object} env the CloudFlare environment
+ * @param {DaCtx} daCtx the DA Context
+ * @param {String} key the key of the object to delete
+ * @param {Boolean} isMove if this was initiated by a move operation
+ * @return {Promise<void>}
+ */
 export async function deleteObject(env, daCtx, key, isMove = false) {
   const fname = key.split('/').pop();
+  const tmpCtx = { ...daCtx, key }; // For next calls, ctx needs the passed key, as it could contain a folder
   if (fname.includes('.') && !key.endsWith('.props')) {
-    await postObjectVersionWithLabel(env, daCtx, isMove ? 'Moved' : 'Deleted');
+    await postObjectVersionWithLabel(env, tmpCtx, isMove ? 'Moved' : 'Deleted');
   }
   await env.DA_CONTENT.delete(key);
-  await deleteFromCollab(env, daCtx, key);
+  await deleteFromCollab(env, tmpCtx);
 }
 /**
  * Deletes an object in the storage, creating a version of it if necessary.
