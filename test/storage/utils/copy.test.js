@@ -34,7 +34,7 @@ describe('Copy Utils', () => {
       assert.strictEqual(results.success, false);
     });
 
-    it('Copies a file', async () => {
+    it('Copies a file (New Metadata)', async () => {
       const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], key: 'index.html' };
       const results = await copyFile(env, daCtx, 'index.html', 'newdir/index.html');
       assert(results.success);
@@ -50,13 +50,13 @@ describe('Copy Utils', () => {
       assert.strictEqual(customMetadata.path, copy.key);
     });
 
-    it('Retains the metadata for the file', async () => {
+    it('Moves a file (Retains Metadata)', async () => {
       const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], key: 'index.html' };
       const original = await env.DA_CONTENT.head('wknd/index.html');
       const results = await copyFile(env, daCtx, 'index.html', 'newdir/index.html', true);
       assert(results.success);
-      const kept = await env.DA_CONTENT.head('wknd/index.html');
-      assert(kept);
+      const dropped = await env.DA_CONTENT.head('wknd/index.html');
+      assert.ifError(dropped);
       const copy = await env.DA_CONTENT.head('wknd/newdir/index.html');
       assert(copy);
       const { customMetadata } = copy;
@@ -69,7 +69,6 @@ describe('Copy Utils', () => {
   });
 
   describe('copyFiles', () => {
-
     it('handles an empty list of files', async () => {
       const results = await copyFiles(env, {}, []);
       assert.strictEqual(results.length, 0)
@@ -113,6 +112,7 @@ describe('Copy Utils', () => {
     it('Moves a list of files', async () => {
       const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], key: 'index.html' };
       const pageList = [];
+      const customMetadatas = [];
       for (let i = 0; i < 10; i += 1) {
         const customMetadata = {
           id: `${i}`,
@@ -126,6 +126,7 @@ describe('Copy Utils', () => {
           httpMetadata: { contentType: 'text/html' }
         });
         pageList.push({ src, dest: `newdir/index${i}.html` });
+        customMetadatas.push(customMetadata);
       }
 
       const results = await copyFiles(env, daCtx, pageList, true);
@@ -135,13 +136,13 @@ describe('Copy Utils', () => {
       for (let i = 0; i < pageList.length; i += 1) {
         const { src, dest } = pageList[i];
         const original = await env.DA_CONTENT.head(`${daCtx.org}/${src}`);
-        assert(original);
+        assert.ifError(original);
         const copy = await env.DA_CONTENT.head(`${daCtx.org}/${dest}`);
         assert(copy);
-        assert.strictEqual(copy.customMetadata.id, original.customMetadata.id);
-        assert.strictEqual(copy.customMetadata.version, original.customMetadata.version);
-        assert.strictEqual(copy.customMetadata.timestamp, original.customMetadata.timestamp);
-        assert.strictEqual(copy.customMetadata.users, original.customMetadata.users);
+        assert.strictEqual(copy.customMetadata.id, customMetadatas[i].id);
+        assert.strictEqual(copy.customMetadata.version, customMetadatas[i].version);
+        assert.strictEqual(copy.customMetadata.timestamp, customMetadatas[i].timestamp);
+        assert.strictEqual(copy.customMetadata.users, customMetadatas[i].users);
         assert.strictEqual(copy.customMetadata.path, copy.key);
         assert.strictEqual(copy.httpMetadata.contentType, 'text/html');
       }

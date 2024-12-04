@@ -25,21 +25,38 @@ describe('Copy helper', () => {
 
   it('sanitizes a folder path', async () => {
     const req = {
-      formData: async () => ({
-        get: () => '/foo/bar/',
-      }),
+      formData: async () => {
+        const fd = new FormData();
+        fd.append('destination', '/foo/bar/');
+        return fd;
+      },
     };
     const details = await copyHelper(req, { key: 'baz' });
-    assert.deepEqual(details, { source: 'baz', destination: 'bar' });
+    assert.deepEqual(details, { source: 'baz', destination: 'bar', continuationToken: undefined });
   });
 
   it('sanitizes a file path', async () => {
     const req = {
-      formData: async () => ({
-        get: () => '/FOO/BAR',
-      }),
+      formData: async () => {
+        const fd = new FormData();
+        fd.append('destination', '/FOO/BAR');
+        return fd;
+      },
     };
     const details = await copyHelper(req, { key: 'baz' });
-    assert.deepEqual(details, { source: 'baz', destination: 'bar' });
+    assert.deepEqual(details, { source: 'baz', destination: 'bar', continuationToken: undefined });
+  });
+
+  it('populates continuation token', async () => {
+    const req = {
+      formData: async () => {
+        const fd = new FormData();
+        fd.append('destination', '/foo/bar');
+        fd.append('continuation-token', 'token');
+        return fd;
+      },
+    };
+    const details = await copyHelper(req, { key: 'baz' });
+    assert.deepEqual(details, { source: 'baz', destination: 'bar', continuationToken: 'token'  });
   });
 });

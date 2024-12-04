@@ -19,8 +19,8 @@ const limit = 100;
  * @param {Object} env the CloudFlare environment
  * @param {Object} daCtx the DA Context
  * @param {Object} details the source & details of the copy operation
- * @param {string} details.source the source directory or file
- * @param {string} details.destination the destination directory or file
+ * @param {String} details.source the source directory or file
+ * @param {String} details.destination the destination directory or file
  * @return {Promise<{ status }>}
  */
 export default async function moveObject(env, daCtx, details) {

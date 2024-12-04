@@ -39,14 +39,13 @@ describe('Object copy', () => {
   });
 
   describe('copy', () => {
-
     it('Copies a file', async () => {
       let copyCalled = false;
       const copyObject = await esmock('../../../src/storage/object/copy.js', {
         '../../../src/storage/utils/copy.js': {
-          copyFile: async (env, ctx, source, destination, retainMetadata) => {
+          copyFile: async (env, ctx, source, destination, isMove) => {
             copyCalled = true;
-            assert.strictEqual(retainMetadata, false);
+            assert.strictEqual(isMove, false);
             assert.strictEqual(source, 'index.html');
             assert.strictEqual(destination, 'newdir/index.html');
             return {
@@ -65,7 +64,7 @@ describe('Object copy', () => {
       assert(copyCalled);
     });
 
-    it('Copies a folder', async () => {
+    it('Copies a (small) folder', async () => {
       let list = [];
       const copyObject = await esmock('../../../src/storage/object/copy.js', {
         '../../../src/storage/utils/copy.js': {
@@ -89,7 +88,7 @@ describe('Object copy', () => {
       assert.strictEqual(list.length, 2);
     });
 
-    it(`copy handles truncated folder list`, async function() {
+    it(`copies a folder (truncated), no continuation token`, async function() {
       this.timeout(60000);
       let list = [];
       const copyObject = await esmock('../../../src/storage/object/copy.js', {
@@ -104,17 +103,87 @@ describe('Object copy', () => {
           }
         },
       });
-      const promises = [];
-      for (let i = 0; i < 101; i++) {
-        promises.push(env.DA_CONTENT.put(`wknd/pages/index${i}.html`, 'content'));
+      for (let i = 0; i < 250; i++) {
+        await env.DA_CONTENT.put(`wknd/pages/index${i}.html`, 'content');
       }
-      await Promise.all(promises);
       const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }] };
       await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
       const details = { source: 'pages', destination: 'pages-newdir' };
       const resp = await copyObject(env, daCtx, details);
+      assert.strictEqual(resp.status, 206);
+      assert.strictEqual(list.length, 101);
+      const body = JSON.parse(resp.body);
+      assert(body.continuationToken);
+      const jobData = await env.DA_JOBS.get(body.continuationToken);
+      const remaining = JSON.parse(jobData);
+      assert.strictEqual(remaining.length, 150);
+    });
+
+    it(`copies a folder (truncated), continuation token`, async function() {
+      const continuationToken = 'token';
+      this.timeout(60000);
+      let list = [];
+      const copyObject = await esmock('../../../src/storage/object/copy.js', {
+        '../../../src/storage/utils/copy.js': {
+          copyFiles: async (env, ctx, files) => {
+            list.push(...files);
+            return files.map((item) => ({
+              success: true,
+              source: `wknd/${item.src}`,
+              destination: `wknd/${item.dest}`
+            }));
+          }
+        },
+      });
+      const copyList = [];
+      for (let i = 0; i < 250; i++) {
+        const src = `wknd/pages/index${i}.html`
+        copyList.push(src);
+        await env.DA_CONTENT.put(src, 'content');
+      }
+      await env.DA_JOBS.put(continuationToken, JSON.stringify(copyList));
+      const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }] };
+      await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
+      const details = { source: 'pages', destination: 'pages-newdir', continuationToken };
+      const resp = await copyObject(env, daCtx, details);
+      assert.strictEqual(resp.status, 206);
+      assert.strictEqual(list.length, 100);
+      const jobs = await env.DA_JOBS.get(continuationToken);
+      const jobData = JSON.parse(jobs);
+      assert.strictEqual(jobData.length, 150);
+    });
+
+    it(`copies a folder (not truncated), continuation token`, async function() {
+      const continuationToken = 'token';
+      this.timeout(60000);
+      let list = [];
+      const copyObject = await esmock('../../../src/storage/object/copy.js', {
+        '../../../src/storage/utils/copy.js': {
+          copyFiles: async (env, ctx, files) => {
+            list.push(...files);
+            return files.map((item) => ({
+              success: true,
+              source: `wknd/${item.src}`,
+              destination: `wknd/${item.dest}`
+            }));
+          }
+        },
+      });
+      const copyList = [];
+      for (let i = 0; i < 50; i++) {
+        const src = `wknd/pages/index${i}.html`
+        copyList.push(src);
+        await env.DA_CONTENT.put(src, 'content');
+      }
+      await env.DA_JOBS.put(continuationToken, JSON.stringify(copyList));
+      const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }] };
+      await env.DA_CONTENT.put('wknd.props', '{"key":"value"}');
+      const details = { source: 'pages', destination: 'pages-newdir', continuationToken };
+      const resp = await copyObject(env, daCtx, details);
       assert.strictEqual(resp.status, 204);
-      assert.strictEqual(list.length, 102);
+      assert.strictEqual(list.length, 50);
+      const jobs = await env.DA_JOBS.get(continuationToken);
+      assert.ifError(jobs);
     });
   });
 
@@ -124,9 +193,9 @@ describe('Object copy', () => {
         let copyCalled = false;
         const copyObject = await esmock('../../../src/storage/object/copy.js', {
           '../../../src/storage/utils/copy.js': {
-            copyFile: async (env, ctx, source, destination, retainMetadata) => {
+            copyFile: async (env, ctx, source, destination, isMove) => {
               copyCalled = true;
-              assert.strictEqual(retainMetadata, true);
+              assert(isMove);
               assert.strictEqual(source, 'index.html');
               assert.strictEqual(destination, 'newdir/index.html');
               return {
@@ -143,8 +212,6 @@ describe('Object copy', () => {
         const resp = await copyObject(env, daCtx, details, true);
         assert.strictEqual(resp.status, 204);
         assert(copyCalled);
-        const removed = await env.DA_CONTENT.head('wknd/index.html');
-        assert.ifError(removed);
       });
 
       it('retains source on copy failure', async () => {
@@ -169,17 +236,13 @@ describe('Object copy', () => {
     });
 
     describe('folder', () => {
-      it('removes source on copy success', async () => {
+      it('moves files', async () => {
         const list = [];
         const copyObject = await esmock('../../../src/storage/object/copy.js', {
           '../../../src/storage/utils/copy.js': {
-            copyFiles: async (env, ctx, files) => {
+            copyFiles: async (env, ctx, files, isRename) => {
+              assert(isRename)
               list.push(...files);
-              return files.map((item, idx) => ({
-                success: true,
-                source: `wknd/${item.src}`,
-                destination: `wknd/${item.dest}`
-              }));
             }
           },
         });
@@ -190,69 +253,6 @@ describe('Object copy', () => {
         const resp = await copyObject(env, daCtx, details, true);
         assert.strictEqual(resp.status, 204);
         assert.strictEqual(list.length, 2);
-        let head = await env.DA_CONTENT.head('wknd/originaldir.props');
-        assert.ifError(head);
-        head = await env.DA_CONTENT.head('wknd/originaldir/index.html');
-        assert.ifError(head);
-      });
-
-      it('retains source on copy failure', async () => {
-        const list = [];
-        const copyObject = await esmock('../../../src/storage/object/copy.js', {
-          '../../../src/storage/utils/copy.js': {
-            copyFiles: async (env, ctx, files) => {
-              list.push(...files);
-              return files.map((item, idx) => ({
-                success: false,
-                source: `wknd/${item.src}`,
-                destination: `wknd/${item.dest}`
-              }));
-            }
-          },
-        });
-        const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], isFile: false };
-        await env.DA_CONTENT.put('wknd/originaldir.props', '{"key":"value"}');
-        await env.DA_CONTENT.put('wknd/originaldir/index.html', 'Hello World');
-        const details = { source: 'originaldir', destination: 'newdir' };
-        const resp = await copyObject(env, daCtx, details, true);
-        assert.strictEqual(resp.status, 204);
-        assert.strictEqual(list.length, 2);
-        let head = await env.DA_CONTENT.head('wknd/originaldir.props');
-        assert(head);
-        head = await env.DA_CONTENT.head('wknd/originaldir/index.html');
-        assert(head);
-      });
-
-      it('handles mix of success & failures', async function() {
-        this.timeout(60000);
-        const list = [];
-        const copyObject = await esmock('../../../src/storage/object/copy.js', {
-          '../../../src/storage/utils/copy.js': {
-            copyFiles: async (env, ctx, files) => {
-              list.push(...files);
-              return files.map((item, idx) => ({
-                success: (idx % 2 === 0),
-                source: `wknd/${item.src}`,
-                destination: `wknd/${item.dest}`
-              }));
-            }
-          },
-        });
-        const promises = [];
-        for (let i = 0; i < 101; i++) {
-          promises.push(env.DA_CONTENT.put(`wknd/originaldir/index${i}.html`, 'content'));
-        }
-        await Promise.all(promises);
-
-        const daCtx = { org: 'wknd', users: [{ email: "user@wknd.site" }], isFile: false };
-        await env.DA_CONTENT.put('wknd/originaldir.props', '{"key":"value"}');
-        await env.DA_CONTENT.put('wknd/originaldir/index.html', 'Hello World');
-        const details = { source: 'originaldir', destination: 'newdir' };
-        const resp = await copyObject(env, daCtx, details, true);
-        assert.strictEqual(resp.status, 204);
-        assert.strictEqual(list.length, 103);
-        const r2o = await env.DA_CONTENT.list({ prefix: 'wknd/originaldir/' });
-        assert.strictEqual(r2o.objects.length, 51); // Even indices are successful
       });
 
       it(`handles truncated folder list`, async function() {
@@ -260,13 +260,9 @@ describe('Object copy', () => {
         let list = [];
         const copyObject = await esmock('../../../src/storage/object/copy.js', {
           '../../../src/storage/utils/copy.js': {
-            copyFiles: async (env, ctx, files) => {
+            copyFiles: async (env, ctx, files, isRename) => {
+              assert(isRename)
               list.push(...files);
-              return files.map((item, idx) => ({
-                success: true,
-                source: `wknd/${item.src}`,
-                destination: `wknd/${item.dest}`
-              }));
             }
           },
         });
@@ -281,11 +277,8 @@ describe('Object copy', () => {
         await env.DA_CONTENT.put('wknd/pages/index.html', 'HelloWorld');
         const details = { source: 'pages', destination: 'pages-newdir' };
         const resp = await copyObject(env, daCtx, details, true);
-        assert.strictEqual(resp.status, 204);
-        assert.strictEqual(list.length, 103);
-        const r2o = await env.DA_CONTENT.list({ prefix: 'wknd/originaldir/' });
-        assert.strictEqual(r2o.truncated, false);
-        assert.strictEqual(r2o.objects.length, 0);
+        assert.strictEqual(resp.status, 206);
+        assert.strictEqual(list.length, 101);
       });
     });
   });

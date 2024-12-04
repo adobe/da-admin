@@ -49,7 +49,7 @@ export async function getMiniflare() {
     serviceBindings: {
       dacollab(request) { /* no op */ },
     },
-    kvNamespaces: { DA_AUTH: 'DA_AUTH', DA_CONFIG: 'DA_CONFIG' },
+    kvNamespaces: { DA_AUTH: 'DA_AUTH', DA_CONFIG: 'DA_CONFIG', DA_JOBS: 'DA_JOBS' },
     r2Buckets: { DA_CONTENT: 'DA_CONTENT' },
     bindings: { DA_BUCKET_NAME: 'da-content' },
   });

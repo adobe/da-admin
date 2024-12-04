@@ -12,6 +12,8 @@
 import { deleteFromCollab } from '../utils/collab.js';
 import { postObjectVersionWithLabel } from '../version/put.js';
 
+const MAX_KEYS = 100;
+
 /**
  * Deletes an object in the storage, creating a version of it if necessary.
  *
@@ -56,26 +58,34 @@ export async function deleteObject(env, daCtx, key, isMove = false) {
  *
  * @param {Object} env the CloudFlare environment
  * @param {DaCtx} daCtx the DA Context
- * @return {Promise<{body: null, status: number}>}
+ * @param {Object} details the details about the delete operation
+ * @return {Promise<{body: {}, status: number}>}
  */
-export default async function deleteObjects(env, daCtx) {
+export default async function deleteObjects(env, daCtx, details) {
+  if (daCtx.isFile) {
+    await deleteObject(env, daCtx, daCtx.key);
+    return { body: null, status: 204 };
+  }
+
   const keys = [];
+  if (!daCtx.isFile && !details.continuationToken) {
+    keys.push(`${daCtx.key}.props`);
+  }
   const prefix = `${daCtx.org}/${daCtx.key}/`;
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.
-  keys.push(daCtx.key, `${daCtx.key}.props`);
-  let truncated = false;
-  do {
-    const r2objects = await env.DA_CONTENT.list({ prefix, limit: 100 });
-    const { objects } = r2objects;
-    truncated = r2objects.truncated;
-    keys.push(...objects.map(({ key }) => key.split('/').slice(1).join('/')));
-    const promises = [];
-    keys.forEach((k) => {
-      promises.push(deleteObject(env, daCtx, k));
-    });
-    await Promise.all(promises);
-    keys.length = 0;
-  } while (truncated);
-  return { body: null, status: 204 };
+  const r2objects = await env.DA_CONTENT.list({ prefix, limit: MAX_KEYS });
+  const { objects, cursor } = r2objects;
+  keys.push(...objects.map(({ key }) => key.split('/').slice(1).join('/')));
+  const promises = [];
+  keys.forEach((k) => {
+    promises.push(deleteObject(env, daCtx, k));
+  });
+  await Promise.all(promises);
+
+  if (cursor) {
+    return { body: JSON.stringify({ continuationToken: cursor }), status: 206 };
+  } else {
+    return { body: null, status: 204 };
+  }
 }
