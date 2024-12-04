@@ -23,6 +23,7 @@ describe('collab invalidation', () => {
   describe('no op cases', () => {
     it('does not invalidate collab if initiator is collab', async () => {
       const daCtx = {
+        key: 'somedoc.html',
         initiator: 'collab',
         ...DA_CTX,
       };
@@ -34,9 +35,13 @@ describe('collab invalidation', () => {
           }
         }
       };
-      await deleteFromCollab(env, daCtx, 'somedoc.html');
+      await deleteFromCollab(env, daCtx);
     });
     it('collab if file is not html', async () => {
+      const daCtx = {
+        key: 'somedoc.props',
+        ...DA_CTX,
+      };
       const env = {
         dacollab: {
           fetch: async () => {
@@ -44,12 +49,16 @@ describe('collab invalidation', () => {
           }
         }
       };
-      await deleteFromCollab(env, DA_CTX, 'somedoc.props');
+      await deleteFromCollab(env, daCtx);
     });
   });
 
   describe('delete action', () => {
     it('deletes from collab', async () => {
+      const daCtx = {
+        key: 'somedoc.html',
+        ...DA_CTX,
+      };
       const env = {
         dacollab: {
           fetch: async (url) => {
@@ -57,12 +66,16 @@ describe('collab invalidation', () => {
           }
         }
       };
-      await deleteFromCollab(env, DA_CTX, 'somedoc.html');
+      await deleteFromCollab(env, daCtx);
     });
   });
 
   describe('sync action', () => {
     it('syncs collab', async () => {
+      const daCtx = {
+        key: 'somedoc.html',
+        ...DA_CTX,
+      };
       const env = {
         dacollab: {
           fetch: async (url) => {
@@ -70,7 +83,7 @@ describe('collab invalidation', () => {
           }
         }
       };
-      await syncCollab(env, DA_CTX, 'somedoc.html');
+      await syncCollab(env, daCtx);
     });
   });
 });
