@@ -46,7 +46,7 @@ export default async function getDaCtx(req, env) {
     org,
     users,
     fullKey,
-    initiator: req.headers.get('x-da-initiator'),
+    initiator: req.headers?.get('x-da-initiator'),
   };
 
   // Get org properties
