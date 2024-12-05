@@ -23,7 +23,7 @@ async function isOrgAuthed(env, daCtx, org) {
 
 /**
  * @typedef {Object} Org
- * @property {string} name the org name
+ * @property {String} name the org name
  */
 
 /**

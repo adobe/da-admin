@@ -13,10 +13,12 @@ import getObject from '../storage/object/get.js';
 import putObject from '../storage/object/put.js';
 import deleteObjects from '../storage/object/delete.js';
 import putHelper from '../helpers/source.js';
+import deleteHelper from '../helpers/delete.js';
 import { syncCollab } from '../storage/utils/collab.js';
 
-export async function deleteSource({ env, daCtx }) {
-  return deleteObjects(env, daCtx);
+export async function deleteSource({ req, env, daCtx }) {
+  const details = await deleteHelper(req);
+  return deleteObjects(env, daCtx, details);
 }
 
 export async function postSource({ req, env, daCtx }) {

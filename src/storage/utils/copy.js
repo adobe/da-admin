@@ -24,10 +24,10 @@
  * @param {DaCtx} daCtx the DA Context
  * @param {String} sourceKey the key for the source file (excluding Org)
  * @param {String} destinationKey the key for the destination file (excluding Org)
- * @param {Boolean=false} retainMetadata whether to retain the metadata from the source
+ * @param {Boolean=false} isMove whether to retain the metadata from the source
  * @return {Promise<CopyResult>} the status of the copy operation
  */
-export const copyFile = async (env, daCtx, sourceKey, destinationKey, retainMetadata = false) => {
+export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove = false) => {
   const source = `${daCtx.org}/${sourceKey}`;
   const destination = `${daCtx.org}/${destinationKey}`;
   try {
@@ -49,9 +49,13 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, retainMeta
       users: JSON.stringify(daCtx.users),
       path: destination,
     };
-    if (retainMetadata) Object.assign(customMetadata, obj.customMetadata, { path: destination });
-
+    // Move operation so maintain the original the metadata
+    if (isMove) Object.assign(customMetadata, obj.customMetadata, { path: destination });
     await env.DA_CONTENT.put(destination, body, { httpMetadata, customMetadata });
+
+    // Delete the original on move.
+    if (isMove) await env.DA_CONTENT.delete(source);
+
     return { success: true, source, destination };
     /* c8 ignore next 5 */
   } catch (e) {
@@ -75,15 +79,15 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, retainMeta
  * @param {Object} env the CloudFlare environment
  * @param {DaCtx} daCtx the DA Context
  * @param {CopyDetails[]} detailsList the key for the source file
- * @param {Boolean=false} retainMetadata whether to retain the metadata from each source
+ * @param {Boolean=false} isMove whether to retain the metadata from each source
  * @return {Promise<CopyResult[]>} the status of the copy operation
  */
-export const copyFiles = async (env, daCtx, detailsList, retainMetadata = false) => {
+export const copyFiles = async (env, daCtx, detailsList, isMove = false) => {
   const promises = [];
   const copy = [...detailsList];
   while (copy.length > 0) {
     const { src, dest } = copy.shift();
-    promises.push(copyFile(env, daCtx, src, dest, retainMetadata));
+    promises.push(copyFile(env, daCtx, src, dest, isMove));
   }
   return Promise.all(promises);
 };
