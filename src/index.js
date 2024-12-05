@@ -16,7 +16,7 @@ import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
-import unkownHandler from './handlers/unkown.js';
+import unknownHandler from './handlers/unknown.js';
 
 export default {
   async fetch(req, env) {
@@ -45,7 +45,7 @@ export default {
         respObj = await deleteHandler({ req, env, daCtx });
         break;
       default:
-        respObj = unkownHandler();
+        respObj = unknownHandler();
     }
 
     return daResp(respObj);
