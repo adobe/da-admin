@@ -86,7 +86,6 @@ export default async function copyObject(env, daCtx, details, isRename = false) 
     }
     return { status: 204 };
   } catch (e) {
-    console.log(e);
     return { body: '', status: 404 };
   }
 }

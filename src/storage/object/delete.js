@@ -27,31 +27,13 @@ export async function deleteObject(env, daCtx, key, isMove = false) {
   const fname = key.split('/').pop();
 
   const tmpCtx = { ...daCtx, key }; // For next calls, ctx needs the passed key, as it could contain a folder
-  if (daCtx.isFile && fname.includes('.') && !key.endsWith('.props')) {
-    await postObjectVersionWithLabel(env, tmpCtx, isMove ? 'Moved' : 'Deleted');
-  }
-  await env.DA_CONTENT.delete(`${daCtx.org}/${key}`);
-  await deleteFromCollab(env, tmpCtx);
-}
-/**
- * Deletes an object in the storage, creating a version of it if necessary.
- *
- * @param {Object} env the CloudFlare environment
- * @param {DaCtx} daCtx the DA Context
- * @param {String} key the key of the object to delete (excluding Org)
- * @param {Boolean} isMove if this was initiated by a move operation
- * @return {Promise<void>}
- */
-export async function deleteObject(env, daCtx, key, isMove = false) {
-  const fname = key.split('/').pop();
-
-  const tmpCtx = { ...daCtx, key }; // For next calls, ctx needs the passed key, as it could contain a folder
   if (fname.indexOf('.') > 0 && !key.endsWith('.props')) {
     await postObjectVersionWithLabel(env, tmpCtx, isMove ? 'Moved' : 'Deleted');
   }
   await env.DA_CONTENT.delete(`${daCtx.org}/${key}`);
   await deleteFromCollab(env, tmpCtx);
 }
+
 /**
  * Deletes one or more objects in the storage. Object is specified by the key in the daCtx or a list passed in.
  * Note: folders can not be specified in the `keys` list.
