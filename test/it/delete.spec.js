@@ -32,11 +32,22 @@ describe('DELETE HTTP Requests',  () => {
     });
 
     it('handles existing file', async () => {
+      const before = await env.DA_CONTENT.get('wknd/index.html');
+      const id = before.customMetadata.id;
+      const input = {
+        prefix: `wknd/.da-versions/${id}/`,
+        delimiter: '/',
+      }
+      let list = await env.DA_CONTENT.list(input);
+      assert.strictEqual(list.objects.length, 0);
+
       const req = new Request('https://admin.da.live/source/wknd/index.html', { method: 'DELETE' });
       const resp = await worker.fetch(req, env);
       assert.strictEqual(resp.status, 204);
-      const obj = await env.DA_CONTENT.get('wknd/index.html');
-      assert.ifError(obj);
+      const after = await env.DA_CONTENT.get('wknd/index.html');
+      assert.ifError(after);
+      list = await env.DA_CONTENT.list(input);
+      assert.strictEqual(list.objects.length, 1);
     });
   });
 })

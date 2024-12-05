@@ -15,11 +15,12 @@ import { getUsers, isAuthorized } from './auth.js';
 /**
  * Gets Dark Alley Context
  * @param {Request} req the request object
- * @param env the Cloudflare environment context
+ * @param {Object} env the Cloudflare environment context
  * @returns {DaCtx} The Dark Alley Context.
  */
 export default async function getDaCtx(req, env) {
-  let { pathname } = new URL(req.url);
+  const url = new URL(req.url);
+  let { pathname } = url;
   // Remove proxied api route
   if (pathname.startsWith('/api')) pathname = pathname.replace('/api', '');
 
@@ -40,10 +41,12 @@ export default async function getDaCtx(req, env) {
   // Set base details
   const daCtx = {
     path: pathname,
+    origin: url.origin,
     api,
     org,
     users,
     fullKey,
+    initiator: req.headers.get('x-da-initiator'),
   };
 
   // Get org properties

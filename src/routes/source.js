@@ -12,38 +12,18 @@
 import getObject from '../storage/object/get.js';
 import putObject from '../storage/object/put.js';
 import deleteObjects from '../storage/object/delete.js';
-
 import putHelper from '../helpers/source.js';
+import { syncCollab } from '../storage/utils/collab.js';
 
-async function invalidateCollab(api, url, env) {
-  const invPath = `/api/v1/${api}?doc=${url}`;
-
-  // Use dacollab service binding, hostname is not relevant
-  const invURL = `https://localhost${invPath}`;
-  await env.dacollab.fetch(invURL);
-}
-
-export async function deleteSource({ req, env, daCtx }) {
-  const resp = await deleteObjects(env, daCtx);
-
-  if (resp.status === 204) {
-    const initiator = req.headers.get('x-da-initiator');
-    if (initiator !== 'collab') {
-      await invalidateCollab('deleteadmin', req.url, env);
-    }
-  }
-  return resp;
+export async function deleteSource({ env, daCtx }) {
+  return deleteObjects(env, daCtx);
 }
 
 export async function postSource({ req, env, daCtx }) {
   const obj = await putHelper(req, env, daCtx);
   const resp = await putObject(env, daCtx, obj);
-
-  if (resp.status === 201 || resp.status === 200) {
-    const initiator = req.headers.get('x-da-initiator');
-    if (initiator !== 'collab') {
-      await invalidateCollab('syncadmin', req.url, env);
-    }
+  if (resp.status === 200 || resp.status === 201) {
+    await syncCollab(env, daCtx);
   }
   return resp;
 }

@@ -35,6 +35,7 @@ const config = {
  * @return {Miniflare}
  */
 export async function getMiniflare() {
+  const collabCalls = [];
   const mf = new Miniflare({
     modules: true,
     // Need a script to initialize Miniflare
@@ -46,11 +47,7 @@ export async function getMiniflare() {
         }
       `,
     serviceBindings: {
-      dacollab() {
-        return {
-          fetch: () => { /* no-op fetch */ },
-        };
-      },
+      dacollab(request) { /* no op */ },
     },
     kvNamespaces: { DA_AUTH: 'DA_AUTH', DA_CONFIG: 'DA_CONFIG' },
     r2Buckets: { DA_CONTENT: 'DA_CONTENT' },
