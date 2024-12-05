@@ -25,7 +25,7 @@ export async function deleteObject(env, daCtx, key, isMove = false) {
   const fname = key.split('/').pop();
 
   const tmpCtx = { ...daCtx, key }; // For next calls, ctx needs the passed key, as it could contain a folder
-  if (fname.includes('.') && !key.endsWith('.props')) {
+  if (daCtx.isFile && fname.includes('.') && !key.endsWith('.props')) {
     await postObjectVersionWithLabel(env, tmpCtx, isMove ? 'Moved' : 'Deleted');
   }
   await env.DA_CONTENT.delete(`${daCtx.org}/${key}`);
