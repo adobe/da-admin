@@ -82,3 +82,49 @@ export async function isAuthorized(env, org, user) {
   if (!admins) return true;
   return admins.some((admin) => admin.toLowerCase() === user.email.toLowerCase());
 }
+
+const pathLookupByOrg = new Map();
+
+function hasUserPermission(pathLookup, user, target, action) {
+  return user.groups
+    .map((group) => pathLookup.get(group) || [])
+    .map((entries) => entries
+      .find(({ path }) => {
+        if (target.length < path.length) return false;
+        if (path.endsWith('/*')) return target.startsWith(path.slice(0, -1));
+        if (target.endsWith('.html')) return target.slice(0, -5) === path;
+        return target === path;
+      }) || { action: '' })
+    .some(({ actions }) => actions.includes(action));
+}
+
+export async function hasPermission(daCtx, path, action) {
+  if (!pathLookupByOrg.has(daCtx.org)) {
+    const pathLookup = new Map();
+    pathLookupByOrg.set(daCtx.org, pathLookup);
+    const props = await daCtx.env.DA_CONFIG.get(daCtx.org, { type: 'json' });
+    if (!props || !props.data.permissions) return true;
+    // eslint-disable-next-line no-shadow
+    props.data.permissions.forEach(({ path, groups, actions }) => {
+      groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
+        if (!pathLookup.has(group)) pathLookup.set(group, []);
+        pathLookup
+          .get(group)
+          .push({
+            path,
+            actions: actions
+              .split(',')
+              .map((entry) => entry.trim())
+              .filter((entry) => entry.length > 0)
+              .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : ['read'])),
+          });
+      });
+    });
+    pathLookup
+      .forEach((value) => value
+        .sort(({ path: path1 }, { path: path2 }) => path2.length - path1.length));
+  }
+  if (pathLookupByOrg.get(daCtx.org).size === 0) return true;
+  return daCtx.users
+    .every((user) => hasUserPermission(pathLookupByOrg.get(daCtx.org), user, path, action));
+}

@@ -13,15 +13,19 @@
 import { getObjectVersion } from '../storage/version/get.js';
 import { listObjectVersions } from '../storage/version/list.js';
 import { postObjectVersion } from '../storage/version/put.js';
+import { hasPermission } from '../utils/auth.js';
 
 export async function getVersionList({ env, daCtx }) {
+  if (!await hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
   return listObjectVersions(env, daCtx);
 }
 
 export async function getVersionSource({ env, daCtx, head }) {
+  if (!await hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
   return getObjectVersion(env, daCtx, head);
 }
 
 export async function postVersionSource({ req, env, daCtx }) {
+  if (!await hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
   return postObjectVersion(req, env, daCtx);
 }

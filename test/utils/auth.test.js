@@ -17,6 +17,7 @@ import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import jose from './mocks/jose.js';
 import fetch from './mocks/fetch.js';
+import { hasPermission } from '../../src/utils/auth.js';
 
 // ES Mocks
 const {
@@ -139,4 +140,50 @@ describe('DA auth', () => {
       assert.strictEqual(userValue, '{"email":"aparker@geometrixx.info"}');
     });
   });
+
+  describe('path authorization', async () =>  {
+    it('test1', async () => {
+      const DA_CONFIG = {
+        'test': {
+          "total": 1,
+          "limit": 1,
+          "offset": 0,
+          "data": {
+            "permissions": [
+              {
+                "path": "/*",
+                "groups": "g1",
+                "actions": "read",
+              },
+              {
+                "path": "/*",
+                "groups": "g2",
+                "actions": "write",
+              },
+              {
+                "path": "/foo",
+                "groups": "g1",
+                "actions": "write",
+              }
+            ]
+          },
+          ":type": "multi-sheet"
+        }
+      };
+      const env2 = {
+        DA_CONFIG: {
+          get: (name) => {
+            return DA_CONFIG[name];
+          },
+        }
+      };
+      assert(await hasPermission({ users: [{groups: ['g1']}], org: 'test',  env: env2 }, '/test', 'read'));
+      assert(await hasPermission({ users: [{groups: ['g1']}], org: 'test',  env: env2 }, '/foo', 'write'));
+      assert(!await hasPermission({ users: [{groups: ['g1']}],  org: 'test', env: env2 }, '/test', 'write'));
+      assert(await hasPermission({ users: [{groups: ['g2']}],  org: 'test', env: env2 }, '/test', 'write'));
+      assert(await hasPermission({ users: [{groups: ['g2']}],  org: 'test', env: env2 }, '/test', 'read'));
+      assert(await hasPermission({ users: [{groups: ['g1', 'g2']}],  org: 'test', env: env2 }, '/test', 'read'));
+      assert(await hasPermission({ users: [{groups: ['g1', 'g2']}],  org: 'test', env: env2 }, '/test', 'write'));
+
+  })});
 });
