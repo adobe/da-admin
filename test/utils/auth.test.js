@@ -57,6 +57,40 @@ describe('Dark Alley auth', () => {
       const authed = await isAuthorized(env, 'geometrixx', { email: 'chad@geometrixx.info' });
       assert.strictEqual(authed, false);
     });
+
+    it('authorization multi sheet config', async () => {
+      const DA_CONFIG = {
+        'geometrixx': {
+          "total": 1,
+          "limit": 1,
+          "offset": 0,
+          "data": {
+            "data": [
+              {
+                "key": "admin.role.all",
+                "value": "aPaRKer@Geometrixx.Info"
+              }
+            ],
+            "otherdata": [
+              {
+                "key": "foo",
+                "value": "bar"
+              }
+            ],
+          },
+          ":type": "multi-sheet"
+        }
+      };
+      const env2 = {
+        DA_CONFIG: {
+          get: (name) => {
+            return DA_CONFIG[name];
+          },
+        }
+      };
+      assert(await isAuthorized(env2, 'wknd', { email: 'aparker@geometrixx.info' }));
+      assert(await isAuthorized(env2, 'geometrixx', { email: 'aparker@geometrixx.info' }));
+    });
   });
 
   describe('get user', async () => {
