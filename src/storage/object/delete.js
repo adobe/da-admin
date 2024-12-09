@@ -25,7 +25,8 @@ export async function deleteObject(client, daCtx, Key, env /* , isMove = false *
   // if (fname.includes('.') && !fname.startsWith('.') && !fname.endsWith('.props')) {
   //   const tmpCtx = { ...daCtx, key: Key }; // For next calls, ctx needs the passed
   //   note the Ext also needs to be set ^^^
-  //   await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, tmpCtx);
+  //   make sure to pass the deleted flag in the below call
+  //   await postObjectVersionWithLabel(isMove ? 'Moved' : 'Deleted', env, tmpCtx, true);
   // }
 
   let resp;

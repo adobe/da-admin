@@ -36,12 +36,13 @@ export function getContentLength(body) {
 
 export async function putVersion(config, {
   Bucket, Body, ID, Version, Ext, Metadata, ContentLength,
-}, noneMatch = true) {
+}, deleted) {
   const length = ContentLength ?? getContentLength(Body);
 
-  const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
+  const client = ifNoneMatch(config);
+  const Key = deleted ? `.da-deleted/${Metadata.Path}/${ID}` : `.da-versions/${ID}/${Version}.${Ext}`;
   const input = {
-    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
+    Bucket, Key, Body, Metadata, ContentLength: length,
   };
   const command = new PutObjectCommand(input);
   try {
@@ -63,7 +64,7 @@ function buildInput({
   };
 }
 
-export async function putObjectWithVersion(env, daCtx, update, body) {
+export async function putObjectWithVersion(env, daCtx, update, body, deleted = false) {
   const config = getS3Config(env);
   // While we are automatically storing the body once for the 'Collab Parse' changes, we never
   // do a HEAD, because we may need the content. Once we don't need to do this automatic store
@@ -90,7 +91,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
       return resp.$metadata.httpStatusCode === 200 ? 201 : resp.$metadata.httpStatusCode;
     } catch (e) {
       if (e.$metadata.httpStatusCode === 412) {
-        return putObjectWithVersion(env, daCtx, update, body);
+        return putObjectWithVersion(env, daCtx, update, body, deleted);
       }
       return e.$metadata.httpStatusCode;
     }
@@ -116,7 +117,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
       Path: current.metadata?.path || Path,
       Label,
     },
-  });
+  }, deleted);
 
   if (versionResp.status !== 200 && versionResp.status !== 412) {
     return versionResp.status;
@@ -135,19 +136,19 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
     return resp.$metadata.httpStatusCode;
   } catch (e) {
     if (e.$metadata.httpStatusCode === 412) {
-      return putObjectWithVersion(env, daCtx, update, body);
+      return putObjectWithVersion(env, daCtx, update, body, deleted);
     }
     return e.$metadata.httpStatusCode;
   }
 }
 
-export async function postObjectVersionWithLabel(label, env, daCtx) {
+export async function postObjectVersionWithLabel(label, env, daCtx, deleted = false) {
   const { body, contentLength, contentType } = await getObject(env, daCtx);
   const { org, key } = daCtx;
 
   const resp = await putObjectWithVersion(env, daCtx, {
     org, key, body, contentLength, type: contentType, label,
-  }, true);
+  }, true, deleted);
 
   return { status: resp === 200 ? 201 : resp };
 }

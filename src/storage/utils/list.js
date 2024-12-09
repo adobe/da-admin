@@ -29,8 +29,10 @@ export default function formatList(resp, daCtx) {
       const name = prefix.Prefix.slice(0, -1).split('/').pop();
       const splitName = name.split('.');
 
-      // Do not add any extension folders
-      if (splitName.length > 1) return;
+      if (!daCtx.key.startsWith('.da-deleted/')) {
+        // Do not add any extension folders
+        if (splitName.length > 1) return;
+      }
 
       const path = `/${daCtx.org}/${prefix.Prefix.slice(0, -1)}`;
       combined.push({ path, name });
