@@ -13,15 +13,25 @@ import getObject from '../object/get.js';
 import listObjects from '../object/list.js';
 
 export async function listObjectVersions(env, { org, key }) {
-  const current = await getObject(env, { org, key }, true);
-  if (current.status === 404 || !current.metadata.id) {
-    return 404;
+  const lastseg = key.split('/').pop();
+  let id;
+  if (lastseg.includes('.')) {
+    // The key is that of a resouce
+    const current = await getObject(env, { org, key }, true);
+    if (current.status === 404 || !current.metadata.id) {
+      return 404;
+    }
+    id = current.metadata.id;
+  } else {
+    // The key is that of a version ID
+    id = lastseg;
   }
-  const resp = await listObjects(env, { org, key: `.da-versions/${current.metadata.id}` });
+
+  const resp = await listObjects(env, { org, key: `.da-versions/${id}` });
   const promises = await Promise.all(JSON.parse(resp.body).map(async (entry) => {
     const entryResp = await getObject(env, {
       org,
-      key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
+      key: `.da-versions/${id}/${entry.name}.${entry.ext}`,
     }, true);
     const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
     const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
@@ -29,7 +39,7 @@ export async function listObjectVersions(env, { org, key }) {
 
     if (entryResp.contentLength > 0) {
       return {
-        url: `/versionsource/${org}/${current.metadata.id}/${entry.name}.${entry.ext}`,
+        url: `/versionsource/${org}/${id}/${entry.name}.${entry.ext}`,
         users,
         timestamp,
         path,

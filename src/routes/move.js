@@ -9,11 +9,24 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import moveObject from '../storage/object/move.js';
+import moveObject, { restoreDeletedObject } from '../storage/object/move.js';
 import moveHelper from '../helpers/move.js';
 
 export default async function moveRoute({ req, env, daCtx }) {
   const details = await moveHelper(req, daCtx);
   if (details.error) return details.error;
   return moveObject(env, daCtx, details);
+}
+
+export async function postRestoreDeleted({ req, env, daCtx }) {
+  const source = daCtx.key;
+  if (!source.startsWith('.da-deleted/')) {
+    return { status: 400 };
+  }
+
+  const destBase = source.substring('.da-deleted/'.length);
+  const lastSlash = destBase.lastIndexOf('/');
+  const dest = destBase.substring(0, lastSlash + 1);
+
+  return /* await */ restoreDeletedObject(env, daCtx, { source, destination: dest });
 }

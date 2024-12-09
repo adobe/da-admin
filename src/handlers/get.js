@@ -34,6 +34,7 @@ export default async function getHandler({ env, daCtx }) {
   if (path.startsWith('/config')) return getConfig({ env, daCtx });
   if (path.startsWith('/versionlist')) return getVersionList({ env, daCtx });
   if (path.startsWith('/versionsource')) return getVersionSource({ env, daCtx });
+  if (path.startsWith('/foo')) return getSource({ env, daCtx });
 
   return undefined;
 }

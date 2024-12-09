@@ -70,3 +70,25 @@ source:
         $ref: "./responses.yaml#/401"
       '500':
         $ref: "./responses.yaml#/500"
+
+restore:
+  post:
+    operationId: sourceRestore
+    tags:
+      - Source
+    summary: Restore source content
+    description: Restore the content **source** or **directory**.
+    parameters:
+      - $ref: "./parameters.yaml#/orgParam"
+      - $ref: "./parameters.yaml#/repoParam"
+      - $ref: "./parameters.yaml#/pathParam"
+      - $ref: "./parameters.yaml#/extParam"
+    responses:
+      '204':
+        $ref: "./responses.yaml#/204"
+      '400':
+        $ref: "./responses.yaml#/400"
+      '401':
+        $ref: "./responses.yaml#/401"
+      '500':
+        $ref: "./responses.yaml#/500"

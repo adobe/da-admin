@@ -39,7 +39,7 @@ export async function putVersion(config, {
   const length = ContentLength ?? getContentLength(Body);
 
   const client = ifNoneMatch(config);
-  const Key = deleted ? `.da-deleted/${Metadata.Path}/${ID}` : `.da-versions/${ID}/${Version}.${Ext}`;
+  const Key = deleted ? `.da-deleted/${Metadata.Path}/${ID}.${Ext}` : `.da-versions/${ID}/${Version}.${Ext}`;
   const input = {
     Bucket, Key, Body, Metadata, ContentLength: length,
   };
