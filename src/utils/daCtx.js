@@ -36,6 +36,7 @@ export default async function getDaCtx(req, env) {
 
   // Set base details
   const daCtx = {
+    env,
     path: pathname,
     api,
     org,

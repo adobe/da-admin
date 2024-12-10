@@ -55,6 +55,7 @@ describe('Object copy', () => {
       }
       const env = { dacollab };
       const ctx = {
+        env,
         org: 'foo',
         key: 'mydir',
         origin: 'somehost.sometld',
@@ -67,6 +68,10 @@ describe('Object copy', () => {
       await copyObject(env, ctx, details, false);
 
       assert.strictEqual(s3Sent.length, 3);
+
+      // Make the order in s3Sent predictable
+      s3Sent.sort((a, b) => a.Key.localeCompare(b.Key));
+
       const input = s3Sent[2];
       assert.strictEqual(input.Bucket, 'foo-content');
       assert.strictEqual(input.CopySource, 'foo-content/mydir/xyz.html');
@@ -108,6 +113,10 @@ describe('Object copy', () => {
 
 
       assert.strictEqual(s3Sent.length, 3);
+
+      // Make the order in s3Sent predictable
+      s3Sent.sort((a, b) => a.Key.localeCompare(b.Key));
+
       const input = s3Sent[2];
       assert.strictEqual(input.Bucket, 'testorg-content');
       assert.strictEqual(input.CopySource, 'testorg-content/mydir/dir1/myfile.html');

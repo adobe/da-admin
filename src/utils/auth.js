@@ -130,7 +130,7 @@ export async function hasPermission(daCtx, path, action) {
   if (!pathLookupByOrg.has(daCtx.org)) {
     const pathLookup = new Map();
     pathLookupByOrg.set(daCtx.org, pathLookup);
-    const props = await daCtx.env.DA_CONFIG.get(daCtx.org, { type: 'json' });
+    const props = await daCtx.env?.DA_CONFIG?.get(daCtx.org, { type: 'json' });
     if (!props || !props.data.permissions) return true;
     // eslint-disable-next-line no-shadow
     props.data.permissions.forEach(({ path, groups, actions }) => {
