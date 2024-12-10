@@ -12,7 +12,7 @@
 import { decodeJwt } from 'jose';
 
 export async function setUser(userId, expiration, headers, env) {
-  const resp = await fetch(`${env.IMS_ORIGIN}/ims/profile/v1`, { headers });
+  let resp = await fetch(`${env.IMS_ORIGIN}/ims/profile/v1`, { headers });
   if (!resp.ok) {
     // Something went wrong - either with the connection or the token isn't valid
     // assume we are anon for now (but don't cache so we can try again next time)
@@ -20,7 +20,27 @@ export async function setUser(userId, expiration, headers, env) {
   }
   const json = await resp.json();
 
-  const value = JSON.stringify({ email: json.email });
+  // Now get the groups of the user
+  resp = await fetch(`${env.IMS_ORIGIN}/ims/organizations/v5`, { headers });
+  if (!resp.ok) {
+    // Something went wrong - either with the connection or the token isn't valid
+    // assume we are anon for now (but don't cache so we can try again next time)
+    return null;
+  }
+
+  const organizationsJson = await resp.json();
+
+  const value = JSON.stringify({
+    email: json.email,
+    ident: json.userId,
+    groups: organizationsJson
+      .map(({ orgName, orgRef, groups }) => groups
+        .map(({ groupName, groupDisplayName, ident }) => ({
+          orgName, orgIdent: orgRef.ident, groupName, groupDisplayName, ident,
+        })))
+      .flat(),
+  });
+
   await env.DA_AUTH.put(userId, value, { expiration });
   return value;
 }
@@ -86,15 +106,22 @@ export async function isAuthorized(env, org, user) {
 const pathLookupByOrg = new Map();
 
 function hasUserPermission(pathLookup, user, target, action) {
-  return user.groups
-    .map((group) => pathLookup.get(group) || [])
+  return (user.groups || [])
+    .flatMap((group) => [`${group.orgIdent}/${group.ident}`,
+      `${group.orgName}/${group.ident}`,
+      `${group.orgIdent}/${group.groupName}`,
+      `${group.orgName}/${group.groupName}`,
+    ])
+    .concat(user.ident)
+    .concat(user.email)
+    .map((key) => pathLookup.get(key) || [])
     .map((entries) => entries
       .find(({ path }) => {
         if (target.length < path.length) return false;
         if (path.endsWith('/*')) return target.startsWith(path.slice(0, -1));
         if (target.endsWith('.html')) return target.slice(0, -5) === path;
         return target === path;
-      }) || { action: '' })
+      }) || { actions: [] })
     .some(({ actions }) => actions.includes(action));
 }
 

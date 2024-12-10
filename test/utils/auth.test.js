@@ -137,7 +137,7 @@ describe('DA auth', () => {
       });
 
       const userValue = await setUser('aparker@geometrixx.info', 100, headers, env);
-      assert.strictEqual(userValue, '{"email":"aparker@geometrixx.info"}');
+      assert.strictEqual(userValue, '{"email":"aparker@geometrixx.info","ident":"123","groups":[{"orgName":"Org1","orgIdent":"2345B0EA551D747","groupName":"READ_WRITE_STANDARD@DEV","groupDisplayName":"READ_WRITE_STANDARD@DEV","ident":4711},{"orgName":"Org1","orgIdent":"2345B0EA551D747","groupName":"READ_ONLY_STANDARD@PROD","groupDisplayName":"READ_ONLY_STANDARD@PROD","ident":8080},{"orgName":"ACME Inc.","orgIdent":"EE23423423423","groupName":"Emp","groupDisplayName":"Emp","ident":12312312},{"orgName":"ACME Inc.","orgIdent":"EE23423423423","groupName":"org-test","groupDisplayName":"org-test","ident":34243}]}');
     });
   });
 
@@ -152,17 +152,17 @@ describe('DA auth', () => {
             "permissions": [
               {
                 "path": "/*",
-                "groups": "g1",
+                "groups": "2345B0EA551D747/4711,123",
                 "actions": "read",
               },
               {
                 "path": "/*",
-                "groups": "g2",
+                "groups": "2345B0EA551D747/8080",
                 "actions": "write",
               },
               {
                 "path": "/foo",
-                "groups": "g1",
+                "groups": "2345B0EA551D747/4711",
                 "actions": "write",
               }
             ]
@@ -177,13 +177,15 @@ describe('DA auth', () => {
           },
         }
       };
-      assert(await hasPermission({ users: [{groups: ['g1']}], org: 'test',  env: env2 }, '/test', 'read'));
-      assert(await hasPermission({ users: [{groups: ['g1']}], org: 'test',  env: env2 }, '/foo', 'write'));
-      assert(!await hasPermission({ users: [{groups: ['g1']}],  org: 'test', env: env2 }, '/test', 'write'));
-      assert(await hasPermission({ users: [{groups: ['g2']}],  org: 'test', env: env2 }, '/test', 'write'));
-      assert(await hasPermission({ users: [{groups: ['g2']}],  org: 'test', env: env2 }, '/test', 'read'));
-      assert(await hasPermission({ users: [{groups: ['g1', 'g2']}],  org: 'test', env: env2 }, '/test', 'read'));
-      assert(await hasPermission({ users: [{groups: ['g1', 'g2']}],  org: 'test', env: env2 }, '/test', 'write'));
-
+      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test',  env: env2 }, '/test', 'read'));
+      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test',  env: env2 }, '/foo', 'write'));
+      assert(!await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}],  org: 'test', env: env2 }, '/test', 'write'));
+      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'write'));
+      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'read'));
+      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}, {orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'read'));
+      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}, {orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'write'));
+      assert(!await hasPermission({ users: [{groups: []}],  org: 'test', env: env2 }, '/test', 'read'));
+      assert(await hasPermission({ users: [{ident: '123',groups: []}],  org: 'test', env: env2 }, '/test', 'read'));
+      assert(!await hasPermission({ users: [{ident: '123',groups: []}],  org: 'test', env: env2 }, '/test', 'write'));
   })});
 });
