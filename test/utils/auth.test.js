@@ -142,7 +142,7 @@ describe('DA auth', () => {
   });
 
   describe('path authorization', async () =>  {
-    it('test1', async () => {
+    it('test hasPermissions', async () => {
       const DA_CONFIG = {
         'test': {
           "total": 1,
@@ -178,6 +178,7 @@ describe('DA auth', () => {
         }
       };
       assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test',  env: env2 }, '/test', 'read'));
+      assert(!await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test',  env: env2 }, '/test', 'write'));
       assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test',  env: env2 }, '/foo', 'write'));
       assert(!await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}],  org: 'test', env: env2 }, '/test', 'write'));
       assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'write'));
@@ -187,5 +188,6 @@ describe('DA auth', () => {
       assert(!await hasPermission({ users: [{groups: []}],  org: 'test', env: env2 }, '/test', 'read'));
       assert(await hasPermission({ users: [{ident: '123',groups: []}],  org: 'test', env: env2 }, '/test', 'read'));
       assert(!await hasPermission({ users: [{ident: '123',groups: []}],  org: 'test', env: env2 }, '/test', 'write'));
-  })});
+    });
+ });
 });

@@ -107,7 +107,8 @@ const pathLookupByOrg = new Map();
 
 function hasUserPermission(pathLookup, user, target, action) {
   return (user.groups || [])
-    .flatMap((group) => [`${group.orgIdent}/${group.ident}`,
+    .flatMap((group) => [
+      `${group.orgIdent}/${group.ident}`,
       `${group.orgName}/${group.ident}`,
       `${group.orgIdent}/${group.groupName}`,
       `${group.orgName}/${group.groupName}`,
@@ -143,7 +144,7 @@ export async function hasPermission(daCtx, path, action) {
               .split(',')
               .map((entry) => entry.trim())
               .filter((entry) => entry.length > 0)
-              .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : ['read'])),
+              .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : [entry])),
           });
       });
     });

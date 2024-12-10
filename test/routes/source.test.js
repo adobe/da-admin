@@ -166,4 +166,72 @@ describe('Source Route', () => {
     const resp = await deleteSource({env, daCtx});
     assert.equal(204, resp.status);
   });
+
+  it('Test getSource with permissions', async () => {
+    const DA_CONFIG = {
+      'test-source': {
+        "total": 1,
+        "limit": 1,
+        "offset": 0,
+        "data": {
+          "permissions": [
+            {
+              "path": "/*",
+              "groups": "2345B0EA551D747/4711,123",
+              "actions": "read",
+            },
+            {
+              "path": "/*",
+              "groups": "2345B0EA551D747/8080",
+              "actions": "write",
+            },
+            {
+              "path": "/foo",
+              "groups": "2345B0EA551D747/4711",
+              "actions": "write",
+            },
+            {
+              "path": "/bar",
+              "groups": "2345B0EA551D747/4711",
+              "actions": "",
+            }
+          ]
+        },
+        ":type": "multi-sheet"
+      }
+    };
+    const env = {
+      DA_CONFIG: {
+        get: (name) => {
+          return DA_CONFIG[name];
+        },
+      }
+    };
+
+    const daCtx = { users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test-source', env};
+
+    const called = [];
+    const getResp = async (e, c) => {
+      if (e === env && c === daCtx) {
+        called.push('getObject');
+        return {status: 200};
+      }
+    };
+
+    const { getSource } = await esmock(
+      '../../src/routes/source.js', {
+        '../../src/storage/object/get.js': {
+          default: getResp
+        }
+      }
+    );
+    daCtx.key = '/test';
+    const resp = await getSource({env, daCtx});
+    assert.equal(200, resp.status);
+    assert.deepStrictEqual(called, ['getObject']);
+
+    daCtx.key = '/bar';
+    const resp2 = await getSource({env, daCtx});
+    assert.equal(403, resp2.status);
+  });
 });
