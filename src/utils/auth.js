@@ -99,7 +99,7 @@ export async function isAuthorized(env, org, user) {
     return acc;
   }, []);
 
-  if (!admins) return true;
+  if (!admins || !admins.length) return true;
   return admins.some((admin) => admin.toLowerCase() === user.email.toLowerCase());
 }
 
@@ -127,13 +127,17 @@ function hasUserPermission(pathLookup, user, target, action) {
 }
 
 export async function hasPermission(daCtx, path, action) {
+  console.log('hasPermission:', daCtx.users.map((u) => u.email), path, action);
+  // eslint-disable-next-line no-param-reassign
+  if (!path.startsWith('/')) path = `/${path}`;
+
   if (!pathLookupByOrg.has(daCtx.org)) {
     const pathLookup = new Map();
     pathLookupByOrg.set(daCtx.org, pathLookup);
     const props = await daCtx.env?.DA_CONFIG?.get(daCtx.org, { type: 'json' });
-    if (!props || !props.data.permissions) return true;
+    if (!props || !props.permissions.data) return true;
     // eslint-disable-next-line no-shadow
-    props.data.permissions.forEach(({ path, groups, actions }) => {
+    props.permissions.data.forEach(({ path, groups, actions }) => {
       groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
         if (!pathLookup.has(group)) pathLookup.set(group, []);
         pathLookup
@@ -153,6 +157,12 @@ export async function hasPermission(daCtx, path, action) {
         .sort(({ path: path1 }, { path: path2 }) => path2.length - path1.length));
   }
   if (pathLookupByOrg.get(daCtx.org).size === 0) return true;
-  return daCtx.users
+  const permission = daCtx.users
     .every((user) => hasUserPermission(pathLookupByOrg.get(daCtx.org), user, path, action));
+
+  if (!permission) {
+    // eslint-disable-next-line no-console
+    console.log(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);
+  }
+  return permission;
 }
