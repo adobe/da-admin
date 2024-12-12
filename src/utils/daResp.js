@@ -14,7 +14,7 @@ export default function daResp({
   body,
   contentType = 'application/json',
   contentLength,
-}) {
+}, ctx) {
   const headers = new Headers();
   headers.append('Access-Control-Allow-Origin', '*');
   headers.append('Access-Control-Allow-Methods', 'HEAD, GET, PUT, POST, DELETE');
@@ -22,6 +22,9 @@ export default function daResp({
   headers.append('Content-Type', contentType);
   if (contentLength) {
     headers.append('Content-Length', contentLength);
+  }
+  if (ctx?.aclCtx) {
+    headers.append('X-da-actions', `/${ctx.key}=${ctx.aclCtx.actions}`);
   }
 
   return new Response(body, { status, headers });

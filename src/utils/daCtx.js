@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import { getUsers, isAuthorized } from './auth.js';
+import { getAclCtx, getUsers, isAuthorized } from './auth.js';
 
 /**
  * Gets Dark Alley Context
@@ -36,7 +36,6 @@ export default async function getDaCtx(req, env) {
 
   // Set base details
   const daCtx = {
-    env,
     path: pathname,
     api,
     org,
@@ -85,6 +84,8 @@ export default async function getDaCtx(req, env) {
     daCtx.pathname = `/${daPathBase}.${daCtx.ext}`;
     daCtx.aemPathname = `/${aemPathBase}.${daCtx.ext}`;
   }
+
+  daCtx.aclCtx = await getAclCtx(env, org, users, keyBase);
 
   return daCtx;
 }

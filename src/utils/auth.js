@@ -103,10 +103,8 @@ export async function isAuthorized(env, org, user) {
   return admins.some((admin) => admin.toLowerCase() === user.email.toLowerCase());
 }
 
-const pathLookupByOrg = new Map();
-
-function hasUserPermission(pathLookup, user, target, action) {
-  return (user.groups || [])
+export function getUserActions(pathLookup, user, target) {
+  const idents = (user.groups || [])
     .flatMap((group) => [
       `${group.orgIdent}/${group.ident}`,
       `${group.orgName}/${group.ident}`,
@@ -114,52 +112,71 @@ function hasUserPermission(pathLookup, user, target, action) {
       `${group.orgName}/${group.groupName}`,
     ])
     .concat(user.ident)
-    .concat(user.email)
-    .map((key) => pathLookup.get(key) || [])
-    .map((entries) => entries
-      .find(({ path }) => {
-        if (target.length < path.length) return false;
-        if (path.endsWith('/*')) return target.startsWith(path.slice(0, -1));
-        if (target.endsWith('.html')) return target.slice(0, -5) === path;
-        return target === path;
-      }) || { actions: [] })
-    .some(({ actions }) => actions.includes(action));
+    .concat(user.email);
+
+  const plVals = idents.map((key) => pathLookup.get(key) || []);
+  const actions = plVals.map((entries) => entries
+    .find(({ path }) => {
+      if (target.length < path.length) return false;
+      if (path.endsWith('/*')) return target.startsWith(path.slice(0, -1));
+      if (target.endsWith('.html')) return target.slice(0, -5) === path;
+      return target === path;
+    }) || { actions: [] });
+
+  return new Set(actions.flatMap(({ actions: acts }) => acts));
 }
 
-export async function hasPermission(daCtx, path, action) {
+export async function getAclCtx(env, org, users, key) {
+  const pathLookup = new Map();
+
+  const props = await env.DA_CONFIG?.get(org, { type: 'json' });
+  if (!props || !props.permissions.data) return true;
+
+  props.permissions.data.forEach(({ path, groups, actions }) => {
+    groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
+      if (!pathLookup.has(group)) pathLookup.set(group, []);
+      pathLookup
+        .get(group)
+        .push({
+          path,
+          actions: actions
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0)
+            .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : [entry])),
+        });
+    });
+  });
+  pathLookup
+    .forEach((value) => value
+      .sort(({ path: path1 }, { path: path2 }) => path2.length - path1.length));
+
+  // Do a lookup for the base key, we always need this info
+  const k = key.startsWith('/') ? key : `/${key}`;
+  const actions = users.reduce((acc, u) => acc.concat([...getUserActions(pathLookup, u, k)]), []);
+
+  return { pathLookup, actions };
+}
+
+export function hasPermission(daCtx, path, action) {
   console.log('hasPermission:', daCtx.users.map((u) => u.email), path, action);
+
+  if (daCtx.aclCtx.pathLookup.size === 0) {
+    return true;
+  }
+
+  // is it the path from the context? then return the cached value
+  if (daCtx.key === path) {
+    return daCtx.aclCtx.actions.includes(action);
+  }
+
+  // TODO is it ever something else?
+
   // eslint-disable-next-line no-param-reassign
   if (!path.startsWith('/')) path = `/${path}`;
 
-  if (!pathLookupByOrg.has(daCtx.org)) {
-    const pathLookup = new Map();
-    pathLookupByOrg.set(daCtx.org, pathLookup);
-    const props = await daCtx.env?.DA_CONFIG?.get(daCtx.org, { type: 'json' });
-    if (!props || !props.permissions.data) return true;
-    // eslint-disable-next-line no-shadow
-    props.permissions.data.forEach(({ path, groups, actions }) => {
-      groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
-        if (!pathLookup.has(group)) pathLookup.set(group, []);
-        pathLookup
-          .get(group)
-          .push({
-            path,
-            actions: actions
-              .split(',')
-              .map((entry) => entry.trim())
-              .filter((entry) => entry.length > 0)
-              .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : [entry])),
-          });
-      });
-    });
-    pathLookup
-      .forEach((value) => value
-        .sort(({ path: path1 }, { path: path2 }) => path2.length - path1.length));
-  }
-  if (pathLookupByOrg.get(daCtx.org).size === 0) return true;
   const permission = daCtx.users
-    .every((user) => hasUserPermission(pathLookupByOrg.get(daCtx.org), user, path, action));
-
+    .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, path).has(action));
   if (!permission) {
     // eslint-disable-next-line no-console
     console.log(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);

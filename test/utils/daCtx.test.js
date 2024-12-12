@@ -11,7 +11,7 @@ const getDaCtx = await esmock(
   '../../src/utils/daCtx.js', { '../../src/utils/auth.js': auth },
 );
 
-describe('Dark Alley context', () => {
+describe('DA context', () => {
   describe('API context', async () => {
     let daCtx;
 
@@ -128,5 +128,68 @@ describe('Dark Alley context', () => {
       assert.strictEqual(daCtx.pathname, '/geometrixx/nft/blockchain.png');
       assert.strictEqual(daCtx.aemPathname, '/nft/blockchain.png');
     });
+  });
+
+  describe('ACL context', () => {
+    it('get user actions', () => {
+      const patharr = [
+        {path: '/da-aem-boilerplate/authtest/sub/sub/*', actions: []},
+        {path: '/da-aem-boilerplate/authtest/sub/*', actions: ['read', 'write']},
+        {path: '/da-aem-boilerplate/authtest/*', actions: ['read']},
+        {path: '/*', actions: ['read', 'write']},
+        {path: '/', actions: ['read', 'write']},
+      ];
+
+      const pathlookup = new Map();
+      pathlookup.set('joe@acme.com', patharr);
+
+      const user = {
+        email: 'joe@acme.com',
+        ident: 'AAAA@bbb.e',
+        groups: [
+          {orgName: 'org1', orgIdent: 'ABCDEFG', ident: 123456, groupName: 'grp1'},
+          {orgName: 'org2', orgIdent: 'ZZZZZZZ', ident: 77777, groupName: 'grp2'},
+        ],
+      };
+
+      assert.deepStrictEqual(['read', 'write'],
+        [...getDaCtx.getUserActions(pathlookup, user, '/')]);
+      assert.deepStrictEqual(['read'],
+        [...getDaCtx.getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub')]);
+      assert.deepStrictEqual(['read', 'write'],
+        [...getDaCtx.getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub/sub')]);
+      });
+  });
+
+  it('get user actions2', () => {
+    const patharr = [
+      {path: '/*', actions: ['read', 'write']},
+      {path: '/', actions: ['read', 'write']},
+      {path: '/da-aem-boilerplate/', actions: ['read']},
+    ];
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', patharr);
+    const patharr2 = [
+      {path: '/*', actions: ['read']},
+      {path: '/da-aem-boilerplate/authtest/*', actions: ['read', 'write']},
+    ];
+    pathlookup.set('ABCDEFG/123456', patharr2);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+      groups: [
+        {orgName: 'org1', orgIdent: 'ABCDEFG', ident: 123456, groupName: 'grp1'},
+        {orgName: 'org2', orgIdent: 'ZZZZZZZ', ident: 77777, groupName: 'grp2'},
+      ],
+    };
+    assert.deepStrictEqual(['read', 'write'],
+      [...getDaCtx.getUserActions(pathlookup, user, '/')]);
+    assert.deepStrictEqual(['read', 'write'],
+      [...getDaCtx.getUserActions(pathlookup, user, '/foo')]);
+    assert.deepStrictEqual(['read'],
+      [...getDaCtx.getUserActions(pathlookup, user, '/da-aem-boilerplate/')]);
+    assert.deepStrictEqual(['read', 'write'],
+      [...getDaCtx.getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/blah')]);
   });
 });
