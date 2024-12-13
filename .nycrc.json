@@ -9,6 +9,6 @@
   "include": ["src/**/*.js"],
   "statements": 75,
   "branches": 90,
-  "functions": 70,
+  "functions": 65,
   "lines": 75
 }

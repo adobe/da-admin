@@ -43,7 +43,7 @@ export async function putVersion(env, daCtx, {
 
 /**
  * @typedef {Object} PutObjectUpdate
- * @property {String} key the key of the object
+ * @property {String} key the key of the object (excluding the Org)
  * @property {String} body the body of the object
  * @property {String} type the content type of the object
  * @property {String} label the label of the version

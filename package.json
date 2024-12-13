@@ -11,7 +11,7 @@
     "docs:build": "npx @redocly/cli build-docs -o docs/index.html admin@v1",
     "docs:watch": "npx @redocly/cli preview-docs admin@v1",
     "lint": "eslint .",
-    "test": "c8 mocha --spec=test/**/*.test.js && mocha --spec=test/it/**/*.spec.js",
+    "test": "vitest -c test/vitest.config.js --run && c8 mocha --spec=test/**/*.test.js && mocha --spec=test/it/**/*.spec.js",
     "test:unit": "c8 mocha --spec=test/**/*.test.js",
     "test:perf": "mocha --spec=test/**/*.perf.js",
     "test:it": "mocha --spec=test/it/**/*.spec.js",
@@ -24,13 +24,15 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@adobe/eslint-config-helix": "2.0.6",
+    "@cloudflare/vitest-pool-workers": "^0.5.2",
     "@redocly/cli": "^1.4.1",
     "c8": "^8.0.1",
     "eslint": "8.56.0",
     "esmock": "^2.6.4",
     "miniflare": "^3.20240605.0",
     "mocha": "^10.2.0",
-    "wrangler": "^3.57.0"
+    "vitest": "2.1.8",
+    "wrangler": "^3.95.0"
   },
   "lint-staged": {
     "*.js": "eslint",

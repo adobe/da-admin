@@ -17,6 +17,9 @@
  * @property {String} destination the fully qualified destination key
  */
 
+import { deleteFromCollab, syncCollab } from './collab.js';
+import { putObjectWithVersion } from '../version/put.js';
+
 /**
  * Copies the specified file from the source to the destination.
  *
@@ -31,13 +34,13 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove = f
   const source = `${daCtx.org}/${sourceKey}`;
   const destination = `${daCtx.org}/${destinationKey}`;
   try {
-    const obj = await env.DA_CONTENT.get(source);
-    if (!obj) {
+    const srcObj = await env.DA_CONTENT.get(source);
+    if (!srcObj) {
       return { success: false, source, destination };
     }
 
-    const { httpMetadata } = obj;
-    const body = await obj.text();
+    const { httpMetadata } = srcObj;
+    const body = await srcObj.text();
     // We want to keep the history if this was a rename. In case of an actual
     // copy we should start with clean history. The history is associated with the
     // ID of the object, so we need to generate a new ID for the object and also a
@@ -47,14 +50,49 @@ export const copyFile = async (env, daCtx, sourceKey, destinationKey, isMove = f
       version: crypto.randomUUID(),
       timestamp: `${Date.now()}`,
       users: JSON.stringify(daCtx.users),
-      path: destination,
+      path: destinationKey,
     };
     // Move operation so maintain the original the metadata
-    if (isMove) Object.assign(customMetadata, obj.customMetadata, { path: destination });
-    await env.DA_CONTENT.put(destination, body, { httpMetadata, customMetadata });
+    if (isMove) Object.assign(customMetadata, srcObj.customMetadata, { path: destinationKey });
+    const options = {
+
+      customMetadata,
+      httpMetadata,
+    };
+    const result = await env.DA_CONTENT.put(destination, body, { ...options, onlyIf: { etagDoesNotMatch: '*' } });
+    if (!result) {
+      const tmpCtx = { ...daCtx, key: destinationKey };
+      // Handle target file exists case
+      if (isMove) {
+        const destObj = await env.DA_CONTENT.get(`${daCtx.org}/${destinationKey}`);
+        await putObjectWithVersion(env, tmpCtx, {
+          key: destinationKey,
+          body: await destObj.text(),
+          type: destObj.httpMetadata.contentType,
+          label: 'Replaced',
+        });
+        await env.DA_CONTENT.put(destination, body, options);
+      } else {
+        await putObjectWithVersion(
+          env,
+          tmpCtx,
+          {
+            key: destinationKey,
+            body,
+            type: srcObj.httpMetadata.contentType,
+            label: 'Copy',
+          },
+        );
+      }
+      await syncCollab(env, tmpCtx);
+    }
 
     // Delete the original on move.
-    if (isMove) await env.DA_CONTENT.delete(source);
+    if (isMove) {
+      await env.DA_CONTENT.delete(source);
+      const tmpCtx = { ...daCtx, key: sourceKey };
+      await deleteFromCollab(env, tmpCtx);
+    }
 
     return { success: true, source, destination };
     /* c8 ignore next 5 */
