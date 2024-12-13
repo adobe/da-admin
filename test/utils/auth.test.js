@@ -252,13 +252,15 @@ describe('DA auth', () => {
 
   it('get user actions2', () => {
     const patharr = [
-      {path: '/da-aem-boilerplate/', actions: ['read']},
+      {path: '/da-aem-boilerplate/*', actions: ['read']},
+      {path: '/da-aem-boilerplate', actions: ['read']},
       {path: '/*', actions: ['read', 'write']},
       {path: '/', actions: ['read', 'write']},
     ];
     const pathlookup = new Map();
     pathlookup.set('joe@acme.com', patharr);
     const patharr2 = [
+      {path: '/da-aem-boilerplate/authtest/myfile', actions: ['read']},
       {path: '/da-aem-boilerplate/authtest/*', actions: ['read', 'write']},
       {path: '/*', actions: ['read']},
     ];
@@ -277,7 +279,9 @@ describe('DA auth', () => {
     assert.deepStrictEqual(['read', 'write'],
       [...getUserActions(pathlookup, user, '/foo')]);
     assert.deepStrictEqual(['read'],
-      [...getUserActions(pathlookup, user, '/da-aem-boilerplate/')]);
+      [...getUserActions(pathlookup, user, '/da-aem-boilerplate')]);
+    assert.deepStrictEqual(['read'],
+      [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/myfile.html')]);
     assert.deepStrictEqual(['read', 'write'],
       [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/blah')]);
   });
