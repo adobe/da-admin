@@ -15,6 +15,7 @@ import { CopyObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/clie
 import { mockClient } from 'aws-sdk-client-mock';
 
 import copyObject from '../../../src/storage/object/copy.js';
+import { getAclCtx } from '../../../src/utils/auth.js';
 
 const s3Mock = mockClient(S3Client);
 
@@ -61,6 +62,7 @@ describe('Object copy', () => {
         origin: 'somehost.sometld',
         users: [{ email: 'haha@foo.com' }],
       };
+      ctx.aclCtx = await getAclCtx(env, ctx.org, ctx.users, '/');
       const details = {
         source: 'mydir',
         destination: 'mydir/newdir',
@@ -105,12 +107,12 @@ describe('Object copy', () => {
       }
       const env = { dacollab };
       const ctx = { org: 'testorg', key: 'mydir/dir1', origin: 'http://localhost:3000' };
+      ctx.aclCtx = await getAclCtx(env, ctx.org, ctx.users, '/');
       const details = {
         source: 'mydir/dir1',
         destination: 'mydir/dir2',
       };
       await copyObject(env, ctx, details, true);
-
 
       assert.strictEqual(s3Sent.length, 3);
 
@@ -160,6 +162,7 @@ describe('Object copy', () => {
         origin: 'https://blahblah:7890',
         users: ['joe@bloggs.org'],
       };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
       const details = {
         source: 'mysrc',
         destination: 'mydst',
@@ -248,6 +251,7 @@ describe('Object copy', () => {
         },
       };
       const daCtx = { org: 'xorg' };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
       const details = {
         source: 'xsrc',
         destination: 'xdst',
@@ -292,6 +296,7 @@ describe('Object copy', () => {
         },
       };
       const daCtx = { org: 'qqqorg', origin: 'http://qqq' };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
       const details = {
         source: 'qqqsrc',
         destination: 'qqqdst',
@@ -320,6 +325,7 @@ describe('Object copy', () => {
         key: 'mydir',
         users: [{ email: 'haha@foo.com' }],
       };
+      ctx.aclCtx = await getAclCtx(env, ctx.org, ctx.users, '/');
       const details = {
         source: 'mydir',
         destination: 'mydir/newdir',
@@ -362,6 +368,7 @@ describe('Object copy', () => {
         key: 'mydir',
         users: [{ email: 'haha@foo.com' }],
       };
+      ctx.aclCtx = await getAclCtx(env, ctx.org, ctx.users, '/');
       const details = {
         source: 'mydir',
         destination: 'mydir/newdir',
@@ -401,6 +408,7 @@ describe('Object copy', () => {
         key: 'mydir',
         users: [{ email: 'haha@foo.com' }],
       };
+      ctx.aclCtx = await getAclCtx(env, ctx.org, ctx.users, '/');
       const details = {
         source: 'mydir',
         destination: 'mydir/newdir',
@@ -442,6 +450,7 @@ describe('Object copy', () => {
         key: 'mydir',
         users: [{ email: 'haha@foo.com' }],
       };
+      ctx.aclCtx = await getAclCtx(env, ctx.org, ctx.users, '/');
       const details = {
         source: 'mydir',
         destination: 'mydir/newdir',
@@ -451,6 +460,7 @@ describe('Object copy', () => {
       s3Mock.on(CopyObjectCommand).callsFake((input => {
         s3Sent.push(input);
       }));
+
       const resp = await copyObject(env, ctx, details, false);
       assert.strictEqual(resp.status, 204);
       assert.ifError(resp.body);

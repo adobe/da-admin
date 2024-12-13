@@ -130,7 +130,12 @@ export async function getAclCtx(env, org, users, key) {
   const pathLookup = new Map();
 
   const props = await env.DA_CONFIG?.get(org, { type: 'json' });
-  if (!props || !props.permissions.data) return true;
+  if (!props || !props.permissions.data) {
+    return {
+      pathLookup,
+      actions: ['read', 'write'],
+    };
+  }
 
   props.permissions.data.forEach(({ path, groups, actions }) => {
     groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
@@ -159,21 +164,19 @@ export async function getAclCtx(env, org, users, key) {
 }
 
 export function hasPermission(daCtx, path, action) {
-  console.log('hasPermission:', daCtx.users.map((u) => u.email), path, action);
-
   if (daCtx.aclCtx.pathLookup.size === 0) {
     return true;
   }
+
+  // eslint-disable-next-line no-param-reassign
+  if (!path.startsWith('/')) path = `/${path}`;
 
   // is it the path from the context? then return the cached value
   if (daCtx.key === path) {
     return daCtx.aclCtx.actions.includes(action);
   }
 
-  // TODO is it ever something else?
-
-  // eslint-disable-next-line no-param-reassign
-  if (!path.startsWith('/')) path = `/${path}`;
+  // The path is a sub-path which can happen during bulk operations
 
   const permission = daCtx.users
     .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, path).has(action));

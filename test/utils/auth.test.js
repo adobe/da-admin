@@ -17,7 +17,7 @@ import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import jose from './mocks/jose.js';
 import fetch from './mocks/fetch.js';
-import { hasPermission } from '../../src/utils/auth.js';
+import { getAclCtx, getUserActions, hasPermission } from '../../src/utils/auth.js';
 
 // ES Mocks
 const {
@@ -142,52 +142,143 @@ describe('DA auth', () => {
   });
 
   describe('path authorization', async () =>  {
+    const DA_CONFIG = {
+      'test': {
+        "total": 1,
+        "limit": 1,
+        "offset": 0,
+        "permissions": {
+          "data": [
+            {
+              "path": "/*",
+              "groups": "2345B0EA551D747/4711,123",
+              "actions": "read",
+            },
+            {
+              "path": "/*",
+              "groups": "2345B0EA551D747/8080",
+              "actions": "write",
+            },
+            {
+              "path": "/foo",
+              "groups": "2345B0EA551D747/4711",
+              "actions": "write",
+            }
+          ]
+        },
+        ":type": "multi-sheet"
+      }
+    };
+
+    const env2 = {
+      DA_CONFIG: {
+        get: (name) => {
+          return DA_CONFIG[name];
+        },
+      }
+    };
+
     it('test hasPermissions', async () => {
-      const DA_CONFIG = {
-        'test': {
-          "total": 1,
-          "limit": 1,
-          "offset": 0,
-          "data": {
-            "permissions": [
-              {
-                "path": "/*",
-                "groups": "2345B0EA551D747/4711,123",
-                "actions": "read",
-              },
-              {
-                "path": "/*",
-                "groups": "2345B0EA551D747/8080",
-                "actions": "write",
-              },
-              {
-                "path": "/foo",
-                "groups": "2345B0EA551D747/4711",
-                "actions": "write",
-              }
-            ]
-          },
-          ":type": "multi-sheet"
-        }
-      };
-      const env2 = {
-        DA_CONFIG: {
-          get: (name) => {
-            return DA_CONFIG[name];
-          },
-        }
-      };
-      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test',  env: env2 }, '/test', 'read'));
-      assert(!await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test',  env: env2 }, '/test', 'write'));
-      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}], org: 'test',  env: env2 }, '/foo', 'write'));
-      assert(!await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}],  org: 'test', env: env2 }, '/test', 'write'));
-      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'write'));
-      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'read'));
-      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}, {orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'read'));
-      assert(await hasPermission({ users: [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}, {orgIdent: '2345B0EA551D747', ident: 8080}]}],  org: 'test', env: env2 }, '/test', 'write'));
-      assert(!await hasPermission({ users: [{groups: []}],  org: 'test', env: env2 }, '/test', 'read'));
-      assert(await hasPermission({ users: [{ident: '123',groups: []}],  org: 'test', env: env2 }, '/test', 'read'));
-      assert(!await hasPermission({ users: [{ident: '123',groups: []}],  org: 'test', env: env2 }, '/test', 'write'));
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({users, org: 'test', aclCtx}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx}, '/test', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx}, '/foo', 'write'));
     });
- });
+
+    it('test hasPermissions2', async () => {
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 8080}]}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({users, org: 'test', key: '/test', aclCtx}, 'test', 'write'));
+      assert(hasPermission({users, org: 'test', key: '/test', aclCtx}, 'test', 'read'));
+    });
+
+    it('test hasPermissions3', async () => {
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}, {orgIdent: '2345B0EA551D747', ident: 8080}]}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({users, org: 'test', aclCtx}, '/test', 'read'));
+      assert(hasPermission({users, org: 'test', aclCtx}, '/test', 'write'));
+    });
+
+    it('test hasPermissions4', async () => {
+      const users = [{groups: []}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(!hasPermission({users, org: 'test', aclCtx}, '/test', 'read'));
+    });
+
+    it('test hasPermissions5', async () => {
+      const users = [{ident: '123',groups: []}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({users, org: 'test', aclCtx}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx}, '/test', 'write'));
+    });
+  });
+
+  describe('ACL context', () => {
+    it('get user actions', () => {
+      const patharr = [
+        {path: '/da-aem-boilerplate/authtest/sub/sub/*', actions: []},
+        {path: '/da-aem-boilerplate/authtest/sub/*', actions: ['read', 'write']},
+        {path: '/da-aem-boilerplate/authtest/*', actions: ['read']},
+        {path: '/*', actions: ['read', 'write']},
+        {path: '/', actions: ['read', 'write']},
+      ];
+
+      const pathlookup = new Map();
+      pathlookup.set('joe@acme.com', patharr);
+
+      const user = {
+        email: 'joe@acme.com',
+        ident: 'AAAA@bbb.e',
+        groups: [
+          {orgName: 'org1', orgIdent: 'ABCDEFG', ident: 123456, groupName: 'grp1'},
+          {orgName: 'org2', orgIdent: 'ZZZZZZZ', ident: 77777, groupName: 'grp2'},
+        ],
+      };
+
+      assert.deepStrictEqual(['read', 'write'],
+        [...getUserActions(pathlookup, user, '/')]);
+      assert.deepStrictEqual(['read'],
+        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub')]);
+      assert.deepStrictEqual(['read', 'write'],
+        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub/sub')]);
+    });
+  });
+
+  it('get user actions2', () => {
+    const patharr = [
+      {path: '/da-aem-boilerplate/', actions: ['read']},
+      {path: '/*', actions: ['read', 'write']},
+      {path: '/', actions: ['read', 'write']},
+    ];
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', patharr);
+    const patharr2 = [
+      {path: '/da-aem-boilerplate/authtest/*', actions: ['read', 'write']},
+      {path: '/*', actions: ['read']},
+    ];
+    pathlookup.set('ABCDEFG/123456', patharr2);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+      groups: [
+        {orgName: 'org1', orgIdent: 'ABCDEFG', ident: 123456, groupName: 'grp1'},
+        {orgName: 'org2', orgIdent: 'ZZZZZZZ', ident: 77777, groupName: 'grp2'},
+      ],
+    };
+    assert.deepStrictEqual(['read', 'write'],
+      [...getUserActions(pathlookup, user, '/')]);
+    assert.deepStrictEqual(['read', 'write'],
+      [...getUserActions(pathlookup, user, '/foo')]);
+    assert.deepStrictEqual(['read'],
+      [...getUserActions(pathlookup, user, '/da-aem-boilerplate/')]);
+    assert.deepStrictEqual(['read', 'write'],
+      [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/blah')]);
+  });
 });

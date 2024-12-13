@@ -26,7 +26,7 @@ const MAX_KEYS = 900;
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
 
-  if (!await hasPermission(daCtx, sourceKey, 'read') || !await hasPermission(daCtx, Key, 'write')) return;
+  if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) return;
 
   const input = {
     Bucket: `${daCtx.org}-content`,

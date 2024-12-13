@@ -12,6 +12,7 @@
 import assert from 'assert';
 import esmock from 'esmock';
 
+import { getAclCtx } from '../../src/utils/auth.js';
 
 describe('Source Route', () => {
   it('Test invalidate using service binding', async () => {
@@ -24,7 +25,7 @@ describe('Source Route', () => {
       DA_COLLAB: 'http://localhost:4444'
     };
 
-    const daCtx = {};
+    const daCtx = { aclCtx: { pathLookup: new Map() }};
     const putResp = async (e, c) => {
       if (e === env && c === daCtx) {
         return { status: 200 };
@@ -76,7 +77,7 @@ describe('Source Route', () => {
       };
 
       const env = { DA_COLLAB: 'http://localhost:1234' };
-      const daCtx = {};
+      const daCtx = { aclCtx: { pathLookup: new Map() }};
 
       const resp = await postSource({ req, env, daCtx });
       assert.equal(201, resp.status);
@@ -111,7 +112,7 @@ describe('Source Route', () => {
       };
 
       const env = { DA_COLLAB: 'http://localhost:1234' };
-      const daCtx = {};
+      const daCtx = { aclCtx: { pathLookup: new Map() }};
 
       const resp = await postSource({ req, env, daCtx });
       assert.equal(500, resp.status);
@@ -123,7 +124,7 @@ describe('Source Route', () => {
 
   it('Test getSource', async () => {
     const env = {};
-    const daCtx = {};
+    const daCtx = { aclCtx: { pathLookup: new Map() }};
 
     const called = [];
     const getResp = async (e, c) => {
@@ -147,7 +148,7 @@ describe('Source Route', () => {
 
   it('Test getSource with', async () => {
     const env = {};
-    const daCtx = {};
+    const daCtx = { aclCtx: { pathLookup: new Map() }};
 
     const deleteResp = async (e, c) => {
       if (e === env && c === daCtx) {
@@ -173,8 +174,8 @@ describe('Source Route', () => {
         "total": 1,
         "limit": 1,
         "offset": 0,
-        "data": {
-          "permissions": [
+        "permissions": {
+          "data": [
             {
               "path": "/*",
               "groups": "2345B0EA551D747/4711,123",
@@ -225,12 +226,15 @@ describe('Source Route', () => {
         }
       }
     );
+
     daCtx.key = '/test';
+    daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, daCtx.key);
     const resp = await getSource({env, daCtx});
     assert.equal(200, resp.status);
     assert.deepStrictEqual(called, ['getObject']);
 
     daCtx.key = '/bar';
+    daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, daCtx.key);
     const resp2 = await getSource({env, daCtx});
     assert.equal(403, resp2.status);
   });
