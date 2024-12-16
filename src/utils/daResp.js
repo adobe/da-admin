@@ -19,6 +19,7 @@ export default function daResp({
   headers.append('Access-Control-Allow-Origin', '*');
   headers.append('Access-Control-Allow-Methods', 'HEAD, GET, PUT, POST, DELETE');
   headers.append('Access-Control-Allow-Headers', '*');
+  headers.append('Access-Control-Expose-Headers', 'X-da-actions');
   headers.append('Content-Type', contentType);
   if (contentLength) {
     headers.append('Content-Length', contentLength);
