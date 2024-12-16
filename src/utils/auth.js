@@ -168,18 +168,18 @@ export function hasPermission(daCtx, path, action) {
     return true;
   }
 
-  // eslint-disable-next-line no-param-reassign
-  if (!path.startsWith('/')) path = `/${path}`;
+  const p = path.startsWith('/') ? path : `/${path}`;
+  const k = daCtx.key.startsWith('/') ? daCtx.key : `/${daCtx.key}`;
 
   // is it the path from the context? then return the cached value
-  if (daCtx.key === path) {
+  if (k === p) {
     return daCtx.aclCtx.actions.includes(action);
   }
 
   // The path is a sub-path which can happen during bulk operations
 
   const permission = daCtx.users
-    .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, path).has(action));
+    .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, p).has(action));
   if (!permission) {
     // eslint-disable-next-line no-console
     console.log(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);

@@ -181,10 +181,11 @@ describe('DA auth', () => {
     it('test hasPermissions', async () => {
       const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+      const key = '';
 
-      assert(hasPermission({users, org: 'test', aclCtx}, '/test', 'read'));
-      assert(!hasPermission({users, org: 'test', aclCtx}, '/test', 'write'));
-      assert(hasPermission({ users, org: 'test', aclCtx}, '/foo', 'write'));
+      assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/foo', 'write'));
     });
 
     it('test hasPermissions2', async () => {
@@ -198,24 +199,27 @@ describe('DA auth', () => {
     it('test hasPermissions3', async () => {
       const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}, {orgIdent: '2345B0EA551D747', ident: 8080}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+      const key = '';
 
-      assert(hasPermission({users, org: 'test', aclCtx}, '/test', 'read'));
-      assert(hasPermission({users, org: 'test', aclCtx}, '/test', 'write'));
+      assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
+      assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
     });
 
     it('test hasPermissions4', async () => {
       const users = [{groups: []}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+      const key = '';
 
-      assert(!hasPermission({users, org: 'test', aclCtx}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
     });
 
     it('test hasPermissions5', async () => {
       const users = [{ident: '123',groups: []}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+      const key = '';
 
-      assert(hasPermission({users, org: 'test', aclCtx}, '/test', 'read'));
-      assert(!hasPermission({users, org: 'test', aclCtx}, '/test', 'write'));
+      assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
     });
   });
 
@@ -245,6 +249,8 @@ describe('DA auth', () => {
         [...getUserActions(pathlookup, user, '/')]);
       assert.deepStrictEqual(['read'],
         [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub')]);
+      assert.deepStrictEqual(['read'],
+        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/q.html')]);
       assert.deepStrictEqual(['read', 'write'],
         [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub/sub')]);
     });
