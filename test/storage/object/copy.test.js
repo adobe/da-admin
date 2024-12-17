@@ -39,6 +39,70 @@ describe('Object copy', () => {
     assert.strictEqual(resp.status, 409);
   });
 
+  it('returns 403 when copying to a location without write permission', async () => {
+    const pathLookup = new Map();
+    pathLookup.set('aaa@bbb.ccc', [
+      {path: '/source/mysrc', actions: ['read']},
+      {path: '/source/mydst', actions: ['read']}
+    ]);
+
+    const aclCtx = { pathLookup, actions: ['read'] };
+    const ctx = { aclCtx, key: 'source/mysrc', users: [{email: 'aaa@bbb.ccc'}] };
+
+    const details = {
+      source: 'mysrc',
+      destination: 'mydst',
+    };
+
+    const { copyFile } = await import('../../../src/storage/object/copy.js');
+    const resp = await copyFile({}, {}, ctx, '/source/mysrc', details, false);
+    assert.strictEqual(resp.$metadata.httpStatusCode, 403);
+  });
+
+  it('Copy to location with permission', async () => {
+    const pathLookup = new Map();
+    pathLookup.set('aaa@bbb.ccc', [
+      {path: '/source/mysrc', actions: ['read']},
+      {path: '/source/mydst', actions: ['read', 'write']}
+    ]);
+
+    const aclCtx = { pathLookup, actions: ['read'] };
+    const ctx = { aclCtx, key: 'source/mysrc', org: 'org', users: [{email: 'aaa@bbb.ccc'}] };
+
+    const details = {
+      source: 'mysrc',
+      destination: 'mydst',
+    };
+
+    const mockS3Client = class {
+      send(command) {
+        return {
+          command,
+          $metadata: { httpStatusCode: 200 },
+        };
+      }
+      middlewareStack = {
+        add: (a, b) => {},
+      };
+    };
+
+    const { copyFile } = await esmock(
+      '../../../src/storage/object/copy.js', {
+        '@aws-sdk/client-s3': {
+          S3Client: mockS3Client
+        },
+      }
+    )
+
+    const resp = await copyFile({}, {}, ctx, 'source/mysrc', details, true);
+    assert.strictEqual(resp.$metadata.httpStatusCode, 200);
+    const input = resp.command.input;
+    assert.strictEqual(input.Bucket, 'org-content');
+    assert.strictEqual(input.CopySource, 'org-content/source/mysrc');
+    assert.strictEqual(input.Key, 'source/mydst');
+    assert(input.MetadataDirective === undefined);
+  });
+
   describe('single file context', () => {
     it('Copies a file', async () => {
       s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'mydir/xyz.html' }] });
