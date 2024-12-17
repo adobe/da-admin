@@ -260,6 +260,8 @@ describe('DA auth', () => {
     const patharr = [
       {path: '/da-aem-boilerplate/*', actions: ['read']},
       {path: '/da-aem-boilerplate', actions: ['read']},
+      {path: '/somewhere', actions: ['read']},
+      {path: '/foobar/+*', actions: []},
       {path: '/*', actions: ['read', 'write']},
       {path: '/', actions: ['read', 'write']},
     ];
@@ -268,7 +270,7 @@ describe('DA auth', () => {
     const patharr2 = [
       {path: '/da-aem-boilerplate/authtest/myfile', actions: ['read']},
       {path: '/da-aem-boilerplate/authtest/*', actions: ['read', 'write']},
-      {path: '/*', actions: ['read']},
+      {path: '/*', actions: []},
     ];
     pathlookup.set('ABCDEFG/123456', patharr2);
 
@@ -286,6 +288,14 @@ describe('DA auth', () => {
       [...getUserActions(pathlookup, user, '/foo')]);
     assert.deepStrictEqual(['read'],
       [...getUserActions(pathlookup, user, '/da-aem-boilerplate')]);
+    assert.deepStrictEqual(['read'],
+      [...getUserActions(pathlookup, user, '/somewhere')]);
+    assert.deepStrictEqual(['read', 'write'],
+      [...getUserActions(pathlookup, user, '/somewhere/else')]);
+    assert.deepStrictEqual([],
+      [...getUserActions(pathlookup, user, '/foobar')]);
+    assert.deepStrictEqual([],
+      [...getUserActions(pathlookup, user, '/foobar/har')]);
     assert.deepStrictEqual(['read'],
       [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/myfile.html')]);
     assert.deepStrictEqual(['read', 'write'],

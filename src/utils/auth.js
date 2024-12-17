@@ -117,6 +117,7 @@ export function getUserActions(pathLookup, user, target) {
   const plVals = idents.map((key) => pathLookup.get(key) || []);
   const actions = plVals.map((entries) => entries
     .find(({ path }) => {
+      if (path.endsWith('/+*')) return target.startsWith(path.slice(0, -2)) || target === path.slice(0, -3);
       if (target.length < path.length) return false;
       if (path.endsWith('/*')) return target.startsWith(path.slice(0, -1));
       if (target.endsWith('.html')) return target.slice(0, -5) === path;
