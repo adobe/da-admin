@@ -83,6 +83,33 @@ export async function getUsers(req, env) {
   );
 }
 
+// This is somewhat similar to isAuthorized, but the expectation is that
+// isAuthorized will disappear at some point
+export async function isAdmin(env, org, users) {
+  if (!org) return false;
+  if (users.length === 0) return false;
+
+  let props = await env.DA_CONFIG.get(org, { type: 'json' });
+  if (!props) return false;
+
+  // When the data is a multi-sheet, it's one level deeper
+  if (props[':type'] === 'multi-sheet') {
+    props = props.data;
+  }
+
+  const admins = props.data.reduce((acc, data) => {
+    if (data.key === 'admin.role.all') acc.push(data.value.toLowerCase());
+    return acc;
+  }, []);
+
+  if (!admins || !admins.length) return false;
+
+  for (const u of users) {
+    if (!admins.includes(u.email.toLowerCase())) return false;
+  }
+  return true;
+}
+
 export async function isAuthorized(env, org, user) {
   if (!org) return true;
 
@@ -164,12 +191,12 @@ export async function getAclCtx(env, org, users, key) {
   return { pathLookup, actions };
 }
 
-export function hasPermission(daCtx, path, action) {
+export function hasPermission(daCtx, path, action, keywordPath = false) {
   if (daCtx.aclCtx.pathLookup.size === 0) {
     return true;
   }
 
-  const p = path.startsWith('/') ? path : `/${path}`;
+  const p = !path.startsWith('/') && !keywordPath ? `/${path}` : path;
   const k = daCtx.key.startsWith('/') ? daCtx.key : `/${daCtx.key}`;
 
   // is it the path from the context? then return the cached value
