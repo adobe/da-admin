@@ -163,6 +163,11 @@ describe('DA auth', () => {
               "path": "/foo",
               "groups": "2345B0EA551D747/4711",
               "actions": "write",
+            },
+            {
+              "path": "/bar/ + *",
+              "groups": "2345B0EA551D747/4711",
+              "actions": "write",
             }
           ]
         },
@@ -186,6 +191,8 @@ describe('DA auth', () => {
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
       assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
       assert(hasPermission({ users, org: 'test', aclCtx, key}, '/foo', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/bar', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/bar/something.jpg', 'write'));
     });
 
     it('test hasPermissions2', async () => {
@@ -231,6 +238,7 @@ describe('DA auth', () => {
         {path: '/da-aem-boilerplate/authtest/*', actions: ['read']},
         {path: '/*', actions: ['read', 'write']},
         {path: '/', actions: ['read', 'write']},
+        {path: 'CONFIG', actions: ['read']},
       ];
 
       const pathlookup = new Map();
@@ -253,6 +261,8 @@ describe('DA auth', () => {
         [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/q.html')]);
       assert.deepStrictEqual(['read', 'write'],
         [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub/sub')]);
+      assert.deepStrictEqual(['read'],
+        [...getUserActions(pathlookup, user, 'CONFIG')]);
     });
   });
 

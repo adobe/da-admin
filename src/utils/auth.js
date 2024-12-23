@@ -172,7 +172,7 @@ export async function getAclCtx(env, org, users, key) {
       pathLookup
         .get(group)
         .push({
-          path,
+          path: path.replace(/ /g, ''),
           actions: actions
             .split(',')
             .map((entry) => entry.trim())
