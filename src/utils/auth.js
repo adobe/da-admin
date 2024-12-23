@@ -167,12 +167,17 @@ export async function getAclCtx(env, org, users, key) {
   }
 
   props.permissions.data.forEach(({ path, groups, actions }) => {
+    let effectivePath = path.replace(/ /g, '');
+    if (effectivePath.endsWith('/') && effectivePath.length > 1) {
+      effectivePath = effectivePath.slice(0, -1);
+    }
+
     groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
       if (!pathLookup.has(group)) pathLookup.set(group, []);
       pathLookup
         .get(group)
         .push({
-          path: path.replace(/ /g, ''),
+          path: effectivePath,
           actions: actions
             .split(',')
             .map((entry) => entry.trim())

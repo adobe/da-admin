@@ -168,6 +168,16 @@ describe('DA auth', () => {
               "path": "/bar/ + *",
               "groups": "2345B0EA551D747/4711",
               "actions": "write",
+            },
+            {
+              "path": "/",
+              "groups": "2345B0EA551D747/4711",
+              "actions": "write",
+            },
+            {
+              "path": "/furb/",
+              "groups": "2345B0EA551D747/4711",
+              "actions": "write",
             }
           ]
         },
@@ -194,15 +204,18 @@ describe('DA auth', () => {
     });
 
     it('test hasPermissions', async () => {
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
-      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
       const key = '';
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
       assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
       assert(hasPermission({ users, org: 'test', aclCtx, key}, '/foo', 'write'));
       assert(hasPermission({ users, org: 'test', aclCtx, key}, '/bar', 'write'));
       assert(hasPermission({ users, org: 'test', aclCtx, key}, '/bar/something.jpg', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/flob', 'read'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/furb', 'write'));
     });
 
     it('test hasPermissions2', async () => {
@@ -214,26 +227,26 @@ describe('DA auth', () => {
     });
 
     it('test hasPermissions3', async () => {
+      const key = '/test';
       const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}, {orgIdent: '2345B0EA551D747', ident: 8080}]}];
-      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
-      const key = '';
+      const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
     });
 
     it('test hasPermissions4', async () => {
-      const users = [{groups: []}];
-      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
       const key = '';
+      const users = [{groups: []}];
+      const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
     });
 
     it('test hasPermissions5', async () => {
-      const users = [{ident: '123',groups: []}];
-      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
       const key = '';
+      const users = [{ident: '123',groups: []}];
+      const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
       assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
