@@ -25,7 +25,7 @@ export default function daResp({
     headers.append('Content-Length', contentLength);
   }
   if (ctx?.aclCtx) {
-    headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actions]}`);
+    headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
   }
 
   return new Response(body, { status, headers });

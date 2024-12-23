@@ -46,7 +46,7 @@ describe('Object copy', () => {
       {path: '/source/mydst', actions: ['read']}
     ]);
 
-    const aclCtx = { pathLookup, actions: ['read'] };
+    const aclCtx = { pathLookup, actionSet: new Set(['read'])};
     const ctx = { aclCtx, key: 'source/mysrc', users: [{email: 'aaa@bbb.ccc'}] };
 
     const details = {
@@ -66,7 +66,7 @@ describe('Object copy', () => {
       {path: '/source/mydst', actions: ['read', 'write']}
     ]);
 
-    const aclCtx = { pathLookup, actions: ['read'] };
+    const aclCtx = { pathLookup, actionSet: new Set(['read'])};
     const ctx = { aclCtx, key: 'source/mysrc', org: 'org', users: [{email: 'aaa@bbb.ccc'}] };
 
     const details = {

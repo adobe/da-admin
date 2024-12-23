@@ -139,9 +139,10 @@ export function getUserActions(pathLookup, user, target) {
       `${group.orgName}/${group.groupName}`,
     ])
     .concat(user.ident)
-    .concat(user.email);
+    .concat(user.email)
+    .filter((e) => e !== undefined);
 
-  const plVals = idents.map((key) => pathLookup.get(key.toLowerCase()) || []);
+  const plVals = idents.map((key) => pathLookup.get(key) || []);
   const actions = plVals.map((entries) => entries
     .find(({ path }) => {
       if (path.endsWith('/+*')) return target.startsWith(path.slice(0, -2)) || target === path.slice(0, -3);
@@ -161,16 +162,15 @@ export async function getAclCtx(env, org, users, key) {
   if (!props || !props.permissions.data) {
     return {
       pathLookup,
-      actions: ['read', 'write'],
+      actionSet: new Set(['read', 'write']),
     };
   }
 
   props.permissions.data.forEach(({ path, groups, actions }) => {
     groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
-      const lcGroup = group.toLowerCase();
-      if (!pathLookup.has(lcGroup)) pathLookup.set(lcGroup, []);
+      if (!pathLookup.has(group)) pathLookup.set(group, []);
       pathLookup
-        .get(lcGroup)
+        .get(group)
         .push({
           path,
           actions: actions
@@ -189,13 +189,13 @@ export async function getAclCtx(env, org, users, key) {
   const k = key.startsWith('/') ? key : `/${key}`;
 
   const [firstUser, ...otherUsers] = users;
-  let actions = getUserActions(pathLookup, firstUser, k);
+  let actionSet = getUserActions(pathLookup, firstUser, k);
   for (const u of otherUsers) {
     const ua = getUserActions(pathLookup, u, k);
-    actions = actions.intersection(ua);
+    actionSet = actionSet.intersection(ua);
   }
 
-  return { pathLookup, actions };
+  return { pathLookup, actionSet };
 }
 
 export function hasPermission(daCtx, path, action, keywordPath = false) {
@@ -208,7 +208,7 @@ export function hasPermission(daCtx, path, action, keywordPath = false) {
 
   // is it the path from the context? then return the cached value
   if (k === p) {
-    return daCtx.aclCtx.actions.has(action);
+    return daCtx.aclCtx.actionSet.has(action);
   }
 
   // The path is a sub-path which can happen during bulk operations
