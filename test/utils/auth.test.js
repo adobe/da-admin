@@ -151,7 +151,7 @@ describe('DA auth', () => {
           "data": [
             {
               "path": "/*",
-              "groups": "2345B0EA551D747/4711,123",
+              "groups": "2345B0EA551D747/4711,123,joe@bloggs.org",
               "actions": "read",
             },
             {
@@ -182,6 +182,16 @@ describe('DA auth', () => {
         },
       }
     };
+
+    it('test anonumous permissions', async () => {
+      const users = [{email: 'anonymous'}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(!hasPermission({users, org: 'test', aclCtx, key: ''}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key: ''}, '/test', 'write'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key: '/test'}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key: '/test'}, '/test', 'write'));
+    });
 
     it('test hasPermissions', async () => {
       const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
@@ -227,6 +237,16 @@ describe('DA auth', () => {
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
       assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
+    });
+
+    it('test hasPermissions6', async () => {
+      const users = [{email: 'joe@bloggs.org', groups: []}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({users, org: 'test', aclCtx, key: ''}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key: ''}, '/test', 'write'));
+      assert(hasPermission({users, org: 'test', aclCtx, key: '/test'}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key: '/test'}, '/test', 'write'));
     });
   });
 
