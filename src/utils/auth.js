@@ -141,7 +141,7 @@ export function getUserActions(pathLookup, user, target) {
     .concat(user.ident)
     .concat(user.email);
 
-  const plVals = idents.map((key) => pathLookup.get(key) || []);
+  const plVals = idents.map((key) => pathLookup.get(key.toLowerCase()) || []);
   const actions = plVals.map((entries) => entries
     .find(({ path }) => {
       if (path.endsWith('/+*')) return target.startsWith(path.slice(0, -2)) || target === path.slice(0, -3);
@@ -167,9 +167,10 @@ export async function getAclCtx(env, org, users, key) {
 
   props.permissions.data.forEach(({ path, groups, actions }) => {
     groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
-      if (!pathLookup.has(group)) pathLookup.set(group, []);
+      const lcGroup = group.toLowerCase();
+      if (!pathLookup.has(lcGroup)) pathLookup.set(lcGroup, []);
       pathLookup
-        .get(group)
+        .get(lcGroup)
         .push({
           path,
           actions: actions
@@ -186,7 +187,13 @@ export async function getAclCtx(env, org, users, key) {
 
   // Do a lookup for the base key, we always need this info
   const k = key.startsWith('/') ? key : `/${key}`;
-  const actions = users.reduce((acc, u) => acc.concat([...getUserActions(pathLookup, u, k)]), []);
+
+  const [firstUser, ...otherUsers] = users;
+  let actions = getUserActions(pathLookup, firstUser, k);
+  for (const u of otherUsers) {
+    const ua = getUserActions(pathLookup, u, k);
+    actions = actions.intersection(ua);
+  }
 
   return { pathLookup, actions };
 }
@@ -201,7 +208,7 @@ export function hasPermission(daCtx, path, action, keywordPath = false) {
 
   // is it the path from the context? then return the cached value
   if (k === p) {
-    return daCtx.aclCtx.actions.includes(action);
+    return daCtx.aclCtx.actions.has(action);
   }
 
   // The path is a sub-path which can happen during bulk operations
