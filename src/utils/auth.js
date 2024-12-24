@@ -220,16 +220,21 @@ export function hasPermission(daCtx, path, action, keywordPath = false) {
 
   // is it the path from the context? then return the cached value
   if (k === p) {
-    return daCtx.aclCtx.actionSet.has(action);
+    const perm = daCtx.aclCtx.actionSet.has(action);
+    if (!perm) {
+      // eslint-disable-next-line no-console
+      console.log(`User ${daCtx.users.map((u) => u.email)} doesn't have permission to ${action} ${path}`);
+    }
+    return perm;
   }
 
   // The path is a sub-path which can happen during bulk operations
 
   const permission = daCtx.users
     .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, p).has(action));
-  if (!permission) {
+  if (!permission && !keywordPath) {
     // eslint-disable-next-line no-console
-    console.log(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);
+    console.warn(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);
   }
   return permission;
 }
