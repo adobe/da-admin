@@ -159,7 +159,7 @@ export async function getAclCtx(env, org, users, key) {
   const pathLookup = new Map();
 
   const props = await env.DA_CONFIG?.get(org, { type: 'json' });
-  if (!props || !props.permissions.data) {
+  if (!props?.permissions?.data) {
     return {
       pathLookup,
       actionSet: new Set(['read', 'write']),
@@ -167,6 +167,8 @@ export async function getAclCtx(env, org, users, key) {
   }
 
   props.permissions.data.forEach(({ path, groups, actions }) => {
+    if (!path || !groups) return;
+
     let effectivePath = path.replace(/ /g, '');
     if (effectivePath.endsWith('/') && effectivePath.length > 1) {
       effectivePath = effectivePath.slice(0, -1);
@@ -194,10 +196,15 @@ export async function getAclCtx(env, org, users, key) {
   const k = key.startsWith('/') ? key : `/${key}`;
 
   const [firstUser, ...otherUsers] = users;
-  let actionSet = getUserActions(pathLookup, firstUser, k);
-  for (const u of otherUsers) {
-    const ua = getUserActions(pathLookup, u, k);
-    actionSet = actionSet.intersection(ua);
+  let actionSet;
+  if (firstUser) {
+    actionSet = getUserActions(pathLookup, firstUser, k);
+    for (const u of otherUsers) {
+      const ua = getUserActions(pathLookup, u, k);
+      actionSet = actionSet.intersection(ua);
+    }
+  } else {
+    actionSet = new Set();
   }
 
   return { pathLookup, actionSet };

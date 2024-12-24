@@ -263,6 +263,100 @@ describe('DA auth', () => {
     });
   });
 
+  it('test getAclCtx missing props', async () => {
+    const aclCtx = await getAclCtx({}, 'myorg', [], '/foo');
+    assert.strictEqual(aclCtx.pathLookup.size, 0);
+    assert(aclCtx.actionSet.has('read'));
+    assert(aclCtx.actionSet.has('write'));
+  });
+
+  it('test getAclCtx missing props2', async () => {
+    const cfgGet = (o, t) => {
+      if ((o === 'myorg') && (t.type === 'json')) {
+        return {};
+      }
+    };
+    const DA_CONFIG = { get: cfgGet };
+    const env = { DA_CONFIG };
+
+    const aclCtx = await getAclCtx(env, 'myorg', [], '/foo');
+    assert.strictEqual(aclCtx.pathLookup.size, 0);
+    assert(aclCtx.actionSet.has('read'));
+    assert(aclCtx.actionSet.has('write'));
+  });
+
+  it('test getAclCtx missing props3', async () => {
+    const cfgGet = (o, t) => {
+      if ((o === 'someorg') && (t.type === 'json')) {
+        return { permissions: {}};
+      }
+    };
+    const DA_CONFIG = { get: cfgGet };
+    const env = { DA_CONFIG };
+
+    const aclCtx = await getAclCtx(env, 'someorg', [], '/foo');
+    assert.strictEqual(aclCtx.pathLookup.size, 0);
+    assert(aclCtx.actionSet.has('read'));
+    assert(aclCtx.actionSet.has('write'));
+  });
+
+  it('test incorrect props doesnt break things', async () => {
+    const data = [{ groups: 'abc', actions: 'read' }];
+    const permissions = { data };
+    const cfgGet = (o, t) => {
+      if ((o === 'someorg') && (t.type === 'json')) {
+        return { permissions };
+      }
+    };
+    const DA_CONFIG = { get: cfgGet };
+    const env = { DA_CONFIG };
+
+    const aclCtx = await getAclCtx(env, 'someorg', [], '/foo');
+    assert.strictEqual(aclCtx.pathLookup.size, 0);
+    assert.strictEqual(aclCtx.actionSet.size, 0);
+  });
+
+  it('test incorrect props doesnt break things', async () => {
+    const data = [{ path: '/abc', actions: 'read' }];
+    const permissions = { data };
+    const cfgGet = (o, t) => {
+      if ((o === 'someorg') && (t.type === 'json')) {
+        return { permissions };
+      }
+    };
+    const DA_CONFIG = { get: cfgGet };
+    const env = { DA_CONFIG };
+
+    const aclCtx = await getAclCtx(env, 'someorg', [], '/foo');
+    assert.strictEqual(aclCtx.pathLookup.size, 0);
+    assert.strictEqual(aclCtx.actionSet.size, 0);
+  });
+
+  it('test correct props', async () => {
+    const data = [{ path: '/abc', groups: 'a ha, b hoo', actions: 'read' }];
+    const permissions = { data };
+    const cfgGet = (o, t) => {
+      if ((o === 'someorg') && (t.type === 'json')) {
+        return { permissions };
+      }
+    };
+    const DA_CONFIG = { get: cfgGet };
+    const env = { DA_CONFIG };
+
+    const aclCtx = await getAclCtx(env, 'someorg', [], '/foo');
+    assert.strictEqual(aclCtx.pathLookup.size, 2);
+
+    const p1 = aclCtx.pathLookup.get('a ha');
+    const p2 = aclCtx.pathLookup.get('b hoo');
+
+    assert.strictEqual(p1.length, 1);
+    assert.strictEqual(p1[0].path, '/abc');
+    assert.deepStrictEqual(p1[0].actions, ['read']);
+    assert.deepStrictEqual(p2, p1);
+
+    assert.strictEqual(aclCtx.actionSet.size, 0);
+  });
+
   describe('ACL context', () => {
     it('get user actions', () => {
       const patharr = [
