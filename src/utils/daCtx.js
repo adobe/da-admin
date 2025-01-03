@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import { getAclCtx, getUsers, isAuthorized } from './auth.js';
+import { getAclCtx, getUsers } from './auth.js';
 
 /**
  * Gets Dark Alley Context
@@ -43,15 +43,6 @@ export default async function getDaCtx(req, env) {
     fullKey,
     origin: new URL(req.url).origin,
   };
-
-  // Get org properties
-  daCtx.authorized = true;
-  // check for all users in the session if they are authorized
-  for (const user of users) {
-    if (!await isAuthorized(env, org, user)) {
-      daCtx.authorized = false;
-    }
-  }
 
   // Sanitize the remaining path parts
   const path = parts.filter((part) => part !== '');
@@ -86,6 +77,7 @@ export default async function getDaCtx(req, env) {
   }
 
   daCtx.aclCtx = await getAclCtx(env, org, users, keyBase);
+  daCtx.authorized = daCtx.aclCtx.actionSet.has('read');
 
   return daCtx;
 }

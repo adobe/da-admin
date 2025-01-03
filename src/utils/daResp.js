@@ -24,10 +24,10 @@ export default function daResp({
   if (contentLength) {
     headers.append('Content-Length', contentLength);
   }
-  if (ctx?.aclCtx) {
+  if (ctx?.aclCtx && status < 400) {
     headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
-    if (ctx.authorized) {
-      // Admins can see the ACL trace
+    if (ctx.aclCtx.actionSet.has('write')) {
+      // If you can write, you get the acl trace too
       headers.append('X-da-acltrace', JSON.stringify(ctx.aclCtx.actionTrace));
     }
   }

@@ -21,82 +21,11 @@ import { getAclCtx, getUserActions, hasPermission, isAdmin } from '../../src/uti
 
 // ES Mocks
 const {
-  isAuthorized,
   setUser,
   getUsers,
 } = await esmock('../../src/utils/auth.js', { jose, import: { fetch } });
 
 describe('DA auth', () => {
-  describe('is authorized', async () => {
-    // There's nothing to protect if there is no org in the request
-    it('authorized if no org', async () => {
-      const authorized = await isAuthorized(env);
-      assert.strictEqual(authorized, true);
-    });
-
-    it('authorized if no namespace entry', async () => {
-      const authed = await isAuthorized(env, 'wknd', { email: 'aparker@geometrixx.info' });
-      assert.strictEqual(authed, true);
-    });
-
-    it('authorized if no protections', async () => {
-      const authed = await isAuthorized(env, 'beagle', { email: 'chad@geometrixx.info' });
-      assert.strictEqual(authed, true);
-    });
-
-    it('authorized if org and user match', async () => {
-      const authed = await isAuthorized(env, 'geometrixx', { email: 'aparker@geometrixx.info' });
-      assert.strictEqual(authed, true);
-    });
-
-    it('authorized if org and user match - case insensitive', async () => {
-      const authed = await isAuthorized(env, 'geometrixx', { email: 'ApaRkeR@geometrixx.info' });
-      assert.strictEqual(authed, true);
-    });
-
-    it('not authorized no user match', async () => {
-      const authed = await isAuthorized(env, 'geometrixx', { email: 'chad@geometrixx.info' });
-      assert.strictEqual(authed, false);
-    });
-
-    it('authorization multi sheet config', async () => {
-      const DA_CONFIG = {
-        'geometrixx': {
-          "total": 1,
-          "limit": 1,
-          "offset": 0,
-          "data": {
-            "data": [
-              {
-                "key": "admin.role.all",
-                "value": "aPaRKer@Geometrixx.Info"
-              }
-            ],
-            "otherdata": [
-              {
-                "key": "foo",
-                "value": "bar"
-              }
-            ],
-          },
-          ":type": "multi-sheet"
-        }
-      };
-      const env2 = {
-        DA_CONFIG: {
-          get: (name) => {
-            return DA_CONFIG[name];
-          },
-        }
-      };
-
-      assert(await isAuthorized(env2, 'wknd', { email: 'aparker@geometrixx.info' }));
-      assert(await isAuthorized(env2, 'geometrixx', { email: 'aparker@geometrixx.info' }));
-      assert(await isAuthorized(env, 'geometrixx', { email: 'ApaRkeR@geometrixx.info' }));
-      assert(!await isAuthorized(env, 'geometrixx', { email: 'chad@geometrixx.info' }));
-    });
-  });
-
   describe('get user', async () => {
     it('anonymous with no auth header', async () => {
       const users = await getUsers(reqs.org, env);

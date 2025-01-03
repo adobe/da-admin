@@ -83,8 +83,6 @@ export async function getUsers(req, env) {
   );
 }
 
-// This is somewhat similar to isAuthorized, but the expectation is that
-// isAuthorized will disappear at some point
 export async function isAdmin(env, org, users) {
   if (!org) return false;
   if (users.length === 0) return false;
@@ -108,26 +106,6 @@ export async function isAdmin(env, org, users) {
     if (!admins.includes(u.email.toLowerCase())) return false;
   }
   return true;
-}
-
-export async function isAuthorized(env, org, user) {
-  if (!org) return true;
-
-  let props = await env.DA_CONFIG.get(org, { type: 'json' });
-  if (!props) return true;
-
-  // When the data is a multi-sheet, it's one level deeper
-  if (props[':type'] === 'multi-sheet') {
-    props = props.data;
-  }
-
-  const admins = props.data.reduce((acc, data) => {
-    if (data.key === 'admin.role.all') acc.push(data.value);
-    return acc;
-  }, []);
-
-  if (!admins || !admins.length) return true;
-  return admins.some((admin) => admin.toLowerCase() === user.email.toLowerCase());
 }
 
 export function getUserActions(pathLookup, user, target) {
