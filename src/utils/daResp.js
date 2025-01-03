@@ -26,10 +26,7 @@ export default function daResp({
   }
   if (ctx?.aclCtx && status < 400) {
     headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
-    if (ctx.aclCtx.actionSet.has('write')) {
-      // If you can write, you get the acl trace too
-      headers.append('X-da-acltrace', JSON.stringify(ctx.aclCtx.actionTrace));
-    }
+    headers.append('X-da-acltrace', JSON.stringify(ctx.aclCtx.actionTrace));
   }
 
   return new Response(body, { status, headers });

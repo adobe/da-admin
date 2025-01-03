@@ -238,4 +238,73 @@ describe('Source Route', () => {
     const resp2 = await getSource({env, daCtx});
     assert.equal(403, resp2.status);
   });
+
+  it('Test deleteSource with permissions', async() => {
+    const deleteCalled = [];
+    const deleteCall = (e, c, d) => {
+      deleteCalled.push({e, c, d});
+    };
+
+    const ctx = { key: '/a/b/c.html' };
+    const hasPermission = (c, k, a) => {
+      if (k === '/a/b/c.html' && a === 'write') {
+        return false;
+      }
+      return true;
+    }
+
+    const { deleteSource } = await esmock(
+      '../../src/routes/source.js', {
+        '../../src/storage/object/delete.js': {
+          default: deleteCall
+        },
+        '../../src/utils/auth.js': {
+          hasPermission
+        },
+      }
+    );
+
+    const resp = await deleteSource({ req: {}, env: {}, daCtx: ctx });
+    assert.strictEqual(403, resp.status);
+    assert.strictEqual(deleteCalled.length, 0);
+
+    await deleteSource({ req: {}, env: {}, daCtx: { key: 'foobar.html' }});
+    assert.strictEqual(deleteCalled.length, 1);
+    assert.strictEqual(deleteCalled[0].c.key, 'foobar.html');
+  });
+
+  it('Test postSource with permissions', async () => {
+    const putCalled = [];
+    const putCall = (e, c, o) => {
+      putCalled.push({e, c, o});
+      return { status: 202 }; // 202 skips the invalidate collab which is easy for the test
+    };
+
+    const ctx = { key: '/foo/bar.png' };
+    const hasPermission = (c, k, a) => {
+      if (k === '/foo/bar.png' && a === 'write') {
+        return false;
+      }
+      return true;
+    }
+
+    const { postSource } = await esmock(
+      '../../src/routes/source.js', {
+        '../../src/storage/object/put.js': {
+          default: putCall
+        },
+        '../../src/utils/auth.js': {
+          hasPermission
+        },
+      }
+    );
+
+    const resp = await postSource({ req: {}, env: {}, daCtx: ctx });
+    assert.strictEqual(403, resp.status);
+    assert.strictEqual(putCalled.length, 0);
+
+    await postSource({ req: { headers: new Headers() }, env: {}, daCtx: { key: 'haha.png' }});
+    assert.strictEqual(putCalled.length, 1);
+    assert.strictEqual(putCalled[0].c.key, 'haha.png');
+  });
 });

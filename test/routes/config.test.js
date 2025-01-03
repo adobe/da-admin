@@ -25,7 +25,7 @@ describe('Config', () => {
     };
 
     const hasPermission = (c, k, a, kw) => {
-      if (c === ctx && k === 'CONFIG' && a === 'write' && kw === true) {
+      if (k === 'CONFIG' && a === 'write' && kw === true) {
         return true;
       }
     };
@@ -107,7 +107,7 @@ describe('Config', () => {
     };
 
     const hasPermission = (c, k, a, kw) => {
-      if (c === ctx && k === 'CONFIG' && a === 'read' && kw === true) {
+      if (k === 'CONFIG' && a === 'read' && kw === true) {
         return true;
       }
     };
