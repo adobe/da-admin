@@ -150,9 +150,13 @@ export function getUserActions(pathLookup, user, target) {
       if (path.endsWith('/*')) return target.startsWith(path.slice(0, -1));
       if (target.endsWith('.html')) return target.slice(0, -5) === path;
       return target === path;
-    }) || { actions: [] });
+    }) || { actions: [] })
+    .filter((a) => a.path);
 
-  return new Set(actions.flatMap(({ actions: acts }) => acts));
+  return {
+    actions: new Set(actions.flatMap(({ actions: acts }) => acts)),
+    trace: actions,
+  };
 }
 
 export async function getAclCtx(env, org, users, key) {
@@ -179,6 +183,7 @@ export async function getAclCtx(env, org, users, key) {
       pathLookup
         .get(group)
         .push({
+          ident: group,
           path: effectivePath,
           actions: actions
             .split(',')
@@ -197,17 +202,21 @@ export async function getAclCtx(env, org, users, key) {
 
   const [firstUser, ...otherUsers] = users;
   let actionSet;
+  let actionTrace;
   if (firstUser) {
-    actionSet = getUserActions(pathLookup, firstUser, k);
+    const fa = getUserActions(pathLookup, firstUser, k);
+    actionSet = fa.actions;
+    actionTrace = fa.trace;
     for (const u of otherUsers) {
       const ua = getUserActions(pathLookup, u, k);
-      actionSet = actionSet.intersection(ua);
+      actionSet = actionSet.intersection(ua.actions);
+      ua.trace.forEach((t) => actionTrace.push(t));
     }
   } else {
     actionSet = new Set();
   }
 
-  return { pathLookup, actionSet };
+  return { pathLookup, actionSet, actionTrace };
 }
 
 export function hasPermission(daCtx, path, action, keywordPath = false) {
@@ -231,7 +240,7 @@ export function hasPermission(daCtx, path, action, keywordPath = false) {
   // The path is a sub-path which can happen during bulk operations
 
   const permission = daCtx.users
-    .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, p).has(action));
+    .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, p).actions.has(action));
   if (!permission && !keywordPath) {
     // eslint-disable-next-line no-console
     console.warn(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);

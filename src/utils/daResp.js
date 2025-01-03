@@ -26,6 +26,10 @@ export default function daResp({
   }
   if (ctx?.aclCtx) {
     headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
+    if (ctx.authorized) {
+      // Admins can see the ACL trace
+      headers.append('X-da-acltrace', JSON.stringify(ctx.aclCtx.actionTrace));
+    }
   }
 
   return new Response(body, { status, headers });

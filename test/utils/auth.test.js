@@ -352,7 +352,9 @@ describe('DA auth', () => {
     assert.strictEqual(p1.length, 1);
     assert.strictEqual(p1[0].path, '/abc');
     assert.deepStrictEqual(p1[0].actions, ['read']);
-    assert.deepStrictEqual(p2, p1);
+    assert.strictEqual(p2.length, 1);
+    assert.strictEqual(p2[0].path, '/abc');
+    assert.deepStrictEqual(p2[0].actions, ['read']);
 
     assert.strictEqual(aclCtx.actionSet.size, 0);
   });
@@ -381,15 +383,15 @@ describe('DA auth', () => {
       };
 
       assert.deepStrictEqual(['read', 'write'],
-        [...getUserActions(pathlookup, user, '/')]);
+        [...getUserActions(pathlookup, user, '/').actions]);
       assert.deepStrictEqual(['read'],
-        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub')]);
+        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub').actions]);
       assert.deepStrictEqual(['read'],
-        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/q.html')]);
+        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/q.html').actions]);
       assert.deepStrictEqual(['read', 'write'],
-        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub/sub')]);
+        [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/sub/sub').actions]);
       assert.deepStrictEqual(['read'],
-        [...getUserActions(pathlookup, user, 'CONFIG')]);
+        [...getUserActions(pathlookup, user, 'CONFIG').actions]);
     });
   });
 
@@ -420,23 +422,23 @@ describe('DA auth', () => {
       ],
     };
     assert.deepStrictEqual(['read', 'write'],
-      [...getUserActions(pathlookup, user, '/')]);
+      [...getUserActions(pathlookup, user, '/').actions]);
     assert.deepStrictEqual(['read', 'write'],
-      [...getUserActions(pathlookup, user, '/foo')]);
+      [...getUserActions(pathlookup, user, '/foo').actions]);
     assert.deepStrictEqual(['read'],
-      [...getUserActions(pathlookup, user, '/da-aem-boilerplate')]);
+      [...getUserActions(pathlookup, user, '/da-aem-boilerplate').actions]);
     assert.deepStrictEqual(['read'],
-      [...getUserActions(pathlookup, user, '/somewhere')]);
+      [...getUserActions(pathlookup, user, '/somewhere').actions]);
     assert.deepStrictEqual(['read', 'write'],
-      [...getUserActions(pathlookup, user, '/somewhere/else')]);
+      [...getUserActions(pathlookup, user, '/somewhere/else').actions]);
     assert.deepStrictEqual([],
-      [...getUserActions(pathlookup, user, '/foobar')]);
+      [...getUserActions(pathlookup, user, '/foobar').actions]);
     assert.deepStrictEqual([],
-      [...getUserActions(pathlookup, user, '/foobar/har')]);
+      [...getUserActions(pathlookup, user, '/foobar/har').actions]);
     assert.deepStrictEqual(['read'],
-      [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/myfile.html')]);
+      [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/myfile.html').actions]);
     assert.deepStrictEqual(['read', 'write'],
-      [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/blah')]);
+      [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/blah').actions]);
   });
 
   it('isAdmin', async () => {
