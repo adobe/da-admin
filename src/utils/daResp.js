@@ -26,7 +26,7 @@ export default function daResp({
   if (contentLength) {
     headers.append('Content-Length', contentLength);
   }
-  if (ctx?.aclCtx && status < 400) {
+  if (ctx?.aclCtx && status < 500) {
     headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
 
     if (hasPermission(ctx, 'ACLTRACE', 'read', true)) {
