@@ -128,8 +128,8 @@ export function getUserActions(pathLookup, user, target) {
       if (path.endsWith('/*')) return target.startsWith(path.slice(0, -1));
       if (target.endsWith('.html')) return target.slice(0, -5) === path;
       return target === path;
-    }) || { actions: [] })
-    .filter((a) => a.path);
+    }))
+    .filter((a) => a);
 
   return {
     actions: new Set(actions.flatMap(({ actions: acts }) => acts)),
