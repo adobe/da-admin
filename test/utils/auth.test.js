@@ -190,6 +190,23 @@ describe('DA auth', () => {
       assert(hasPermission({users, org: 'test', aclCtx, key: '/test'}, '/test', 'read'));
       assert(!hasPermission({users, org: 'test', aclCtx, key: '/test'}, '/test', 'write'));
     });
+
+    it('test trace information', async () => {
+      const users = [{email: 'joe@bloggs.org', groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/bar/blah.html');
+      const trace = aclCtx.actionTrace;
+
+      assert.strictEqual(2, trace.length);
+      const emailTraceIdx = trace[0].ident === 'joe@bloggs.org' ? 0 : 1
+      const groupTraceIdx = 1 - emailTraceIdx;
+      assert.deepStrictEqual({ident: 'joe@bloggs.org', path: '/*', actions: ['read']}, trace[emailTraceIdx]);
+      assert.deepStrictEqual(
+        {
+          ident: '2345B0EA551D747/4711',
+          path: '/bar/+*',
+          actions: [ 'read', 'write' ]
+        }, trace[groupTraceIdx]);
+    });
   });
 
   it('test getAclCtx missing props', async () => {
