@@ -23,8 +23,11 @@ export async function getVersionList({ env, daCtx }) {
 export async function getVersionSource({ env, daCtx, head }) {
   // daCtx.key is something like
   // 'f85f9b05-ae48-485b-a3b3-dd203ac5c734/1b7e005b-8602-4053-b920-8e67ad8e8dba.html’
+  // so we have to do the permission check when the object is returned from the metadata.
 
-  return getObjectVersion(env, daCtx, head);
+  const resp = await getObjectVersion(env, daCtx, head);
+  if (!hasPermission(daCtx, resp.metadata?.path, 'read')) return { status: 403 };
+  return resp;
 }
 
 export async function postVersionSource({ req, env, daCtx }) {

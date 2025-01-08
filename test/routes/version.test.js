@@ -24,7 +24,7 @@ describe('Version Route', () => {
         return false;
       }
       return true;
-    }
+    };
 
     const { getVersionList } = await esmock(
       '../../src/routes/version.js', {
@@ -52,13 +52,13 @@ describe('Version Route', () => {
     const postObjectVersion = (r, e, c) => {
       povCalled.push({r, e, c});
       return { status: 201 };
-    }
+    };
     const hasPermission = (c, k, a) => {
       if (k === 'hi.html' && a === 'write') {
         return false;
       }
       return true;
-    }
+    };
 
     const { postVersionSource } = await esmock(
       '../../src/routes/version.js', {
@@ -79,5 +79,50 @@ describe('Version Route', () => {
     assert.strictEqual(201, resp2.status);
     assert.strictEqual(1, povCalled.length);
     assert.strictEqual('ho.html', povCalled[0].c.key);
+  });
+
+  it('get version source with permission', async () => {
+    let mdPath;
+    const govCalled = [];
+    const getObjectVersion = (e, c, h) => {
+      govCalled.push({e, c, h});
+      return {
+        status: 200,
+        metadata: {
+          path: mdPath
+        }
+      }
+    };
+    const hasPermission = (c, k, a) => {
+      if (k === 'x/yyy/zzz.json' && a === 'read') {
+        return false;
+      }
+      return true;
+    };
+
+    const { getVersionSource } = await esmock(
+      '../../src/routes/version.js', {
+        '../../src/storage/version/get.js': {
+          getObjectVersion
+        },
+        '../../src/utils/auth.js': {
+          hasPermission
+        },
+      }
+    );
+
+    mdPath = 'huh.json';
+    const resp = await getVersionSource({ env: {}, daCtx: { key: 'aaaa/bbbb.html' }, head: true});
+    assert.strictEqual(200, resp.status);
+    assert.strictEqual(1, govCalled.length);
+    assert.strictEqual('aaaa/bbbb.html', govCalled[0].c.key);
+    assert(govCalled[0].h);
+
+    mdPath = 'x/yyy/zzz.json';
+    const resp2 = await getVersionSource({ env: {}, daCtx: { key: 'aaaa/bbbb.html' }, head: false});
+    assert.strictEqual(403, resp2.status);
+    assert.strictEqual(2, govCalled.length);
+    assert.strictEqual('aaaa/bbbb.html', govCalled[1].c.key);
+    assert(!govCalled[1].h);
   });
 });
