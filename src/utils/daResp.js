@@ -9,8 +9,6 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { hasPermission } from './auth.js';
-
 export default function daResp({
   status,
   body,
@@ -29,7 +27,7 @@ export default function daResp({
   if (ctx?.aclCtx && status < 500) {
     headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
 
-    if (hasPermission(ctx, 'ACLTRACE', 'read', true)) {
+    if (ctx.aclCtx.actionTrace) {
       headers.append('X-da-acltrace', JSON.stringify(ctx.aclCtx.actionTrace));
     }
   }

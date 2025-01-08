@@ -107,6 +107,11 @@ describe('DA auth', () => {
               "path": "/furb/",
               "groups": "2345B0EA551D747/4711",
               "actions": "write",
+            },
+            {
+              "path": "ACLTRACE",
+              "groups": "joe@bloggs.org",
+              "actions": "read",
             }
           ]
         },

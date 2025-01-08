@@ -148,8 +148,15 @@ export async function getAclCtx(env, org, users, key) {
     };
   }
 
+  const aclTrace = [];
   props.permissions.data.forEach(({ path, groups, actions }) => {
     if (!path || !groups) return;
+
+    // The ACLTRACE keyword is handled specially as its used for every request
+    if (path.trim() === 'ACLTRACE' && actions?.includes('read')) {
+      groups.split(',').forEach((g) => aclTrace.push(g.trim()));
+      return; // Don't add it to the list of paths
+    }
 
     let effectivePath = path.replace(/ /g, '');
     if (effectivePath.endsWith('/') && effectivePath.length > 1) {
@@ -185,14 +192,17 @@ export async function getAclCtx(env, org, users, key) {
     const fa = getUserActions(pathLookup, firstUser, k);
     actionSet = fa.actions;
     actionTrace = fa.trace;
-    for (const u of otherUsers) {
+    otherUsers.forEach((u) => {
       const ua = getUserActions(pathLookup, u, k);
       actionSet = actionSet.intersection(ua.actions);
       ua.trace.forEach((t) => actionTrace.push(t));
-    }
+    });
   } else {
     actionSet = new Set();
   }
+
+  // Expose the action trace or not?
+  actionTrace = users.every((u) => aclTrace.includes(u.email)) ? actionTrace : undefined;
 
   return { pathLookup, actionSet, actionTrace };
 }
