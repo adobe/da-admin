@@ -132,7 +132,7 @@ describe('DA auth', () => {
       }
     };
 
-    it('test anonumous permissions', async () => {
+    it('test anonymous permissions', async () => {
       const users = [{email: 'anonymous'}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
 
@@ -224,6 +224,80 @@ describe('DA auth', () => {
 
       assert(hasPermission({users, org: 'test', aclCtx, key: ''}, 'CONFIG', 'write', true));
       assert(hasPermission({users, org: 'test', aclCtx, key: '/somewhere'}, 'CONFIG', 'write', true));
+    });
+  });
+
+  describe('persmissions single sheet', () => {
+    const DA_CONFIG = {
+      'test': {
+        "data": [
+          {
+            "path": "/*",
+            "groups": "2345B0EA551D747/4711,123,joe@bloggs.org",
+            "actions": "read",
+          },
+          {
+            "path": "/*",
+            "groups": "2345B0EA551D747/8080",
+            "actions": "write",
+          },
+          {
+            "path": "/foo",
+            "groups": "2345B0EA551D747/4711",
+            "actions": "write",
+          },
+          {
+            "path": "/bar/ + *",
+            "groups": "2345B0EA551D747/4711",
+            "actions": "write",
+          },
+          {
+            "path": "/",
+            "groups": "2345B0EA551D747/4711",
+            "actions": "write",
+          },
+          {
+            "path": "/furb/",
+            "groups": "2345B0EA551D747/4711",
+            "actions": "write",
+          },
+        ],
+        ":type": "sheet",
+        ":sheetname": "permissions",
+      }
+    };
+
+    const env = {
+      DA_CONFIG: {
+        get: (name) => {
+          return DA_CONFIG[name];
+        },
+      }
+    };
+
+    it('test anonymous permissions', async () => {
+      const users = [{email: 'anonymous'}];
+      const aclCtx = await getAclCtx(env, 'test', users, '/test');
+
+      assert(!hasPermission({users, org: 'test', aclCtx, key: ''}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key: ''}, '/test', 'write'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key: '/test'}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key: '/test'}, '/test', 'write'));
+    });
+
+    it('test hasPermissions', async () => {
+      const key = '';
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const aclCtx = await getAclCtx(env, 'test', users, key);
+
+      assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
+      assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/foo', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/bar', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/bar/something.jpg', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/', 'write'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/flob', 'read'));
+      assert(hasPermission({ users, org: 'test', aclCtx, key}, '/furb', 'write'));
     });
   });
 

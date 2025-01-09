@@ -141,6 +141,12 @@ export async function getAclCtx(env, org, users, key, api) {
   const pathLookup = new Map();
 
   const props = await env.DA_CONFIG?.get(org, { type: 'json' });
+
+  if (props && props[':type'] === 'sheet' && props[':sheetname'] === 'permissions') {
+    // It's a single-sheet, move the data to the right place
+    props.permissions = { data: props.data };
+  }
+
   if (!props?.permissions?.data) {
     return {
       pathLookup,
