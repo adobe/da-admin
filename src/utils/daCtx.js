@@ -76,7 +76,7 @@ export default async function getDaCtx(req, env) {
     daCtx.aemPathname = `/${aemPathBase}.${daCtx.ext}`;
   }
 
-  daCtx.aclCtx = await getAclCtx(env, org, users, keyBase);
+  daCtx.aclCtx = await getAclCtx(env, org, users, keyBase, api);
   daCtx.authorized = daCtx.aclCtx.actionSet.has('read');
 
   return daCtx;

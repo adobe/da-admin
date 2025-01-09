@@ -112,6 +112,11 @@ describe('DA auth', () => {
               "path": "ACLTRACE",
               "groups": "joe@bloggs.org",
               "actions": "read",
+            },
+            {
+              "path": "CONFIG",
+              "groups": "123",
+              "actions": "write",
             }
           ]
         },
@@ -202,15 +207,23 @@ describe('DA auth', () => {
       const trace = aclCtx.actionTrace;
 
       assert.strictEqual(2, trace.length);
-      const emailTraceIdx = trace[0].ident === 'joe@bloggs.org' ? 0 : 1
+      const emailTraceIdx = trace[0].group === 'joe@bloggs.org' ? 0 : 1
       const groupTraceIdx = 1 - emailTraceIdx;
-      assert.deepStrictEqual({ident: 'joe@bloggs.org', path: '/*', actions: ['read']}, trace[emailTraceIdx]);
+      assert.deepStrictEqual({group: 'joe@bloggs.org', path: '/*', actions: ['read']}, trace[emailTraceIdx]);
       assert.deepStrictEqual(
         {
-          ident: '2345B0EA551D747/4711',
+          group: '2345B0EA551D747/4711',
           path: '/bar/+*',
           actions: [ 'read', 'write' ]
         }, trace[groupTraceIdx]);
+    });
+
+    it('test CONFIG api', async () => {
+      const users = [{ident: "123"}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/', 'config');
+
+      assert(hasPermission({users, org: 'test', aclCtx, key: ''}, 'CONFIG', 'write', true));
+      assert(hasPermission({users, org: 'test', aclCtx, key: '/somewhere'}, 'CONFIG', 'write', true));
     });
   });
 

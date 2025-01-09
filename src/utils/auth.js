@@ -137,7 +137,7 @@ export function getUserActions(pathLookup, user, target) {
   };
 }
 
-export async function getAclCtx(env, org, users, key) {
+export async function getAclCtx(env, org, users, key, api) {
   const pathLookup = new Map();
 
   const props = await env.DA_CONFIG?.get(org, { type: 'json' });
@@ -168,7 +168,7 @@ export async function getAclCtx(env, org, users, key) {
       pathLookup
         .get(group)
         .push({
-          ident: group,
+          group,
           path: effectivePath,
           actions: actions
             .split(',')
@@ -183,7 +183,12 @@ export async function getAclCtx(env, org, users, key) {
       .sort(({ path: path1 }, { path: path2 }) => path2.length - path1.length));
 
   // Do a lookup for the base key, we always need this info
-  const k = key.startsWith('/') ? key : `/${key}`;
+  let k;
+  if (api === 'config') {
+    k = 'CONFIG';
+  } else {
+    k = key.startsWith('/') ? key : `/${key}`;
+  }
 
   const [firstUser, ...otherUsers] = users;
   let actionSet;
