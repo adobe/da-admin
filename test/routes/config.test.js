@@ -46,55 +46,6 @@ describe('Config', () => {
     assert.deepStrictEqual(putKVCalled, [{r: req, q: env, c: ctx}]);
   });
 
-  it('Test admin permission', async () => {
-    const ctx = {
-      org: 'myorg', users: [{email: 'user1@foo.org'}, {email: 'user2@foo.org'}]
-    };
-    const env = {};
-    const req = {};
-
-    const putKVCalled = []
-    const putKV = async (r, e, c) => {
-      putKVCalled.push({r, e, c});
-      return 'putKV() called';
-    };
-    const getKVCalled = []
-    const getKV = async (e, c) => {
-      getKVCalled.push({e, c});
-      return 'getKV() called';
-    };
-
-    const hasPermission = () => false;
-    const isAdmin = (e, o, u) => {
-      if (e === env && o === ctx.org && u === ctx.users) {
-        return true;
-      }
-    };
-
-    const { getConfig, postConfig } = await esmock(
-      '../../src/routes/config.js', {
-        '../../src/storage/kv/get.js': {
-          default: getKV,
-        },
-        '../../src/storage/kv/put.js': {
-          default: putKV,
-        },
-        '../../src/utils/auth.js': {
-          hasPermission,
-          isAdmin,
-        }
-      }
-    );
-
-    const res = await getConfig({ env, daCtx: ctx });
-    assert.strictEqual(res, 'getKV() called');
-    assert.deepStrictEqual(getKVCalled, [{e: env, c: ctx}]);
-
-    const res2 = await postConfig({ req, env, daCtx: ctx });
-    assert.strictEqual(res2, 'putKV() called');
-    assert.deepStrictEqual(putKVCalled, [{r: req, e: env, c: ctx}]);
-  });
-
   it('Test getConfig has permission', async () => {
     const ctx = {};
     const env = {};
@@ -143,7 +94,6 @@ describe('Config', () => {
     };
 
     const hasPermission = () => false;
-    const isAdmin = () => false;
 
     const { getConfig, postConfig } = await esmock(
       '../../src/routes/config.js', {
@@ -155,7 +105,6 @@ describe('Config', () => {
         },
         '../../src/utils/auth.js': {
           hasPermission,
-          isAdmin,
         }
       }
     );

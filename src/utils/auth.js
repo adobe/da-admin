@@ -83,31 +83,6 @@ export async function getUsers(req, env) {
   );
 }
 
-export async function isAdmin(env, org, users) {
-  if (!org) return false;
-  if (users.length === 0) return false;
-
-  let props = await env.DA_CONFIG.get(org, { type: 'json' });
-  if (!props) return false;
-
-  // When the data is a multi-sheet, it's one level deeper
-  if (props[':type'] === 'multi-sheet') {
-    props = props.data;
-  }
-
-  const admins = props.data.reduce((acc, data) => {
-    if (data.key === 'admin.role.all') acc.push(data.value.toLowerCase());
-    return acc;
-  }, []);
-
-  if (!admins || !admins.length) return false;
-
-  for (const u of users) {
-    if (!admins.includes(u.email.toLowerCase())) return false;
-  }
-  return true;
-}
-
 export function getUserActions(pathLookup, user, target) {
   const idents = (user.groups || [])
     .flatMap((group) => [

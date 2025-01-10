@@ -17,7 +17,7 @@ import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import jose from './mocks/jose.js';
 import fetch from './mocks/fetch.js';
-import { getAclCtx, getUserActions, hasPermission, isAdmin } from '../../src/utils/auth.js';
+import { getAclCtx, getUserActions, hasPermission } from '../../src/utils/auth.js';
 
 // ES Mocks
 const {
@@ -477,27 +477,5 @@ describe('DA auth', () => {
       [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/myfile.html').actions]);
     assert.deepStrictEqual(['read', 'write'],
       [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/blah').actions]);
-  });
-
-  it('isAdmin', async () => {
-    const props = {
-      data: [
-        { key: 'admin.role.all', value: 'joe@bloggs.org' },
-        { key: 'admin.role.all', value: 'harry@bloggs.org' },
-      ]
-    }
-    const DA_CONFIG = {
-      get: (o, t) => {
-        if ((o === 'myorg') && (t.type === 'json')) {
-          return props;
-        }
-      },
-    }
-    const env = { DA_CONFIG };
-
-    assert(!await isAdmin(env, 'myorg', []));
-    assert(await isAdmin(env, 'myorg', [{email: 'joe@bloggs.org'}]));
-    assert(await isAdmin(env, 'myorg', [{email: 'joe@bloggs.org'}, {email: 'harry@bloggs.org'}]));
-    assert(!await isAdmin(env, 'myorg', [{email: 'joe@bloggs.org'}, {email: 'blah@bloggs.org'}]));
   });
 });
