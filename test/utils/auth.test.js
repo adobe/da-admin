@@ -225,6 +225,12 @@ describe('DA auth', () => {
       assert(hasPermission({users, org: 'test', aclCtx, key: ''}, 'CONFIG', 'write', true));
       assert(hasPermission({users, org: 'test', aclCtx, key: '/somewhere'}, 'CONFIG', 'write', true));
     });
+
+    it('test CONFIG always has read permission', async () => {
+      const users = [{ident: "blah@foo.org"}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/', 'config');
+      assert(aclCtx.actionSet.has('read'));
+    })
   });
 
   describe('persmissions single sheet', () => {

@@ -190,6 +190,20 @@ export async function getAclCtx(env, org, users, key, api) {
   // Expose the action trace or not?
   actionTrace = users.every((u) => aclTrace.includes(u.email)) ? actionTrace : undefined;
 
+  if (k === 'CONFIG') {
+    actionSet.add('read');
+  }
+
+  // // TODO maybe we should turn the order around because it's more likely to have read
+  // // permission on the content than explicitly on CONFIG
+
+  // // If the user doesn't have read persmissions on config, get them from the content
+  // const pathActions = getAllUserActions(pathLookup, users, key.startsWith('/') ? key : `/${key}`);
+  // if (pathActions.actionSet.has('read')) {
+  //   actionSet.add('read');
+  //   actionTrace = pathActions.actionTrace;
+  // }
+
   return { pathLookup, actionSet, actionTrace };
 }
 
