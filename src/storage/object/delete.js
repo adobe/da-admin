@@ -53,9 +53,9 @@ export default async function deleteObjects(env, daCtx, details) {
 
   try {
     const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
-    await Promise.all(sourceKeys.filter(async (key) => hasPermission(daCtx, key, 'write')).map(async (key) => {
-      await deleteObject(client, daCtx, key, env);
-    }));
+
+    const deleteKeys = sourceKeys.filter((key) => hasPermission(daCtx, key, 'write'));
+    await Promise.all(deleteKeys.map(async (key) => deleteObject(client, daCtx, key, env)));
 
     if (continuationToken) {
       return { body: JSON.stringify({ continuationToken }), status: 206 };

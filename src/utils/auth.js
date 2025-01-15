@@ -198,7 +198,8 @@ export async function getAclCtx(env, org, users, key, api) {
   // // permission on the content than explicitly on CONFIG
 
   // // If the user doesn't have read persmissions on config, get them from the content
-  // const pathActions = getAllUserActions(pathLookup, users, key.startsWith('/') ? key : `/${key}`);
+  // const pathActions =
+  //   getAllUserActions(pathLookup, users, key.startsWith('/') ? key : `/${key}`);
   // if (pathActions.actionSet.has('read')) {
   //   actionSet.add('read');
   //   actionTrace = pathActions.actionTrace;

@@ -14,7 +14,7 @@ import esmock from 'esmock';
 import { CopyObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { mockClient } from 'aws-sdk-client-mock';
 
-import copyObject from '../../../src/storage/object/copy.js';
+import copyObject, { copyFile } from '../../../src/storage/object/copy.js';
 import { getAclCtx } from '../../../src/utils/auth.js';
 
 const s3Mock = mockClient(S3Client);
@@ -56,6 +56,34 @@ describe('Object copy', () => {
 
     const { copyFile } = await import('../../../src/storage/object/copy.js');
     const resp = await copyFile({}, {}, ctx, '/source/mysrc', details, false);
+    assert.strictEqual(resp.$metadata.httpStatusCode, 403);
+  });
+
+  it('Copy to location without read permission', async () => {
+    const pathLookup = new Map();
+    pathLookup.set('foo@bar.com', [
+      { path: '/source/mysrc', actions: [] },
+      { path: '/source/mydst', actions: ['read', 'write'] },
+    ]);
+    const aclCtx = { pathLookup };
+    const users = [{ email: 'foo@bar.com' }];
+    const ctx = { aclCtx, users, key: '/foo' };
+
+    const resp = await copyFile({}, {}, ctx, 'source/mysrc', { source: 'mysrc', destination: 'mydst' }, false);
+    assert.strictEqual(resp.$metadata.httpStatusCode, 403);
+  });
+
+  it('Copy to location without write permission', async () => {
+    const pathLookup = new Map();
+    pathLookup.set('foo@bar.com', [
+      { path: '/source/mysrc', actions: ['read'] },
+      { path: '/source/mydst', actions: ['read'] },
+    ]);
+    const aclCtx = { pathLookup };
+    const users = [{ email: 'foo@bar.com' }];
+    const ctx = { aclCtx, users, key: '/foo' };
+
+    const resp = await copyFile({}, {}, ctx, 'source/mysrc', { source: 'mysrc', destination: 'mydst' }, false);
     assert.strictEqual(resp.$metadata.httpStatusCode, 403);
   });
 
