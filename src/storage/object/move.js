@@ -51,8 +51,8 @@ export default async function moveObject(env, daCtx, details) {
       sourceKeys.push(...Contents.map(({ Key }) => Key));
 
       const movedLoad = sourceKeys
-        .filter(async (key) => hasPermission(daCtx, key, 'write'))
-        .filter(async (key) => hasPermission(daCtx, key.replace(details.source, details.destination), 'write'))
+        .filter((key) => hasPermission(daCtx, key, 'write'))
+        .filter((key) => hasPermission(daCtx, key.replace(details.source, details.destination), 'write'))
         .map(async (key) => {
           const result = { key };
           const copied = await copyFile(config, env, daCtx, key, details, true);
