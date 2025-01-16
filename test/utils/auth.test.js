@@ -17,7 +17,7 @@ import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import jose from './mocks/jose.js';
 import fetch from './mocks/fetch.js';
-import { getAclCtx, getUserActions, hasPermission } from '../../src/utils/auth.js';
+import { getAclCtx, getUserActions, hasPermission, logout } from '../../src/utils/auth.js';
 
 // ES Mocks
 const {
@@ -486,5 +486,19 @@ describe('DA auth', () => {
       [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/myother.html').actions]);
     assert.deepStrictEqual(['read', 'write'],
       [...getUserActions(pathlookup, user, '/da-aem-boilerplate/authtest/blah').actions]);
+  });
+
+  it('test logout', async () => {
+    const deleteCalled = [];
+    const deleteFunc = async (id) => {
+      deleteCalled.push(id);
+    }
+    const DA_AUTH = { delete: deleteFunc};
+    const env = { DA_AUTH };
+    const daCtx = { users: [{ ident: '1234@a'}, { ident: '5678@b'}] };
+
+    const resp = await logout({ env, daCtx });
+    assert.deepStrictEqual(new Set(['1234@a', '5678@b']), new Set(deleteCalled));
+    assert.strictEqual(200, resp.status);
   });
 });

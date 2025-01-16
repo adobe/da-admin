@@ -11,6 +11,11 @@
  */
 import { decodeJwt } from 'jose';
 
+export async function logout({ daCtx, env }) {
+  await Promise.all(daCtx.users.map((u) => env.DA_AUTH.delete(u.ident)));
+  return { status: 200 };
+}
+
 export async function setUser(userId, expiration, headers, env) {
   let resp = await fetch(`${env.IMS_ORIGIN}/ims/profile/v1`, { headers });
   if (!resp.ok) {
