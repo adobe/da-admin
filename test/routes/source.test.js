@@ -177,12 +177,12 @@ describe('Source Route', () => {
         "permissions": {
           "data": [
             {
-              "path": "/*",
+              "path": "/**",
               "groups": "2345B0EA551D747/4711,123",
               "actions": "read",
             },
             {
-              "path": "/*",
+              "path": "/**",
               "groups": "2345B0EA551D747/8080",
               "actions": "write",
             },

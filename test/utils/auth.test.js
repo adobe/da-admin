@@ -79,12 +79,17 @@ describe('DA auth', () => {
         "permissions": {
           "data": [
             {
-              "path": "/*",
+              "path": "/x",
+              "groups": "2345B0EA551D747/4711,123,joe@bloggs.org",
+              "actions": "write",
+            },
+            {
+              "path": "/**",
               "groups": "2345B0EA551D747/4711,123,joe@bloggs.org",
               "actions": "read",
             },
             {
-              "path": "/*",
+              "path": "/**",
               "groups": "2345B0EA551D747/8080",
               "actions": "write",
             },
@@ -94,9 +99,19 @@ describe('DA auth', () => {
               "actions": "write",
             },
             {
-              "path": "/bar/ + *",
+              "path": "/bar/ + **",
               "groups": "2345B0EA551D747/4711",
               "actions": "write",
+            },
+            {
+              "path": "/bar/",
+              "groups": "2345B0EA551D747/4711",
+              "actions": "read",
+            },
+            {
+              "path": "/bar/q",
+              "groups": "2345B0EA551D747/4711",
+              "actions": "read",
             },
             {
               "path": "/",
@@ -131,6 +146,19 @@ describe('DA auth', () => {
         },
       }
     };
+
+    it('test path sorting', async () => {
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/mykey');
+      const paths = aclCtx.pathLookup.get('2345B0EA551D747/4711').map((x) => x.path);
+
+      assert.strictEqual(8, paths.length);
+      assert.strictEqual('/bar/q', paths[0], 'q should be counted as shorter than +**');
+      assert.strictEqual('/bar/+**', paths[1], 'bar/+** should be longer than bar/');
+      assert(paths[3] === '/bar' || paths[4] === '/bar', 'Within the same length there is no order');
+      assert.strictEqual('/x', paths[5]);
+      assert(paths[6] === '/**' || paths[7] === '/**', '/** should be counted as longer than /x');
+    });
 
     it('test anonymous permissions', async () => {
       const users = [{email: 'anonymous'}];
@@ -209,11 +237,11 @@ describe('DA auth', () => {
       assert.strictEqual(2, trace.length);
       const emailTraceIdx = trace[0].group === 'joe@bloggs.org' ? 0 : 1
       const groupTraceIdx = 1 - emailTraceIdx;
-      assert.deepStrictEqual({group: 'joe@bloggs.org', path: '/*', actions: ['read']}, trace[emailTraceIdx]);
+      assert.deepStrictEqual({group: 'joe@bloggs.org', path: '/**', actions: ['read']}, trace[emailTraceIdx]);
       assert.deepStrictEqual(
         {
           group: '2345B0EA551D747/4711',
-          path: '/bar/+*',
+          path: '/bar/+**',
           actions: [ 'read', 'write' ]
         }, trace[groupTraceIdx]);
     });
@@ -238,12 +266,12 @@ describe('DA auth', () => {
       'test': {
         "data": [
           {
-            "path": "/*",
+            "path": "/**",
             "groups": "2345B0EA551D747/4711,123,joe@bloggs.org",
             "actions": "read",
           },
           {
-            "path": "/*",
+            "path": "/**",
             "groups": "2345B0EA551D747/8080",
             "actions": "write",
           },
@@ -253,7 +281,7 @@ describe('DA auth', () => {
             "actions": "write",
           },
           {
-            "path": "/bar/ + *",
+            "path": "/bar/ + **",
             "groups": "2345B0EA551D747/4711",
             "actions": "write",
           },
@@ -406,10 +434,10 @@ describe('DA auth', () => {
   describe('ACL context', () => {
     it('get user actions', () => {
       const patharr = [
-        {path: '/da-aem-boilerplate/authtest/sub/sub/*', actions: []},
-        {path: '/da-aem-boilerplate/authtest/sub/*', actions: ['read', 'write']},
-        {path: '/da-aem-boilerplate/authtest/*', actions: ['read']},
-        {path: '/*', actions: ['read', 'write']},
+        {path: '/da-aem-boilerplate/authtest/sub/sub/**', actions: []},
+        {path: '/da-aem-boilerplate/authtest/sub/**', actions: ['read', 'write']},
+        {path: '/da-aem-boilerplate/authtest/**', actions: ['read']},
+        {path: '/**', actions: ['read', 'write']},
         {path: '/', actions: ['read', 'write']},
         {path: 'CONFIG', actions: ['read']},
       ];
@@ -441,11 +469,11 @@ describe('DA auth', () => {
 
   it('get user actions2', () => {
     const patharr = [
-      {path: '/da-aem-boilerplate/*', actions: ['read']},
+      {path: '/da-aem-boilerplate/**', actions: ['read']},
       {path: '/da-aem-boilerplate', actions: ['read']},
       {path: '/somewhere', actions: ['read']},
-      {path: '/foobar/+*', actions: []},
-      {path: '/*', actions: ['read', 'write']},
+      {path: '/foobar/+**', actions: []},
+      {path: '/**', actions: ['read', 'write']},
       {path: '/', actions: ['read', 'write']},
     ];
     const pathlookup = new Map();
@@ -453,8 +481,8 @@ describe('DA auth', () => {
     const patharr2 = [
       {path: '/da-aem-boilerplate/authtest/myfile', actions: ['read']},
       {path: '/da-aem-boilerplate/authtest/myother.html', actions: ['read']},
-      {path: '/da-aem-boilerplate/authtest/*', actions: ['read', 'write']},
-      {path: '/*', actions: []},
+      {path: '/da-aem-boilerplate/authtest/**', actions: ['read', 'write']},
+      {path: '/**', actions: []},
     ];
     pathlookup.set('ABCDEFG/123456', patharr2);
 

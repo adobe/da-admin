@@ -103,9 +103,9 @@ export function getUserActions(pathLookup, user, target) {
   const plVals = idents.map((key) => pathLookup.get(key) || []);
   const actions = plVals.map((entries) => entries
     .find(({ path }) => {
-      if (path.endsWith('/+*')) return target.startsWith(path.slice(0, -2)) || target === path.slice(0, -3);
+      if (path.endsWith('/+**')) return target.startsWith(path.slice(0, -3)) || target === path.slice(0, -4);
       if (target.length < path.length) return false;
-      if (path.endsWith('/*')) return target.startsWith(path.slice(0, -1));
+      if (path.endsWith('/**')) return target.startsWith(path.slice(0, -2));
       if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
       return target === path;
     }))
@@ -115,6 +115,18 @@ export function getUserActions(pathLookup, user, target) {
     actions: new Set(actions.flatMap(({ actions: acts }) => acts)),
     trace: actions,
   };
+}
+
+function prepPathForSort(path) {
+  if (path.endsWith('/+**')) return path.slice(0, -3);
+  if (path.endsWith('/**')) return path.slice(0, -2);
+  return path;
+}
+
+function pathSorter({ path: path1 }, { path: path2 }) {
+  const sp1 = prepPathForSort(path1);
+  const sp2 = prepPathForSort(path2);
+  return sp2.length - sp1.length;
 }
 
 export async function getAclCtx(env, org, users, key, api) {
@@ -164,9 +176,7 @@ export async function getAclCtx(env, org, users, key, api) {
         });
     });
   });
-  pathLookup
-    .forEach((value) => value
-      .sort(({ path: path1 }, { path: path2 }) => path2.length - path1.length));
+  pathLookup.forEach((value) => value.sort(pathSorter));
 
   // Do a lookup for the base key, we always need this info
   let k;

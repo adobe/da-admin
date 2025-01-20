@@ -54,8 +54,8 @@ describe('Move', () => {
     const pathLookup = new Map();
     pathLookup.set('blah@foo.org', [
       { path: '/somewhere/x.html', actions: ['read'] },
-      { path: '/somewhere/+*', actions: ['read', 'write'] },
-      { path: '/somedest/+*', actions: ['read', 'write'] },
+      { path: '/somewhere/+**', actions: ['read', 'write'] },
+      { path: '/somedest/+**', actions: ['read', 'write'] },
     ]);
     const aclCtx = { pathLookup };
     const users = [ { email: 'blah@foo.org' }];
