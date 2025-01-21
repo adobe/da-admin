@@ -148,7 +148,7 @@ describe('DA auth', () => {
     };
 
     it('test path sorting', async () => {
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/mykey');
       const paths = aclCtx.pathLookup.get('2345B0EA551D747/4711').map((x) => x.path);
 
@@ -172,7 +172,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions', async () => {
       const key = '';
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -186,7 +186,7 @@ describe('DA auth', () => {
     });
 
     it('test hasPermissions2', async () => {
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 8080}]}];
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 8080}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
 
       assert(hasPermission({users, org: 'test', key: '/test', aclCtx}, 'test', 'write'));
@@ -195,7 +195,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions3', async () => {
       const key = '/test';
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}, {orgIdent: '2345B0EA551D747', ident: 8080}]}];
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}, {orgIdent: '2345B0EA551D747', groupName: 8080}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -230,7 +230,7 @@ describe('DA auth', () => {
     });
 
     it('test trace information', async () => {
-      const users = [{email: 'joe@bloggs.org', groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const users = [{email: 'joe@bloggs.org', groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/bar/blah.html');
       const trace = aclCtx.actionTrace;
 
@@ -321,7 +321,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions', async () => {
       const key = '';
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', ident: 4711}]}];
+      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}]}];
       const aclCtx = await getAclCtx(env, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -484,7 +484,7 @@ describe('DA auth', () => {
       {path: '/da-aem-boilerplate/authtest/**', actions: ['read', 'write']},
       {path: '/**', actions: []},
     ];
-    pathlookup.set('ABCDEFG/123456', patharr2);
+    pathlookup.set('ABCDEFG/grp1', patharr2);
 
     const user = {
       email: 'joe@acme.com',
@@ -528,5 +528,43 @@ describe('DA auth', () => {
     const resp = await logout({ env, daCtx });
     assert.deepStrictEqual(new Set(['1234@a', '5678@b']), new Set(deleteCalled));
     assert.strictEqual(200, resp.status);
+  });
+
+  it('test identifications', async () => {
+    const user = {
+      email: 'foo@bar.org',
+      ident: '1234@abcd',
+      groups: [
+        { orgName: 'org1', orgIdent: 'ABCDEFG', ident: 111, groupName: 'grp1' },
+        { orgName: 'org2', orgIdent: 'HIJKLMN', ident: 222, groupName: 'grp2' },
+      ]};
+
+    const pathLookup = new Map();
+    pathLookup.set('ABCDEFG', [{ident: 'ABCDEFG', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('ABCDEFG/grp1', [{ident: 'ABCDEFG/grp1', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('ABCDEFG/111', [{ident: 'ABCDEFG/111', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('ABCDEFG/foo@bar.org', [{ident: 'ABCDEFG/foo@bar.org', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('org1/grp1', [{ident: 'org1/grp1', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('org1/111', [{ident: 'org1/111', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('HIJKLMN', [{ident: 'HIJKLMN', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('HIJKLMN/grp2', [{ident: 'HIJKLMN/grp2', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('HIJKLMN/222', [{ident: 'HIJKLMN/222', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('HIJKLMN/foo@bar.org', [{ident: 'HIJKLMN/foo@bar.org', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('org2/grp2', [{ident: 'org2/grp2', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('org2/222', [{ident: 'org2/222', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('foo@bar.org', [{ident: 'foo@bar.org', path: '/xyz', actions: ['read']}]);
+    pathLookup.set('1234@abcd', [{ident: '1234@abcd', path: '/xyz', actions: ['read']}]);
+    const res = getUserActions(pathLookup, user, '/xyz');
+
+    const matchedIds = res.trace.map((r) => r.ident);
+    assert.strictEqual(8, matchedIds.length);
+    assert(matchedIds.includes('ABCDEFG'));
+    assert(matchedIds.includes('ABCDEFG/grp1'));
+    assert(matchedIds.includes('ABCDEFG/foo@bar.org'));
+    assert(matchedIds.includes('HIJKLMN'));
+    assert(matchedIds.includes('HIJKLMN/grp2'));
+    assert(matchedIds.includes('HIJKLMN/foo@bar.org'));
+    assert(matchedIds.includes('1234@abcd'));
+    assert(matchedIds.includes('foo@bar.org'));
   });
 });

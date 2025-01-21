@@ -91,10 +91,9 @@ export async function getUsers(req, env) {
 export function getUserActions(pathLookup, user, target) {
   const idents = (user.groups || [])
     .flatMap((group) => [
-      `${group.orgIdent}/${group.ident}`,
-      `${group.orgName}/${group.ident}`,
+      `${group.orgIdent}`,
       `${group.orgIdent}/${group.groupName}`,
-      `${group.orgName}/${group.groupName}`,
+      `${group.orgIdent}/${user.email}`,
     ])
     .concat(user.ident)
     .concat(user.email)
