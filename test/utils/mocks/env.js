@@ -25,6 +25,7 @@ const env = {
   S3_DEF_URL: 'https://s3.com',
   S3_ACCESS_KEY_ID: 'an-id',
   S3_SECRET_ACCESS_KEY: 'too-many-secrets',
+  IMS_ORIGIN: 'https://ims-na1.adobelogin.com/',
   DA_AUTH: {
     get: (kvNamespace) => {
       return NAMESPACES[kvNamespace];

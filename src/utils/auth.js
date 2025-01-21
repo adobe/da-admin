@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { decodeJwt } from 'jose';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 export async function setUser(userId, expiration, headers, env) {
   const resp = await fetch(`${env.IMS_ORIGIN}/ims/profile/v1`, { headers });
@@ -32,7 +32,16 @@ export async function getUsers(req, env) {
   async function parseUser(token) {
     if (!token || token.trim().length === 0) return { email: 'anonymous' };
 
-    const { user_id: userId, created_at: createdAt, expires_in: expiresIn } = decodeJwt(token);
+    let payload;
+    try {
+      const jwks = createRemoteJWKSet(new URL(`${env.IMS_ORIGIN}/ims/keys`));
+      ({ payload } = await jwtVerify(token, jwks));
+    } catch (e) {
+      console.log('IMS token offline verification failed', e);
+      return { email: 'anonymous' };
+    }
+
+    const { user_id: userId, created_at: createdAt, expires_in: expiresIn } = payload;
     const expires = Number(createdAt) + Number(expiresIn);
     const now = Math.floor(new Date().getTime() / 1000);
 
