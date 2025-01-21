@@ -95,7 +95,6 @@ export function getUserActions(pathLookup, user, target) {
       `${group.orgIdent}/${group.groupName}`,
       `${group.orgIdent}/${user.email}`,
     ])
-    .concat(user.ident)
     .concat(user.email)
     .filter((e) => e !== undefined);
 

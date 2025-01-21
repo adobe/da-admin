@@ -324,13 +324,13 @@ describe('Object delete', () => {
       );
 
       const pathLookup = new Map();
-      pathLookup.set('123456790ABCDEF@x', [
+      pathLookup.set('harry@foo.org', [
         { path: '/a', actions: [] },
         { path: '/b', actions: ['read'] },
         { path: '/c', actions: ['read', 'write'] },
       ]);
       const aclCtx = { pathLookup };
-      const users = [{ ident: '123456790ABCDEF@x' }];
+      const users = [{ email: 'harry@foo.org' }];
       const ctx = { aclCtx, users, key: 'notused' };
 
       const fetchURLs = [];

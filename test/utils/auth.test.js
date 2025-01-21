@@ -212,7 +212,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions5', async () => {
       const key = '';
-      const users = [{ident: '123',groups: []}];
+      const users = [{groups: [{ orgIdent: '123' }]}];
       const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -247,7 +247,7 @@ describe('DA auth', () => {
     });
 
     it('test CONFIG api', async () => {
-      const users = [{ident: "123"}];
+      const users = [{ groups: [{ orgIdent: "123" }]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/', 'config');
 
       assert(hasPermission({users, org: 'test', aclCtx, key: ''}, 'CONFIG', 'write', true));
@@ -557,14 +557,13 @@ describe('DA auth', () => {
     const res = getUserActions(pathLookup, user, '/xyz');
 
     const matchedIds = res.trace.map((r) => r.ident);
-    assert.strictEqual(8, matchedIds.length);
+    assert.strictEqual(7, matchedIds.length);
     assert(matchedIds.includes('ABCDEFG'));
     assert(matchedIds.includes('ABCDEFG/grp1'));
     assert(matchedIds.includes('ABCDEFG/foo@bar.org'));
     assert(matchedIds.includes('HIJKLMN'));
     assert(matchedIds.includes('HIJKLMN/grp2'));
     assert(matchedIds.includes('HIJKLMN/foo@bar.org'));
-    assert(matchedIds.includes('1234@abcd'));
     assert(matchedIds.includes('foo@bar.org'));
   });
 });
