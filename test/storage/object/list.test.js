@@ -43,4 +43,18 @@ describe('List Objects', () => {
     assert.strictEqual(data.length, 3);
     assert(data.every((item) => item.ext && item.lastModified));
   });
+
+  it('limits the results', async () => {
+    s3Mock.on(ListObjectsV2Command, {
+      Bucket: 'adobe-content',
+      Prefix: 'wknd/',
+      Delimiter: '/',
+      MaxKeys: 2,
+    }).resolves({ $metadata: { httpStatusCode: 200 }, Contents: [Contents[0], Contents[1]]});
+
+    const daCtx = { org: 'adobe', key: 'wknd' };
+    const resp = await listObjects({}, daCtx, 2);
+    const data = JSON.parse(resp.body);
+    assert.strictEqual(data.length, 2, 'Should only return 2 items');
+  });
 })
