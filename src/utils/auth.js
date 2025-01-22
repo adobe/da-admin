@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify, jwksCache } from 'jose';
 
 export async function setUser(userId, expiration, headers, env) {
   const resp = await fetch(`${env.IMS_ORIGIN}/ims/profile/v1`, { headers });
@@ -25,6 +25,36 @@ export async function setUser(userId, expiration, headers, env) {
   return value;
 }
 
+/**
+ * Retrieve cached IMS keys from KV Store
+ * @param {*} env 
+ * @param {string} keysUrl 
+ * @returns {Promise<import('jose').ExportedJWKSCache>}
+ */
+async function getPreviouslyCachedJWKS(env, keysUrl) {
+  const cachedJwks = await env.DA_AUTH.get(keysUrl);
+  if (!cachedJwks) return {};
+
+  return JSON.parse(cachedJwks);
+}
+
+/**
+ * Store new set of IMS keys in the KV Store
+ * @param {*} env 
+ * @param {string} keysUrl 
+ * @param {import('jose').ExportedJWKSCache} keysCache 
+ * @returns 
+ */
+async function storeJWSInCache(env, keysUrl, keysCache) {
+  return env.DA_AUTH.put(
+    keysUrl,
+    JSON.stringify(keysCache),
+    {
+      expirationTtl: 24 * 60 * 60, // 24 hours in seconds
+    },
+  );
+}
+
 export async function getUsers(req, env) {
   const authHeader = req.headers?.get('authorization');
   if (!authHeader) return [{ email: 'anonymous' }];
@@ -34,8 +64,24 @@ export async function getUsers(req, env) {
 
     let payload;
     try {
-      const jwks = createRemoteJWKSet(new URL(`${env.IMS_ORIGIN}/ims/keys`));
+      const keysURL = `${env.IMS_ORIGIN}/ims/keys`;
+
+      const keysCache = await getPreviouslyCachedJWKS(env, keysURL);
+      const { uat } = keysCache;
+
+      const jwks = createRemoteJWKSet(
+        new URL(keysURL), 
+        {
+          [jwksCache]: keysCache,
+          cacheMaxAge: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+        },
+      );
+
       ({ payload } = await jwtVerify(token, jwks));
+
+      if (uat !== keysCache.uat) {
+        await storeJWSInCache(env, keysURL, keysCache);
+      }
     } catch (e) {
       console.log('IMS token offline verification failed', e);
       return { email: 'anonymous' };
