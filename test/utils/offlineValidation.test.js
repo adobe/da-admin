@@ -94,12 +94,12 @@ describe('Offline Token Validation', async () => {
     const localEnv = {
       ...env,
       DA_AUTH: {
-        get: (key) => {
+        get: async (key) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cacheLookup = true;
           }
         },
-        put: (key, value) => {
+        put: async (key, value) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cached = JSON.parse(value);
           }
@@ -132,7 +132,7 @@ describe('Offline Token Validation', async () => {
     const localEnv = {
       ...env,
       DA_AUTH: {
-        get: (key) => {
+        get: async (key) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cacheLookup = true;
             return JSON.stringify({
@@ -143,7 +143,7 @@ describe('Offline Token Validation', async () => {
             });
           }
         },
-        put: (key) => {
+        put: async (key) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cached = true;
           }
@@ -181,7 +181,7 @@ describe('Offline Token Validation', async () => {
     const localEnv = {
       ...env,
       DA_AUTH: {
-        get: (key) => {
+        get: async (key) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cacheLookup = true;
             return JSON.stringify({
@@ -192,7 +192,7 @@ describe('Offline Token Validation', async () => {
             });
           }
         },
-        put: (key, value) => {
+        put: async (key, value) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cached = JSON.parse(value);
           }
@@ -239,7 +239,7 @@ describe('Offline Token Validation', async () => {
     const localEnv = {
       ...env,
       DA_AUTH: {
-        get: (key) => {
+        get: async (key) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cacheLookup = true;
             return JSON.stringify({
@@ -250,7 +250,7 @@ describe('Offline Token Validation', async () => {
             });
           }
         },
-        put: (key) => {
+        put: async (key) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cached = true;
           }
@@ -282,7 +282,7 @@ describe('Offline Token Validation', async () => {
     const localEnv = {
       ...env,
       DA_AUTH: {
-        get: (key) => {
+        get: async (key) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cacheLookup = true;
             return JSON.stringify({
@@ -293,7 +293,7 @@ describe('Offline Token Validation', async () => {
             });
           }
         },
-        put: (key, value) => {
+        put: async (key, value) => {
           if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
             cached = JSON.parse(value);
           }
