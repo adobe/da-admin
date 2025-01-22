@@ -27,8 +27,8 @@ export async function setUser(userId, expiration, headers, env) {
 
 /**
  * Retrieve cached IMS keys from KV Store
- * @param {*} env 
- * @param {string} keysUrl 
+ * @param {*} env
+ * @param {string} keysUrl
  * @returns {Promise<import('jose').ExportedJWKSCache>}
  */
 async function getPreviouslyCachedJWKS(env, keysUrl) {
@@ -40,10 +40,10 @@ async function getPreviouslyCachedJWKS(env, keysUrl) {
 
 /**
  * Store new set of IMS keys in the KV Store
- * @param {*} env 
- * @param {string} keysUrl 
- * @param {import('jose').ExportedJWKSCache} keysCache 
- * @returns 
+ * @param {*} env
+ * @param {string} keysUrl
+ * @param {import('jose').ExportedJWKSCache} keysCache
+ * @returns {Promise<void>}
  */
 async function storeJWSInCache(env, keysUrl, keysCache) {
   return env.DA_AUTH.put(
@@ -70,7 +70,7 @@ export async function getUsers(req, env) {
       const { uat } = keysCache;
 
       const jwks = createRemoteJWKSet(
-        new URL(keysURL), 
+        new URL(keysURL),
         {
           [jwksCache]: keysCache,
           cacheMaxAge: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
@@ -83,9 +83,12 @@ export async function getUsers(req, env) {
         await storeJWSInCache(env, keysURL, keysCache);
       }
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.log('IMS token offline verification failed', e);
       return { email: 'anonymous' };
     }
+
+    if (!payload) return { email: 'anonymous' };
 
     const { user_id: userId, created_at: createdAt, expires_in: expiresIn } = payload;
     const expires = Number(createdAt) + Number(expiresIn);
