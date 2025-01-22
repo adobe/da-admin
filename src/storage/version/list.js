@@ -17,7 +17,7 @@ export async function listObjectVersions(env, { org, key }) {
   if (current.status === 404 || !current.metadata.id) {
     return 404;
   }
-  const resp = await listObjects(env, { org, key: `.da-versions/${current.metadata.id}` });
+  const resp = await listObjects(env, { org, key: `.da-versions/${current.metadata.id}` }, 500);
   const promises = await Promise.all(JSON.parse(resp.body).map(async (entry) => {
     const entryResp = await getObject(env, {
       org,
