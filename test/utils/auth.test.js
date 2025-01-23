@@ -17,7 +17,7 @@ import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import jose from './mocks/jose.js';
 import fetch from './mocks/fetch.js';
-import { getAclCtx, getUserActions, hasPermission, logout } from '../../src/utils/auth.js';
+import { getAclCtx, getChildRules, getUserActions, hasPermission, logout } from '../../src/utils/auth.js';
 
 // ES Mocks
 const {
@@ -565,5 +565,52 @@ describe('DA auth', () => {
     assert(matchedIds.includes('HIJKLMN/grp2'));
     assert(matchedIds.includes('HIJKLMN/foo@bar.org'));
     assert(matchedIds.includes('foo@bar.org'));
+  });
+
+  function hasRule(rules, path, action) {
+    return rules.some((r) => r.path === path && r.actions.includes(action));
+  }
+
+  it('test get child rules', async () => {
+    const pathLookup = new Map();
+    pathLookup.set('a@foo.org', [
+      {path: '/**', actions: ['read']},
+      {path: '/something', actions: ['write']},
+      {path: '/foo/bar', actions: ['write']},
+      {path: '/blah/+**', actions: ['write']},
+      {path: '/blah/haha', actions: ['read']},
+      {path: '/blah/hoho/**', actions: ['read']},
+      {path: '/blah/hoho/hihi', actions: ['read']},
+    ]);
+    pathLookup.set('ABCDEF', [
+      {path: '/blah/hohoho', actions: ['read']},
+    ]);
+
+    const aclCtx = { pathLookup };
+    const daCtx = { users: [{email: 'a@foo.org', groups: [{orgIdent: 'ABCDEF'}]}], aclCtx, key: '/blah' };
+    const rules = getChildRules(daCtx);
+    assert.strictEqual(3, rules.length);
+    assert(hasRule(rules, '/blah/haha', 'read'));
+    assert(hasRule(rules, '/blah/hohoho', 'read'));
+    assert(hasRule(rules, '/blah/+**', 'write'));
+
+    const rules2 = getChildRules({...daCtx, key: '/foo/'});
+    assert.strictEqual(2, rules2.length);
+    assert(hasRule(rules2, '/foo/bar', 'write'));
+    assert(hasRule(rules2, '/**', 'read'));
+
+    const rules3 = getChildRules({...daCtx, key: '/something'});
+    assert.strictEqual(1, rules3.length);
+    assert(hasRule(rules3, '/**', 'read'));
+
+    const rules4 = getChildRules({...daCtx, key: '/blah/yee/haa'});
+    assert.strictEqual(1, rules4.length);
+    assert(hasRule(rules4, '/blah/+**', 'write'));
+
+    const daCtx2 = { users: [{email: 'a@foo.org', groups: []}], aclCtx, key: '/blah' };
+    const rules5 = getChildRules(daCtx2);
+    assert.strictEqual(2, rules5.length);
+    assert(hasRule(rules5, '/blah/haha', 'read'));
+    assert(hasRule(rules5, '/blah/+**', 'write'));
   });
 });

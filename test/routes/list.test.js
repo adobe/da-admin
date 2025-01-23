@@ -17,6 +17,7 @@ describe('List Route', () => {
     const loCalled = [];
     const listObjects = (e, c) => {
       loCalled.push({ e, c });
+      return {};
     }
 
     const ctx = { org: 'foo', key: 'q/q/q' };
@@ -41,7 +42,7 @@ describe('List Route', () => {
     assert.strictEqual(403, resp.status);
     assert.strictEqual(0, loCalled.length);
 
-    await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q' }});
+    await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q', users: [] }});
     assert.strictEqual(1, loCalled.length);
     assert.strictEqual('q/q', loCalled[0].c.key);
   });

@@ -26,7 +26,7 @@ describe('DA Resp', () => {
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
-    assert.strictEqual('X-da-actions, X-da-acltrace', resp.headers.get('Access-Control-Expose-Headers'));
+    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('text/plain', resp.headers.get('Content-Type'));
     assert.strictEqual('777', resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/bar.html=read,write', resp.headers.get('X-da-actions'));
@@ -44,7 +44,7 @@ describe('DA Resp', () => {
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
-    assert.strictEqual('X-da-actions, X-da-acltrace', resp.headers.get('Access-Control-Expose-Headers'));
+    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('application/json', resp.headers.get('Content-Type'));
     assert(!resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/blah.html=read', resp.headers.get('X-da-actions'));

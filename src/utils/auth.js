@@ -88,8 +88,8 @@ export async function getUsers(req, env) {
   );
 }
 
-export function getUserActions(pathLookup, user, target) {
-  const idents = (user.groups || [])
+function getIdents(user) {
+  return (user.groups || [])
     .flatMap((group) => [
       `${group.orgIdent}`,
       `${group.orgIdent}/${group.groupName}`,
@@ -97,6 +97,10 @@ export function getUserActions(pathLookup, user, target) {
     ])
     .concat(user.email)
     .filter((e) => e !== undefined);
+}
+
+export function getUserActions(pathLookup, user, target) {
+  const idents = getIdents(user);
 
   const plVals = idents.map((key) => pathLookup.get(key) || []);
   const actions = plVals.map((entries) => entries
@@ -219,6 +223,39 @@ export async function getAclCtx(env, org, users, key, api) {
   // }
 
   return { pathLookup, actionSet, actionTrace };
+}
+
+export function getUserChildRules(pathLookup, ident, key) {
+  const dk = key.endsWith('/') ? key : `${key}/`;
+  const dirKey = dk.startsWith('/') ? dk : `/${dk}`;
+
+  const rules = pathLookup.get(ident) || [];
+  const pr1 = rules.filter((r) => r.path.startsWith(dirKey));
+  const pr2 = pr1.filter((r) => r.path.lastIndexOf('/') === (dirKey.length - 1));
+
+  const wildcardFound = pr2.some((r) => r.path.endsWith('**'));
+  if (!wildcardFound && dirKey.lastIndexOf('/') > 0) {
+    // remove last pathsegment from dirkey
+    const dirKeyParent = dirKey.substring(0, dirKey.slice(0, -1).lastIndexOf('/')).concat('/');
+
+    const parentRules = getUserChildRules(pathLookup, ident, dirKeyParent);
+    const parentWildCardRules = parentRules.filter((r) => r.path.endsWith('**'));
+    pr2.push(...parentWildCardRules);
+  }
+  return pr2;
+}
+
+export function getChildRules(daCtx) {
+  const allRules = [];
+  for (const u of daCtx.users) {
+    const idents = getIdents(u);
+    for (const id of idents) {
+      allRules.push(...getUserChildRules(daCtx.aclCtx.pathLookup, id, daCtx.key));
+    }
+  }
+
+  allRules.sort(pathSorter);
+  return allRules;
 }
 
 export function hasPermission(daCtx, path, action, keywordPath = false) {
