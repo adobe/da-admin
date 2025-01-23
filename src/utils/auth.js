@@ -57,7 +57,7 @@ async function storeJWSInCache(env, keysUrl, keysCache) {
   } catch (err) {
     // An error may be thrown if a write to the same key is made within 1 second
     // eslint-disable-next-line no-console
-    console.error('Failed to store keys in cache', err); 
+    console.error('Failed to store keys in cache', err);
   }
 }
 
