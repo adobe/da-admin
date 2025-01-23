@@ -46,13 +46,19 @@ async function getPreviouslyCachedJWKS(env, keysUrl) {
  * @returns {Promise<void>}
  */
 async function storeJWSInCache(env, keysUrl, keysCache) {
-  return env.DA_AUTH.put(
-    keysUrl,
-    JSON.stringify(keysCache),
-    {
-      expirationTtl: 24 * 60 * 60, // 24 hours in seconds
-    },
-  );
+  try {
+    await env.DA_AUTH.put(
+      keysUrl,
+      JSON.stringify(keysCache),
+      {
+        expirationTtl: 24 * 60 * 60, // 24 hours in seconds
+      },
+    );
+  } catch (err) {
+    // An error may be thrown if a write to the same key is made within 1 second
+    // eslint-disable-next-line no-console
+    console.error('Failed to store keys in cache', err); 
+  }
 }
 
 export async function getUsers(req, env) {

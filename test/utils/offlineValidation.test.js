@@ -310,4 +310,45 @@ describe('Offline Token Validation', async () => {
     assert.deepStrictEqual(cached.jwks, { keys: [publicKeyJwk]}, 'Cached keys should match the fetched keys');
     scope.done();
   });
+
+  it('should not fail if storing in cache fails', async () => {
+    const kid = 'id1';
+    const { privateKey, publicKeyJwk } = await generateMockKeyPair(kid);
+
+    const scope = nock('https://ims-na1.adobelogin.com')
+      .get('/ims/keys')
+      .reply(200, { keys: [publicKeyJwk] });
+
+    const accessToken = await generateToken(kid, privateKey);
+
+    const before = Date.now();
+
+    let cacheLookup = false;
+    let cacheAttempt;
+    const localEnv = {
+      ...env,
+      DA_AUTH: {
+        get: async (key) => {
+          if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
+            cacheLookup = true;
+          }
+        },
+        put: async (key, value) => {
+          if (key === 'https://ims-na1.adobelogin.com/ims/keys') {
+            cacheAttempt = JSON.parse(value);
+            throw new Error('429: Too many requests');
+          }
+        },
+      }
+    }
+
+    const users = await getUsers(mockRequest(accessToken), localEnv);
+    assert.deepStrictEqual(users, [{ email: 'mocked@example.com' } ]);
+    assert.ok(cacheLookup, 'Should have looked up the keys in the cache');
+    assert.ok(cacheAttempt, 'Should have try to cache the keys');
+    assert.ok(cacheAttempt.uat >= before, 'Timestamp of keys in cache should be after the test started');
+    assert.ok(cacheAttempt.uat <= Date.now(), 'Timestamp of keys in cache should be before the test ended');
+    assert.deepStrictEqual(cacheAttempt.jwks, { keys: [publicKeyJwk]}, 'Cached attempt keys should match the fetched keys');
+    scope.done();
+  });
 });
