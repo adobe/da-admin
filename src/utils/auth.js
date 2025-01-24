@@ -252,14 +252,24 @@ export function getChildRules(daCtx) {
   const pd = daCtx.key.endsWith('/') ? daCtx.key : daCtx.key.concat('/');
   const probeDir = pd.startsWith('/') ? pd : '/'.concat(pd);
   const probeKey = probeDir.concat('acl.probe');
-  const allActions = new Set();
+  const actionSets = [];
   for (const u of daCtx.users) {
     const { actions } = getUserActions(daCtx.aclCtx.pathLookup, u, probeKey);
-    actions.forEach((a) => allActions.add(a));
+    actionSets.push(actions);
+  }
+
+  let resultSet;
+  if (actionSets.length === 0) {
+    resultSet = new Set();
+  } else {
+    resultSet = actionSets.shift();
+    for (const as of actionSets) {
+      resultSet = resultSet.intersection(as);
+    }
   }
 
   // eslint-disable-next-line no-param-reassign
-  daCtx.aclCtx.childRules = [`${probeDir}**=${[...allActions].join(',')}`];
+  daCtx.aclCtx.childRules = [`${probeDir}**=${[...resultSet].join(',')}`];
 }
 
 export function hasPermission(daCtx, path, action, keywordPath = false) {

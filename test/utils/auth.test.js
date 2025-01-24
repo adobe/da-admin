@@ -587,10 +587,12 @@ describe('DA auth', () => {
       {path: '/blah/haha', actions: ['read']},
       {path: '/blah/hoho/**', actions: ['read']},
       {path: '/blah/hoho/hihi', actions: ['read']},
+      {path: '/hello/+**', actions: ['read','write']},
     ]);
     pathLookup.set('ABCDEF', [
       {path: '/blah/hohoho', actions: ['read']},
       {path: '/blah/+**', actions: ['read']},
+      {path: '/hello/+**', actions: ['read']},
     ]);
     pathLookup.forEach((value) => value.sort(pathSorter));
 
@@ -632,6 +634,13 @@ describe('DA auth', () => {
     getChildRules(daCtx3);
     const rules6 = daCtx3.aclCtx.childRules;
     assert.strictEqual(1, rules6.length);
-    assert(rules6[0] === '/blah/**=read,write' || rules6[0] === '/blah/**=write,read');
+    assert.strictEqual('/blah/**=', rules6[0]);
+
+    delete daCtx.aclCtx.childRules;
+    const daCtx4 = { users, aclCtx, key: '/hello' };
+    getChildRules(daCtx4);
+    const rules7 = daCtx4.aclCtx.childRules;
+    assert.strictEqual(1, rules7.length);
+    assert.strictEqual('/hello/**=read', rules7[0]);
   });
 });
