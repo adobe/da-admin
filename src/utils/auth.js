@@ -38,6 +38,9 @@ export async function setUser(userId, expiration, headers, env) {
   const value = JSON.stringify({
     email: json.email,
     ident: json.userId,
+    orgs: organizationsJson.map(({ orgName, orgRef }) => ({
+      orgName, orgIdent: orgRef.ident,
+    })),
     groups: organizationsJson
       .map(({ orgName, orgRef, groups }) => groups
         .map(({ groupName, groupDisplayName, ident }) => ({

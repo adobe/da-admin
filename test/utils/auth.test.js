@@ -71,8 +71,50 @@ describe('DA auth', () => {
         'Authorization': `Bearer aparker@geometrixx.info`,
       });
 
-      const userValue = await setUser('aparker@geometrixx.info', 100, headers, env);
-      assert.strictEqual(userValue, '{"email":"aparker@geometrixx.info","ident":"123","groups":[{"orgName":"Org1","orgIdent":"2345B0EA551D747","groupName":"READ_WRITE_STANDARD@DEV","groupDisplayName":"READ_WRITE_STANDARD@DEV","ident":4711},{"orgName":"Org1","orgIdent":"2345B0EA551D747","groupName":"READ_ONLY_STANDARD@PROD","groupDisplayName":"READ_ONLY_STANDARD@PROD","ident":8080},{"orgName":"ACME Inc.","orgIdent":"EE23423423423","groupName":"Emp","groupDisplayName":"Emp","ident":12312312},{"orgName":"ACME Inc.","orgIdent":"EE23423423423","groupName":"org-test","groupDisplayName":"org-test","ident":34243}]}');
+      const userValStr = await setUser('aparker@geometrixx.info', 100, headers, env);
+      const userValue = JSON.parse(userValStr);
+
+      assert.strictEqual('aparker@geometrixx.info', userValue.email);
+      assert.strictEqual('123', userValue.ident);
+
+      const expectedOrgs = [
+        { orgName: 'Org1', orgIdent: '2345B0EA551D747' },
+        { orgName: 'Org No groups', orgIdent: '139024093' },
+        { orgName: 'ACME Inc.', orgIdent: 'EE23423423423' },
+      ];
+      assert.deepStrictEqual(expectedOrgs, userValue.orgs);
+
+      const expectedGroups = [
+        {
+          "orgName": "Org1",
+          "orgIdent": "2345B0EA551D747",
+          "groupName": "READ_WRITE_STANDARD@DEV",
+          "groupDisplayName": "READ_WRITE_STANDARD@DEV",
+          "ident": 4711
+        },
+        {
+          "orgName": "Org1",
+          "orgIdent": "2345B0EA551D747",
+          "groupName": "READ_ONLY_STANDARD@PROD",
+          "groupDisplayName": "READ_ONLY_STANDARD@PROD",
+          "ident": 8080
+        },
+        {
+          "orgName": "ACME Inc.",
+          "orgIdent": "EE23423423423",
+          "groupName": "Emp",
+          "groupDisplayName": "Emp",
+          "ident": 12312312
+        },
+        {
+          "orgName": "ACME Inc.",
+          "orgIdent": "EE23423423423",
+          "groupName": "org-test",
+          "groupDisplayName": "org-test",
+          "ident": 34243
+        }
+      ];
+      assert.deepStrictEqual(expectedGroups, userValue.groups);
     });
   });
 
