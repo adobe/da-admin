@@ -125,7 +125,7 @@ function prepPathForSort(path) {
   return path;
 }
 
-function pathSorter({ path: path1 }, { path: path2 }) {
+export function pathSorter({ path: path1 }, { path: path2 }) {
   const sp1 = prepPathForSort(path1);
   const sp2 = prepPathForSort(path2);
   return sp2.length - sp1.length;
@@ -249,18 +249,17 @@ export function getChildRules(daCtx) {
   const storedRules = daCtx.aclCtx.childRules;
   if (storedRules) return;
 
-  const allRules = [];
+  const pd = daCtx.key.endsWith('/') ? daCtx.key : daCtx.key.concat('/');
+  const probeDir = pd.startsWith('/') ? pd : '/'.concat(pd);
+  const probeKey = probeDir.concat('acl.probe');
+  const allActions = new Set();
   for (const u of daCtx.users) {
-    const idents = getIdents(u);
-    for (const id of idents) {
-      allRules.push(...getUserChildRules(daCtx.aclCtx.pathLookup, id, daCtx.key));
-    }
+    const { actions } = getUserActions(daCtx.aclCtx.pathLookup, u, probeKey);
+    actions.forEach((a) => allActions.add(a));
   }
 
-  allRules.sort(pathSorter);
-
   // eslint-disable-next-line no-param-reassign
-  daCtx.aclCtx.childRules = allRules;
+  daCtx.aclCtx.childRules = [`${probeDir}**=${[...allActions].join(',')}`];
 }
 
 export function hasPermission(daCtx, path, action, keywordPath = false) {

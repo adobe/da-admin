@@ -42,8 +42,13 @@ describe('List Route', () => {
     assert.strictEqual(403, resp.status);
     assert.strictEqual(0, loCalled.length);
 
-    await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q', users: [], aclCtx: {} }});
+    const aclCtx = {};
+    await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q', users: [], aclCtx }});
     assert.strictEqual(1, loCalled.length);
     assert.strictEqual('q/q', loCalled[0].c.key);
+
+    const childRules = aclCtx.childRules;
+    assert.strictEqual(1, childRules.length);
+    assert(childRules[0].startsWith('/q/q/**='), 'Should have defined some child rule');
   });
 });

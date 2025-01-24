@@ -14,7 +14,6 @@ export default function daResp({
   body,
   contentType = 'application/json',
   contentLength,
-  childRules,
 }, ctx) {
   const headers = new Headers();
   headers.append('Access-Control-Allow-Origin', '*');
@@ -29,8 +28,7 @@ export default function daResp({
     headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
 
     if (ctx.aclCtx.childRules) {
-      const rules = childRules.map((r) => `${r.path}=${r.actions}`);
-      headers.append('X-da-child-actions', rules.join(';'));
+      headers.append('X-da-child-actions', ctx.aclCtx.childRules.join(';'));
     }
     if (ctx.aclCtx.actionTrace) {
       headers.append('X-da-acltrace', JSON.stringify(ctx.aclCtx.actionTrace));

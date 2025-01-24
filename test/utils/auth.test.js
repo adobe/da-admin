@@ -17,7 +17,13 @@ import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import jose from './mocks/jose.js';
 import fetch from './mocks/fetch.js';
-import { getAclCtx, getChildRules, getUserActions, hasPermission, logout } from '../../src/utils/auth.js';
+import {
+  getAclCtx,
+  getChildRules,
+  getUserActions,
+  hasPermission,
+  logout,
+  pathSorter } from '../../src/utils/auth.js';
 
 // ES Mocks
 const {
@@ -584,42 +590,48 @@ describe('DA auth', () => {
     ]);
     pathLookup.set('ABCDEF', [
       {path: '/blah/hohoho', actions: ['read']},
+      {path: '/blah/+**', actions: ['read']},
     ]);
+    pathLookup.forEach((value) => value.sort(pathSorter));
 
     const aclCtx = { pathLookup };
     const daCtx = { users: [{email: 'a@foo.org', groups: [{orgIdent: 'ABCDEF'}]}], aclCtx, key: '/blah' };
     getChildRules(daCtx);
     const rules = daCtx.aclCtx.childRules;
-    assert.strictEqual(3, rules.length);
-    assert(hasRule(rules, '/blah/haha', 'read'));
-    assert(hasRule(rules, '/blah/hohoho', 'read'));
-    assert(hasRule(rules, '/blah/+**', 'write'));
+    assert.strictEqual(1, rules.length);
+    assert(rules[0] === '/blah/**=read,write' || rules[0] === '/blah/**=write,read');
 
     delete daCtx.aclCtx.childRules;
     getChildRules({...daCtx, key: '/foo/'});
     const rules2 = daCtx.aclCtx.childRules;
-    assert.strictEqual(2, rules2.length);
-    assert(hasRule(rules2, '/foo/bar', 'write'));
-    assert(hasRule(rules2, '/**', 'read'));
+    assert.strictEqual(1, rules2.length);
+    assert.strictEqual('/foo/**=read', rules2[0]);
 
     delete daCtx.aclCtx.childRules;
     getChildRules({...daCtx, key: '/something'});
     const rules3 = daCtx.aclCtx.childRules;
     assert.strictEqual(1, rules3.length);
-    assert(hasRule(rules3, '/**', 'read'));
+    assert.strictEqual('/something/**=read', rules3[0]);
 
     delete daCtx.aclCtx.childRules;
     getChildRules({...daCtx, key: '/blah/yee/haa'});
     const rules4 = daCtx.aclCtx.childRules;
     assert.strictEqual(1, rules4.length);
-    assert(hasRule(rules4, '/blah/+**', 'write'));
+    assert(rules4[0] === '/blah/yee/haa/**=read,write' || rules4[0] === '/blah/yee/haa/**=write,read');
 
     delete daCtx.aclCtx.childRules;
     const daCtx2 = { users: [{email: 'a@foo.org', groups: []}], aclCtx, key: '/blah' };
     getChildRules(daCtx2);
-    const rules5 = daCtx.aclCtx.childRules;
-    assert.strictEqual(2, rules5.length);
-    assert(hasRule(rules5, '/blah/haha', 'read'));
-    assert(hasRule(rules5, '/blah/+**', 'write'));
+    const rules5 = daCtx2.aclCtx.childRules;
+    assert.strictEqual(1, rules5.length);
+    assert.strictEqual('/blah/**=write', rules5[0]);
+
+    delete daCtx.aclCtx.childRules;
+    const users = [{email: 'a@foo.org', groups: []}, {email: 'blah@foo.org', groups: [{orgIdent: 'ABCDEF'}]}];
+    const daCtx3 = { users, aclCtx, key: '/blah' };
+    getChildRules(daCtx3);
+    const rules6 = daCtx3.aclCtx.childRules;
+    assert.strictEqual(1, rules6.length);
+    assert(rules6[0] === '/blah/**=read,write' || rules6[0] === '/blah/**=write,read');
   });
 });
