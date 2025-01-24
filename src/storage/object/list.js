@@ -17,19 +17,21 @@ import {
 import getS3Config from '../utils/config.js';
 import formatList from '../utils/list.js';
 
-function buildInput({ org, key }) {
-  return {
+function buildInput({ org, key, maxKeys }) {
+  const input = {
     Bucket: `${org}-content`,
     Prefix: key ? `${key}/` : null,
     Delimiter: '/',
   };
+  if (maxKeys) input.MaxKeys = maxKeys;
+  return input;
 }
 
-export default async function listObjects(env, daCtx) {
+export default async function listObjects(env, daCtx, maxKeys) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const input = buildInput(daCtx);
+  const input = buildInput({ ...daCtx, maxKeys });
   const command = new ListObjectsV2Command(input);
   try {
     const resp = await client.send(command);
