@@ -13,17 +13,10 @@ import listBuckets from '../storage/bucket/list.js';
 import listObjects from '../storage/object/list.js';
 import { getChildRules, hasPermission } from '../utils/auth.js';
 
-function addChildRules(daCtx) {
-  const childRules = getChildRules(daCtx);
-  const rules = childRules.map((r) => `${r.path}=${r.actions}`);
-  return rules.join(',');
-}
-
 export default async function getList({ env, daCtx }) {
   if (!daCtx.org) return listBuckets(env, daCtx);
   if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
 
-  const resp = await listObjects(env, daCtx);
-  resp.childRules = addChildRules(daCtx);
-  return resp;
+  getChildRules(daCtx);
+  return /* await */ listObjects(env, daCtx);
 }

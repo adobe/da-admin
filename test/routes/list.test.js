@@ -38,11 +38,11 @@ describe('List Route', () => {
         }
       }
     );
-    const resp = await getList({ env: {}, daCtx: ctx });
+    const resp = await getList({ env: {}, daCtx: ctx, aclCtx: {} });
     assert.strictEqual(403, resp.status);
     assert.strictEqual(0, loCalled.length);
 
-    await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q', users: [] }});
+    await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q', users: [], aclCtx: {} }});
     assert.strictEqual(1, loCalled.length);
     assert.strictEqual('q/q', loCalled[0].c.key);
   });

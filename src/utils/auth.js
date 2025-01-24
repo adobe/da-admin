@@ -246,6 +246,9 @@ export function getUserChildRules(pathLookup, ident, key) {
 }
 
 export function getChildRules(daCtx) {
+  const storedRules = daCtx.aclCtx.childRules;
+  if (storedRules) return;
+
   const allRules = [];
   for (const u of daCtx.users) {
     const idents = getIdents(u);
@@ -255,7 +258,9 @@ export function getChildRules(daCtx) {
   }
 
   allRules.sort(pathSorter);
-  return allRules;
+
+  // eslint-disable-next-line no-param-reassign
+  daCtx.aclCtx.childRules = allRules;
 }
 
 export function hasPermission(daCtx, path, action, keywordPath = false) {

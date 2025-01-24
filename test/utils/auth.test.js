@@ -588,27 +588,36 @@ describe('DA auth', () => {
 
     const aclCtx = { pathLookup };
     const daCtx = { users: [{email: 'a@foo.org', groups: [{orgIdent: 'ABCDEF'}]}], aclCtx, key: '/blah' };
-    const rules = getChildRules(daCtx);
+    getChildRules(daCtx);
+    const rules = daCtx.aclCtx.childRules;
     assert.strictEqual(3, rules.length);
     assert(hasRule(rules, '/blah/haha', 'read'));
     assert(hasRule(rules, '/blah/hohoho', 'read'));
     assert(hasRule(rules, '/blah/+**', 'write'));
 
-    const rules2 = getChildRules({...daCtx, key: '/foo/'});
+    delete daCtx.aclCtx.childRules;
+    getChildRules({...daCtx, key: '/foo/'});
+    const rules2 = daCtx.aclCtx.childRules;
     assert.strictEqual(2, rules2.length);
     assert(hasRule(rules2, '/foo/bar', 'write'));
     assert(hasRule(rules2, '/**', 'read'));
 
-    const rules3 = getChildRules({...daCtx, key: '/something'});
+    delete daCtx.aclCtx.childRules;
+    getChildRules({...daCtx, key: '/something'});
+    const rules3 = daCtx.aclCtx.childRules;
     assert.strictEqual(1, rules3.length);
     assert(hasRule(rules3, '/**', 'read'));
 
-    const rules4 = getChildRules({...daCtx, key: '/blah/yee/haa'});
+    delete daCtx.aclCtx.childRules;
+    getChildRules({...daCtx, key: '/blah/yee/haa'});
+    const rules4 = daCtx.aclCtx.childRules;
     assert.strictEqual(1, rules4.length);
     assert(hasRule(rules4, '/blah/+**', 'write'));
 
+    delete daCtx.aclCtx.childRules;
     const daCtx2 = { users: [{email: 'a@foo.org', groups: []}], aclCtx, key: '/blah' };
-    const rules5 = getChildRules(daCtx2);
+    getChildRules(daCtx2);
+    const rules5 = daCtx.aclCtx.childRules;
     assert.strictEqual(2, rules5.length);
     assert(hasRule(rules5, '/blah/haha', 'read'));
     assert(hasRule(rules5, '/blah/+**', 'write'));

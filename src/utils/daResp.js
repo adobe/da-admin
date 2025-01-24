@@ -28,8 +28,9 @@ export default function daResp({
   if (ctx?.aclCtx && status < 500) {
     headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
 
-    if (childRules) {
-      headers.append('X-da-child-actions', childRules);
+    if (ctx.aclCtx.childRules) {
+      const rules = childRules.map((r) => `${r.path}=${r.actions}`);
+      headers.append('X-da-child-actions', rules.join(';'));
     }
     if (ctx.aclCtx.actionTrace) {
       headers.append('X-da-acltrace', JSON.stringify(ctx.aclCtx.actionTrace));
