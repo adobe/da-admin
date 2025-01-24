@@ -17,7 +17,7 @@ const MOCK_CONFIG = `{
 }`;
 
 describe('KV storage', () => {
-  describe('Get success', async () => {
+  it('Get success', async () => {
     const env = {
       DA_CONFIG: {
         get: () => { return MOCK_CONFIG },
@@ -30,7 +30,7 @@ describe('KV storage', () => {
     assert.strictEqual(resp.status, 200);
   });
 
-  describe('Get not found', async () => {
+  it('Get not found', async () => {
     const env = { DA_CONFIG: { get: () => { return null } } };
     const daCtx = { fullKey: 'adobe/geometrixx' };
 
@@ -39,7 +39,7 @@ describe('KV storage', () => {
     assert.strictEqual(resp.status, 404);
   });
 
-  describe('Put success', async () => {
+  it('Put success', async () => {
     const formData = new FormData();
     formData.append('config', MOCK_CONFIG);
 
@@ -56,7 +56,7 @@ describe('KV storage', () => {
     assert.strictEqual(resp.status, 201);
   });
 
-  describe('Put without form data', async () => {
+  it('Put without form data', async () => {
     const req = { formData: () => { return null; } };
     const env = {};
     const daCtx = { fullKey: 'adobe/geometrixx' };
@@ -65,7 +65,7 @@ describe('KV storage', () => {
     assert.strictEqual(resp.status, 400);
   });
 
-  describe('Put with malformed config', async () => {
+  it('Put with malformed config', async () => {
     const formData = new FormData();
     formData.append('config', 'abc');
 
@@ -80,5 +80,145 @@ describe('KV storage', () => {
     const resp = await putKv(req, env, daCtx);
     assert.strictEqual(resp.body, '{"error":"Couldn\'t parse or save config."}');
     assert.strictEqual(resp.status, 400);
+  });
+});
+
+describe('Validate permission sheet', () => {
+  it('Check that put is successful when CONFIG write permission is set', async () => {
+    const config = {
+      ':sheetname': 'permissions',
+      ':type': 'sheet',
+      data: [
+        { path: '/+*', actions: 'read', groups: 'me@foo.org' },
+        { path: 'CONFIG', actions: 'read', groups: 'hi@foo.org' },
+        { path: 'CONFIG', actions: 'write', groups: 'me@foo.org' },
+      ]
+    };
+    const formData = new FormData();
+    formData.append('config', JSON.stringify(config));
+
+    const req = { formData: () => { return formData; } };
+    const stored = [];
+    const env = {
+      DA_CONFIG: {
+        put: (key, value) => { stored.push(value); },
+        get: (key) => { return "dummy"; }
+      }
+    };
+
+    const resp = await putKv(req, env, {});
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual(stored.length, 1);
+    assert.strictEqual(stored[0], JSON.stringify(config));
+  });
+
+  it('Check that put is successful when CONFIG write permission is set - multisheet', async () => {
+    const config = {
+      permissions: {
+        data: [
+          { path: '/+*', actions: 'read', groups: 'me@foo.org' },
+          { path: 'CONFIG', actions: 'read', groups: 'hi@foo.org' },
+          { path: 'CONFIG', actions: 'write', groups: 'me@foo.org' },
+        ]
+      },
+      blah: {}
+    };
+    const formData = new FormData();
+    formData.append('config', JSON.stringify(config));
+
+    const req = { formData: () => { return formData; } };
+    const stored = [];
+    const env = {
+      DA_CONFIG: {
+        put: (key, value) => { stored.push(value); },
+        get: (key) => { return "dummy"; }
+      }
+    };
+
+    const resp = await putKv(req, env, {});
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual(stored.length, 1);
+    assert.strictEqual(stored[0], JSON.stringify(config));
+  });
+
+  it('Check that put is not successful when CONFIG write permission is missing', async () => {
+    const config = {
+      ':sheetname': 'permissions',
+      ':type': 'sheet',
+      data: [
+        { path: '/+*', actions: 'write', groups: 'me@foo.org' },
+        { path: 'CONFIG', actions: 'read', groups: 'me@foo.org' }
+      ]
+    };
+    const formData = new FormData();
+    formData.append('config', JSON.stringify(config));
+
+    const req = { formData: () => { return formData; } };
+    const stored = [];
+    const env = {
+      DA_CONFIG: {
+        put: (key, value) => { stored.push(value); },
+        get: (key) => { return "dummy"; }
+      }
+    };
+
+    const resp = await putKv(req, env, {});
+    assert.strictEqual(resp.status, 400);
+    const error = JSON.parse(resp.body);
+    assert.strictEqual(error.error, 'Should at least specify one user or group that has CONFIG write permission');
+    assert.strictEqual(stored.length, 0);
+  });
+
+  it('Check that put is not successful when CONFIG write permission is missing - multisheet', async () => {
+    const config = {
+      permissions: {
+        data: [
+          { path: '/+*', actions: 'write', groups: 'me@foo.org' },
+          { path: 'CONFIG', actions: 'read', groups: 'me@foo.org' }
+        ],
+      },
+      foo: {}
+    };
+    const formData = new FormData();
+    formData.append('config', JSON.stringify(config));
+
+    const req = { formData: () => { return formData; } };
+    const stored = [];
+    const env = {
+      DA_CONFIG: {
+        put: (key, value) => { stored.push(value); },
+        get: (key) => { return "dummy"; }
+      }
+    };
+
+    const resp = await putKv(req, env, {});
+    assert.strictEqual(resp.status, 400);
+    const error = JSON.parse(resp.body);
+    assert.strictEqual(error.error, 'Should at least specify one user or group that has CONFIG write permission');
+    assert.strictEqual(stored.length, 0);
+  });
+
+  it('Check that put is successful if permission sheet is not there', async () => {
+    const config = {
+      ':sheetname': 'other',
+      ':type': 'sheet',
+      data: []
+    };
+    const formData = new FormData();
+    formData.append('config', JSON.stringify(config));
+
+    const req = { formData: () => { return formData; } };
+    const stored = [];
+    const env = {
+      DA_CONFIG: {
+        put: (key, value) => { stored.push(value); },
+        get: (key) => { return "dummy"; }
+      }
+    };
+
+    const resp = await putKv(req, env, {});
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual(stored.length, 1);
+    assert.strictEqual(stored[0], JSON.stringify(config));
   });
 });

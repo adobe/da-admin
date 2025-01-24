@@ -1,4 +1,4 @@
 export default {
   getUsers: () => { return [{ email: 'anonymous' }]; },
-  isAuthorized: () => { return false; }
+  getAclCtx: () => { return { actionSet: new Set() }; },
 };

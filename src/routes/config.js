@@ -12,11 +12,22 @@
 
 import putKv from '../storage/kv/put.js';
 import getKv from '../storage/kv/get.js';
+import { hasPermission } from '../utils/auth.js';
 
-export function postConfig({ req, env, daCtx }) {
+export async function postConfig({ req, env, daCtx }) {
+  if (!hasPermission(daCtx, 'CONFIG', 'write', true)) {
+    return { status: 403 };
+  }
+
   return putKv(req, env, daCtx);
 }
 
-export function getConfig({ env, daCtx }) {
+export async function getConfig({ env, daCtx }) {
+  // // TODO maybe we should turn the order around?
+  // if (!hasPermission(daCtx, 'CONFIG', 'read', true)) {
+  //   const key = daCtx.key.startsWith('/') ? daCtx.key : `/${daCtx.key}`
+  //   if (!hasPermission(daCtx, key, 'read', true)) { // TODO
+  //     return { status: 403 };
+  // }
   return getKv(env, daCtx);
 }

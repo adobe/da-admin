@@ -48,6 +48,6 @@ export default {
         respObj = unknownHandler();
     }
 
-    return daResp(respObj);
+    return daResp(respObj, daCtx);
   },
 };
