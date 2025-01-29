@@ -9,38 +9,22 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  ListObjectsV2Command,
-} from '@aws-sdk/client-s3';
-
-import getS3Config from '../utils/config.js';
 import formatList from '../utils/list.js';
 
-function buildInput({ org, key, maxKeys }) {
-  const input = {
-    Bucket: `${org}-content`,
-    Prefix: key ? `${key}/` : null,
-    Delimiter: '/',
-  };
-  if (maxKeys) input.MaxKeys = maxKeys;
-  return input;
-}
-
 export default async function listObjects(env, daCtx, maxKeys) {
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-
-  const input = buildInput({ ...daCtx, maxKeys });
-  const command = new ListObjectsV2Command(input);
+  const input = {
+    prefix: daCtx.key ? `${daCtx.org}/${daCtx.key}/` : `${daCtx.org}/`,
+    delimiter: '/',
+    limit: maxKeys,
+  };
   try {
-    const resp = await client.send(command);
+    const resp = await env.DA_CONTENT.list(input);
     // console.log(resp);
-    const body = formatList(resp, daCtx);
+    const body = formatList(resp);
     return {
       body: JSON.stringify(body),
-      status: resp.$metadata.httpStatusCode,
-      contentType: resp.ContentType,
+      status: 200,
+      contentType: 'application/json',
     };
   } catch (e) {
     return { body: '', status: 404 };

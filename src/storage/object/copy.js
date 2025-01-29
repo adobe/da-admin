@@ -9,13 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  CopyObjectCommand,
-} from '@aws-sdk/client-s3';
-
 import getObject from './get.js';
-import getS3Config from '../utils/config.js';
 import { invalidateCollab } from '../utils/object.js';
 import { putObjectWithVersion } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
@@ -23,7 +17,7 @@ import { hasPermission } from '../../utils/auth.js';
 
 const MAX_KEYS = 900;
 
-export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
+export const copyFile = async (env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
 
   if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) {
@@ -34,70 +28,57 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
     };
   }
 
-  const input = {
-    Bucket: `${daCtx.org}-content`,
-    Key,
-    CopySource: `${daCtx.org}-content/${sourceKey}`,
-  };
+  const source = `${daCtx.org}/${sourceKey}`;
+  const destination = `${daCtx.org}/${Key}`;
 
-  // We only want to keep the history if this was a rename. In case of an actual
-  // copy we should start with clean history. The history is associated with the
-  // ID of the object, so we need to generate a new ID for the object and also a
-  // new ID for the version. We set the user to the user making the copy.
-  if (!isRename) {
-    input.Metadata = {
+  try {
+    const obj = await env.DA_CONTENT.get(source);
+    if (!obj) {
+      return { metadata: { httpStatusCode: 404 } };
+    }
+    // We only want to keep the history if this was a rename. In case of an actual
+    // copy we should start with clean history. The history is associated with the
+    // ID of the object, so we need to generate a new ID for the object and also a
+    // new ID for the version. We set the user to the user making the copy.
+    const customMetadata = !isRename ? {
       ID: crypto.randomUUID(),
       Version: crypto.randomUUID(),
       Timestamp: `${Date.now()}`,
       Users: JSON.stringify(daCtx.users),
       Path: Key,
-    };
-    input.MetadataDirective = 'REPLACE';
-  }
+    } : obj.customMetadata;
 
-  try {
-    const client = new S3Client(config);
-    client.middlewareStack.add(
-      (next) => async (args) => {
-        // eslint-disable-next-line no-param-reassign
-        args.request.headers['cf-copy-destination-if-none-match'] = '*';
-        return next(args);
-      },
-      {
-        step: 'build',
-        name: 'ifNoneMatchMiddleware',
-        tags: ['METADATA', 'IF-NONE-MATCH'],
-      },
-    );
-    const resp = await client.send(new CopyObjectCommand(input));
-    return resp;
-  } catch (e) {
-    if (e.$metadata.httpStatusCode === 412) {
-      // Not the happy path - something is at the destination already.
-      if (!isRename) {
-        // This is a copy so just put the source into the target to keep the history.
-
-        const original = await getObject(env, { org: daCtx.org, key: sourceKey });
-        return /* await */ putObjectWithVersion(env, daCtx, {
-          org: daCtx.org,
-          key: Key,
-          body: original.body,
-          contentLength: original.contentLength,
-          type: original.contentType,
-        });
-      }
-      // We're doing a rename
-
-      // TODO when storing the version make sure to do it from the file that was where there before
-      // await postObjectVersionWithLabel('Moved', env, daCtx);
-
-      const client = new S3Client(config);
-      // This is a move so copy to the new location
-      return /* await */ client.send(new CopyObjectCommand(input));
-    } else if (e.$metadata.httpStatusCode === 404) {
-      return { $metadata: e.$metadata };
+    const { httpMetadata } = obj;
+    const body = await obj.text();
+    const onlyIf = { etagDoesNotMatch: '*' };
+    if (await env.DA_CONTENT.put(destination, body, { onlyIf, httpMetadata, customMetadata })) {
+      return { metadata: { httpStatusCode: 200 } };
     }
-    throw e;
+    // Not the happy path - something is at the destination already.
+    if (!isRename) {
+      // This is a copy so just put the source into the target to keep the history.
+
+      const original = await getObject(env, { org: daCtx.org, key: sourceKey });
+      return {
+        metadata: {
+          httpStatusCode: await putObjectWithVersion(env, daCtx, {
+            org: daCtx.org,
+            key: Key,
+            body: original.body,
+            contentLength: original.contentLength,
+            type: original.contentType,
+          }),
+        },
+      };
+    }
+    // We're doing a rename
+
+    // TODO when storing the version make sure to do it from the file that was where there before
+    // await postObjectVersionWithLabel('Moved', env, daCtx);
+
+    // This is a move so copy to the new location
+    await env.DA_CONTENT.put(destination, body, { httpMetadata, customMetadata });
+    return { metadata: { httpStatusCode: 200 } };
   } finally {
     if (Key.endsWith('.html')) {
       // Reset the collab cached state for the copied object
@@ -109,9 +90,6 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
 export default async function copyObject(env, daCtx, details, isRename) {
   if (details.source === details.destination) return { body: '', status: 409 };
 
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-
   let sourceKeys;
   let remainingKeys = [];
   let continuationToken;
@@ -122,18 +100,18 @@ export default async function copyObject(env, daCtx, details, isRename) {
       remainingKeys = await env.DA_JOBS.get(continuationToken, { type: 'json' });
       sourceKeys = remainingKeys.splice(0, MAX_KEYS);
     } else {
-      let resp = await listCommand(daCtx, details, client);
+      let resp = await listCommand(daCtx, details);
       sourceKeys = resp.sourceKeys;
       if (resp.continuationToken) {
         continuationToken = `copy-${details.source}-${details.destination}-${crypto.randomUUID()}`;
         while (resp.continuationToken) {
-          resp = await listCommand(daCtx, { continuationToken: resp.continuationToken }, client);
+          resp = await listCommand(daCtx, { continuationToken: resp.continuationToken });
           remainingKeys.push(...resp.sourceKeys);
         }
       }
     }
     await Promise.all(sourceKeys.map(async (key) => {
-      await copyFile(config, env, daCtx, key, details, isRename);
+      await copyFile(env, daCtx, key, details, isRename);
     }));
 
     if (remainingKeys.length) {

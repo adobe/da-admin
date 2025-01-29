@@ -9,62 +9,24 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  PutObjectCommand,
-} from '@aws-sdk/client-s3';
-
-import getS3Config from '../utils/config.js';
-import {
-  createBucketIfMissing, ifMatch, ifNoneMatch,
-} from '../utils/version.js';
 import getObject from '../object/get.js';
 
-export function getContentLength(body) {
-  if (body === undefined) {
-    return undefined;
-  }
-
-  if (typeof body === 'string' || body instanceof String) {
-    // get string length in bytes
-    return new Blob([body]).size;
-  } else if (body instanceof File) {
-    return body.size;
-  }
-  return undefined;
-}
-
-export async function putVersion(config, {
-  Bucket, Body, ID, Version, Ext, Metadata, ContentLength,
+export async function putVersion(env, {
+  Bucket, Body, ID, Version, Ext, Metadata, ContentType,
 }, noneMatch = true) {
-  const length = ContentLength ?? getContentLength(Body);
-
-  const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
-  const input = {
-    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
-  };
-  const command = new PutObjectCommand(input);
-  try {
-    const resp = await client.send(command);
-    return { status: resp.$metadata.httpStatusCode };
-  } catch (e) {
-    return { status: e.$metadata.httpStatusCode };
+  const onlyIf = noneMatch ? { etagMatches: '*' } : undefined;
+  const r2o = await env.DA_CONTENT.put(
+    `${Bucket}/.da-versions/${ID}/${Version}.${Ext}`,
+    Body,
+    { onlyIf, customMetadata: Metadata, httpMetadata: { contentType: ContentType } },
+  );
+  if (r2o) {
+    return { status: 200 };
   }
-}
-
-function buildInput({
-  org, key, body, type, contentLength,
-}) {
-  const length = contentLength ?? getContentLength(body);
-
-  const Bucket = `${org}-content`;
-  return {
-    Bucket, Key: key, Body: body, ContentType: type, ContentLength: length,
-  };
+  return { status: 412 };
 }
 
 export async function putObjectWithVersion(env, daCtx, update, body) {
-  const config = getS3Config(env);
   // While we are automatically storing the body once for the 'Collab Parse' changes, we never
   // do a HEAD, because we may need the content. Once we don't need to do this automatic store
   // any more, we can change the 'false' argument in the next line back to !body.
@@ -73,27 +35,23 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const ID = current.metadata?.id || crypto.randomUUID();
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(daCtx.users);
-  const input = buildInput(update);
   const Timestamp = `${Date.now()}`;
   const Path = update.key;
 
   if (current.status === 404) {
-    const client = ifNoneMatch(config);
-    const command = new PutObjectCommand({
-      ...input,
-      Metadata: {
-        ID, Version, Users, Timestamp, Path,
-      },
-    });
-    try {
-      const resp = await client.send(command);
-      return resp.$metadata.httpStatusCode === 200 ? 201 : resp.$metadata.httpStatusCode;
-    } catch (e) {
-      if (e.$metadata.httpStatusCode === 412) {
-        return putObjectWithVersion(env, daCtx, update, body);
-      }
-      return e.$metadata.httpStatusCode;
+    const customMetadata = {
+      ID, Version, Users, Timestamp, Path,
+    };
+    const onlyIf = { etagDoesNotMatch: '*' };
+    const r2o = await env.DA_CONTENT.put(
+      `${daCtx.org}/${update.key}`,
+      update.body,
+      { onlyIf, httpMetadata: { contentType: update.type }, customMetadata },
+    );
+    if (!r2o) {
+      return putObjectWithVersion(env, daCtx, update, body);
     }
+    return 201;
   }
 
   const pps = current.metadata?.preparsingstore || '0';
@@ -103,8 +61,8 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   const Preparsingstore = storeBody ? Timestamp : pps;
   const Label = storeBody ? 'Collab Parse' : update.label;
 
-  const versionResp = await putVersion(config, {
-    Bucket: input.Bucket,
+  const versionResp = await putVersion(env, {
+    Bucket: update.org,
     Body: (body || storeBody ? current.body : ''),
     ContentLength: (body || storeBody ? current.contentLength : undefined),
     ID,
@@ -122,23 +80,23 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
     return versionResp.status;
   }
 
-  const client = ifMatch(config, `${current.etag}`);
-  const command = new PutObjectCommand({
-    ...input,
-    Metadata: {
-      ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Preparsingstore,
+  const onlyIf = { etagMatches: `${current.etag}` };
+  const r2o = await env.DA_CONTENT.put(
+    `${daCtx.org}/${update.key}`,
+    update.body,
+    {
+      onlyIf,
+      customMetadata: {
+        ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Preparsingstore,
+      },
+      httpMetadata: { contentType: update.type },
     },
-  });
-  try {
-    const resp = await client.send(command);
+  );
 
-    return resp.$metadata.httpStatusCode;
-  } catch (e) {
-    if (e.$metadata.httpStatusCode === 412) {
-      return putObjectWithVersion(env, daCtx, update, body);
-    }
-    return e.$metadata.httpStatusCode;
+  if (!r2o) {
+    return putObjectWithVersion(env, daCtx, update, body);
   }
+  return 200;
 }
 
 export async function postObjectVersionWithLabel(label, env, daCtx) {

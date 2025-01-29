@@ -9,28 +9,13 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {
-  S3Client,
-  ListObjectsV2Command,
-} from '@aws-sdk/client-s3';
-
-import getS3Config from '../utils/config.js';
 import { deleteObject } from './delete.js';
 import { copyFile } from './copy.js';
 import { hasPermission } from '../../utils/auth.js';
 
-function buildInput(org, key) {
-  return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
-  };
-}
+const limit = 100;
 
 export default async function moveObject(env, daCtx, details) {
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
-
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.
   const sourceKeys = [details.source];
@@ -41,24 +26,32 @@ export default async function moveObject(env, daCtx, details) {
 
   const results = [];
   let ContinuationToken;
-
+  const prefix = details.source.length ? `${daCtx.org}/${details.source}/` : `${daCtx.org}/`;
   do {
     try {
-      const command = new ListObjectsV2Command({ ...input, ContinuationToken });
-      const resp = await client.send(command);
+      const input = {
+        prefix,
+        limit,
+        cursor: ContinuationToken,
+      };
+      const r2list = await env.DA_CONTENT.list(input);
+      const { objects } = r2list;
+      ContinuationToken = r2list.cursor;
 
-      const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
+      sourceKeys.push(...objects
+        .map(({ key }) => key.split('/').slice(1).join('/')));
+
+      const NextContinuationToken = r2list.cursor;
 
       const movedLoad = sourceKeys
         .filter((key) => hasPermission(daCtx, key, 'write'))
         .filter((key) => hasPermission(daCtx, key.replace(details.source, details.destination), 'write'))
         .map(async (key) => {
           const result = { key };
-          const copied = await copyFile(config, env, daCtx, key, details, true);
+          const copied = await copyFile(env, daCtx, key, details, true);
           // Only delete the source if the file was successfully copied
           if (copied.$metadata.httpStatusCode === 200) {
-            const deleted = await deleteObject(client, daCtx, key, env, true);
+            const deleted = await deleteObject(daCtx, key, env, true);
             result.status = deleted.status === 204 ? 204 : deleted.status;
           } else {
             result.status = copied.$metadata.httpStatusCode;
