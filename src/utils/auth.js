@@ -254,6 +254,15 @@ export function getChildRules(daCtx) {
 
   const pd = daCtx.key.endsWith('/') ? daCtx.key : daCtx.key.concat('/');
   const probeDir = pd.startsWith('/') ? pd : '/'.concat(pd);
+
+  if (daCtx.aclCtx.pathLookup.size === 0) {
+    // If there are no acls, everyone can access
+
+    // eslint-disable-next-line no-param-reassign
+    daCtx.aclCtx.childRules = [`${probeDir}**=read,write`];
+    return;
+  }
+
   const probeKey = probeDir.concat('acl.probe');
   const actionSets = [];
   for (const u of daCtx.users) {

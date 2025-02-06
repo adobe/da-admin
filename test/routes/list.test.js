@@ -42,7 +42,7 @@ describe('List Route', () => {
     assert.strictEqual(403, resp.status);
     assert.strictEqual(0, loCalled.length);
 
-    const aclCtx = {};
+    const aclCtx = { pathLookup: new Map() };
     await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q', users: [], aclCtx }});
     assert.strictEqual(1, loCalled.length);
     assert.strictEqual('q/q', loCalled[0].c.key);

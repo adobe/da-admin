@@ -685,4 +685,14 @@ describe('DA auth', () => {
     assert.strictEqual(1, rules7.length);
     assert.strictEqual('/hello/**=read', rules7[0]);
   });
+
+  it('test get child rules when there are no acls', async () => {
+    const pathLookup = new Map();
+    const aclCtx = { pathLookup };
+    const daCtx = { users: [{email: 'anonymous'}], aclCtx, key: '/foo' };
+    getChildRules(daCtx);
+    const rules = daCtx.aclCtx.childRules;
+    assert.strictEqual(1, rules.length);
+    assert(rules[0] === '/foo/**=read,write' || rules[0] === '/foo/**=write,read');
+  });
 });
