@@ -17,10 +17,12 @@ import {
 import getS3Config from '../utils/config.js';
 import formatList from '../utils/list.js';
 
-function buildInput({ org, key, maxKeys }) {
+function buildInput({
+  bucket, org, key, maxKeys,
+}) {
   const input = {
-    Bucket: `${org}-content`,
-    Prefix: key ? `${key}/` : null,
+    Bucket: bucket,
+    Prefix: key ? `${org}/${key}/` : `${org}/`,
     Delimiter: '/',
   };
   if (maxKeys) input.MaxKeys = maxKeys;

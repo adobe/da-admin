@@ -53,13 +53,13 @@ export async function putVersion(config, {
 }
 
 function buildInput({
-  org, key, body, type, contentLength,
+  bucket, org, key, body, type, contentLength,
 }) {
   const length = contentLength ?? getContentLength(body);
 
-  const Bucket = `${org}-content`;
+  const Bucket = bucket;
   return {
-    Bucket, Key: key, Body: body, ContentType: type, ContentLength: length,
+    Bucket, Key: `${org}/${key}`, Body: body, ContentType: type, ContentLength: length,
   };
 }
 
