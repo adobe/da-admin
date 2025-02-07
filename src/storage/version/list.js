@@ -12,14 +12,15 @@
 import getObject from '../object/get.js';
 import listObjects from '../object/list.js';
 
-export async function listObjectVersions(env, { org, key }) {
-  const current = await getObject(env, { org, key }, true);
+export async function listObjectVersions(env, { bucket, org, key }) {
+  const current = await getObject(env, { bucket, org, key }, true);
   if (current.status === 404 || !current.metadata.id) {
     return 404;
   }
-  const resp = await listObjects(env, { org, key: `.da-versions/${current.metadata.id}` }, 500);
+  const resp = await listObjects(env, { bucket, org, key: `.da-versions/${current.metadata.id}` }, 500);
   const promises = await Promise.all(JSON.parse(resp.body).map(async (entry) => {
     const entryResp = await getObject(env, {
+      bucket,
       org,
       key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
     }, true);

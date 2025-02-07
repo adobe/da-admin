@@ -38,7 +38,7 @@ export default async function listObjects(env, daCtx, maxKeys) {
   try {
     const resp = await client.send(command);
     // console.log(resp);
-    const body = formatList(resp, daCtx);
+    const body = formatList(resp);
     return {
       body: JSON.stringify(body),
       status: resp.$metadata.httpStatusCode,
