@@ -180,24 +180,24 @@ describe('Version Put', () => {
     });
 
     const env = {};
-    const daCtx= { ext: 'html' };
-    const update = { body: 'new-body', org: 'myorg', key: '/a/x.html' };
+    const daCtx= { bucket: 'bkt', org: 'myorg', ext: 'html' };
+    const update = { bucket: 'bkt', body: 'new-body', org: 'myorg', key: 'a/x.html' };
     const resp = await putObjectWithVersion(env, daCtx, update, true);
     assert.equal(200, resp);
     assert.equal(1, s3VersionSent.length);
     assert.equal('prevbody', s3VersionSent[0].input.Body);
-    assert.equal('myorg-content', s3VersionSent[0].input.Bucket);
-    assert.equal('.da-versions/x123/aaa-bbb.html', s3VersionSent[0].input.Key);
+    assert.equal('bkt', s3VersionSent[0].input.Bucket);
+    assert.equal('myorg/.da-versions/x123/aaa-bbb.html', s3VersionSent[0].input.Key);
     assert.equal('[{"email":"anonymous"}]', s3VersionSent[0].input.Metadata.Users);
-    assert.equal('/a/x.html', s3VersionSent[0].input.Metadata.Path);
+    assert.equal('a/x.html', s3VersionSent[0].input.Metadata.Path);
     assert(s3VersionSent[0].input.Metadata.Timestamp > 0);
 
     assert.equal(1, s3Sent.length);
     assert.equal('new-body', s3Sent[0].input.Body);
-    assert.equal('myorg-content', s3Sent[0].input.Bucket);
-    assert.equal('/a/x.html', s3Sent[0].input.Key);
+    assert.equal('bkt', s3Sent[0].input.Bucket);
+    assert.equal('myorg/a/x.html', s3Sent[0].input.Key);
     assert.equal('x123', s3Sent[0].input.Metadata.ID);
-    assert.equal('/a/x.html', s3Sent[0].input.Metadata.Path);
+    assert.equal('a/x.html', s3Sent[0].input.Metadata.Path);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
   });
@@ -246,24 +246,24 @@ describe('Version Put', () => {
     });
 
     const env = {};
-    const daCtx= { ext: 'html', users: [{"email": "foo@acme.org"}, {"email": "bar@acme.org"}] };
-    const update = { body: 'new-body', org: 'myorg', key: '/a/x.html' };
+    const daCtx= { bucket: 'bbb', org: 'myorg', ext: 'html', users: [{"email": "foo@acme.org"}, {"email": "bar@acme.org"}] };
+    const update = { bucket: 'bbb', body: 'new-body', org: 'myorg', key: 'a/x.html' };
     const resp = await putObjectWithVersion(env, daCtx, update, false);
     assert.equal(202, resp);
     assert.equal(1, s3VersionSent.length);
     assert.equal('', s3VersionSent[0].input.Body);
-    assert.equal('myorg-content', s3VersionSent[0].input.Bucket);
-    assert.equal('.da-versions/q123-456/ver123.html', s3VersionSent[0].input.Key);
+    assert.equal('bbb', s3VersionSent[0].input.Bucket);
+    assert.equal('myorg/.da-versions/q123-456/ver123.html', s3VersionSent[0].input.Key);
     assert.equal('[{"email":"anonymous"}]', s3VersionSent[0].input.Metadata.Users);
-    assert.equal('/a/x.html', s3VersionSent[0].input.Metadata.Path);
+    assert.equal('a/x.html', s3VersionSent[0].input.Metadata.Path);
     assert(s3VersionSent[0].input.Metadata.Timestamp > 0);
 
     assert.equal(1, s3Sent.length);
     assert.equal('new-body', s3Sent[0].input.Body);
-    assert.equal('myorg-content', s3Sent[0].input.Bucket);
-    assert.equal('/a/x.html', s3Sent[0].input.Key);
+    assert.equal('bbb', s3Sent[0].input.Bucket);
+    assert.equal('myorg/a/x.html', s3Sent[0].input.Key);
     assert.equal('q123-456', s3Sent[0].input.Metadata.ID);
-    assert.equal('/a/x.html', s3Sent[0].input.Metadata.Path);
+    assert.equal('a/x.html', s3Sent[0].input.Metadata.Path);
     assert.equal('[{\"email\":\"foo@acme.org\"},{\"email\":\"bar@acme.org\"}]', s3Sent[0].input.Metadata.Users);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
@@ -302,15 +302,15 @@ describe('Version Put', () => {
     });
 
     const env = {};
-    const daCtx= {};
-    const update = { org: 'myorg', key: '/a/b/c' };
+    const daCtx= { bucket: 'b-b', org: 'myorg' };
+    const update = { bucket: 'b-b', org: 'myorg', key: 'a/b/c' };
     const resp = await putObjectWithVersion(env, daCtx, update, true);
     assert.equal(201, resp);
 
     assert.equal(1, s3Sent.length);
-    assert.equal('myorg-content', s3Sent[0].input.Bucket);
+    assert.equal('b-b', s3Sent[0].input.Bucket);
     assert(s3Sent[0].input.Metadata.ID);
-    assert.equal('/a/b/c', s3Sent[0].input.Metadata.Path);
+    assert.equal('a/b/c', s3Sent[0].input.Metadata.Path);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
     assert(s3Sent[0].input.Metadata.Version);
   });
@@ -323,8 +323,9 @@ describe('Version Put', () => {
     };
     const env = {};
     const ctx = {
+      bucket: 'mybucket',
       org: 'org123',
-      key: '/q/r/t'
+      key: 'q/r/t'
     };
 
     const mockGetObject = async (e, u, h) => {
@@ -379,8 +380,8 @@ describe('Version Put', () => {
     assert.equal(201, resp.status);
     assert.equal(1, s3INMSent.length);
     assert(s3INMSent[0].input.Body instanceof ReadableStream);
-    assert.equal('org123-content', s3INMSent[0].input.Bucket);
-    assert.equal('/q/r/t', s3INMSent[0].input.Metadata.Path);
+    assert.equal('mybucket', s3INMSent[0].input.Bucket);
+    assert.equal('q/r/t', s3INMSent[0].input.Metadata.Path);
     assert(s3INMSent[0].input.Metadata.Timestamp > 0);
     assert.equal('[{"email":"anonymous"}]', s3INMSent[0].input.Metadata.Users);
     assert.equal('foobar', s3INMSent[0].input.Metadata.Label);
@@ -388,9 +389,9 @@ describe('Version Put', () => {
 
     assert.equal(1, s3Sent.length);
     assert(s3Sent[0].input.Body instanceof ReadableStream);
-    assert.equal('org123-content', s3Sent[0].input.Bucket);
-    assert.equal('/q/r/t', s3Sent[0].input.Key);
-    assert.equal('/q/r/t', s3Sent[0].input.Metadata.Path);
+    assert.equal('mybucket', s3Sent[0].input.Bucket);
+    assert.equal('org123/q/r/t', s3Sent[0].input.Key);
+    assert.equal('q/r/t', s3Sent[0].input.Metadata.Path);
     assert(s3Sent[0].input.Metadata.ID);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
     assert(s3Sent[0].input.Metadata.Version);
@@ -493,11 +494,13 @@ describe('Version Put', () => {
     });
 
     const update = {
+      org: 'o1',
       body: 'foobar',
-      key: '/mypath',
+      key: 'mypath',
       type: 'test/plain',
     }
     const ctx = {
+      org: 'o1',
       users: [{ email: 'hi@acme.com' }]
     }
     const resp = await putObjectWithVersion({}, ctx, update, true);
@@ -514,8 +517,8 @@ describe('Version Put', () => {
     assert.equal('foobar', input2.Body);
     assert.equal(6, input2.ContentLength);
     assert.equal('test/plain', input2.ContentType);
-    assert.equal('/mypath', input2.Key);
-    assert.equal('/mypath', input2.Metadata.Path);
+    assert.equal('o1/mypath', input2.Key);
+    assert.equal('mypath', input2.Metadata.Path);
     assert.equal('[{"email":"hi@acme.com"}]', input2.Metadata.Users);
     assert(input2.Metadata.Version && input2.Metadata.Version !== 101);
   });
