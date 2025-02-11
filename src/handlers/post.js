@@ -13,6 +13,7 @@ import { postSource } from '../routes/source.js';
 import { postConfig } from '../routes/config.js';
 import { postVersionSource } from '../routes/version.js';
 import copyHandler from '../routes/copy.js';
+import logout from '../routes/logout.js';
 import moveRoute from '../routes/move.js';
 
 export default async function postHandler({ req, env, daCtx }) {
@@ -23,6 +24,7 @@ export default async function postHandler({ req, env, daCtx }) {
   if (path.startsWith('/versionsource')) return postVersionSource({ req, env, daCtx });
   if (path.startsWith('/copy')) return copyHandler({ req, env, daCtx });
   if (path.startsWith('/move')) return moveRoute({ req, env, daCtx });
+  if (path.startsWith('/logout')) return logout({ env, daCtx });
 
   return undefined;
 }

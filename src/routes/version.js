@@ -13,15 +13,24 @@
 import { getObjectVersion } from '../storage/version/get.js';
 import { listObjectVersions } from '../storage/version/list.js';
 import { postObjectVersion } from '../storage/version/put.js';
+import { hasPermission } from '../utils/auth.js';
 
 export async function getVersionList({ env, daCtx }) {
+  if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
   return listObjectVersions(env, daCtx);
 }
 
 export async function getVersionSource({ env, daCtx, head }) {
-  return getObjectVersion(env, daCtx, head);
+  // daCtx.key is something like
+  // 'f85f9b05-ae48-485b-a3b3-dd203ac5c734/1b7e005b-8602-4053-b920-8e67ad8e8dba.html’
+  // so we have to do the permission check when the object is returned from the metadata.
+
+  const resp = await getObjectVersion(env, daCtx, head);
+  if (!hasPermission(daCtx, resp.metadata?.path, 'read')) return { status: 403 };
+  return resp;
 }
 
 export async function postVersionSource({ req, env, daCtx }) {
+  if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
   return postObjectVersion(req, env, daCtx);
 }

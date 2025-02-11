@@ -14,14 +14,25 @@ export default function daResp({
   body,
   contentType = 'application/json',
   contentLength,
-}) {
+}, ctx) {
   const headers = new Headers();
   headers.append('Access-Control-Allow-Origin', '*');
   headers.append('Access-Control-Allow-Methods', 'HEAD, GET, PUT, POST, DELETE');
   headers.append('Access-Control-Allow-Headers', '*');
+  headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace');
   headers.append('Content-Type', contentType);
   if (contentLength) {
     headers.append('Content-Length', contentLength);
+  }
+  if (ctx?.aclCtx && status < 500) {
+    headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
+
+    if (ctx.aclCtx.childRules) {
+      headers.append('X-da-child-actions', ctx.aclCtx.childRules.join(';'));
+    }
+    if (ctx.aclCtx.actionTrace) {
+      headers.append('X-da-acltrace', JSON.stringify(ctx.aclCtx.actionTrace));
+    }
   }
 
   return new Response(body, { status, headers });

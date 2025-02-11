@@ -11,7 +11,7 @@ const getDaCtx = await esmock(
   '../../src/utils/daCtx.js', { '../../src/utils/auth.js': auth },
 );
 
-describe('Dark Alley context', () => {
+describe('DA context', () => {
   describe('API context', async () => {
     let daCtx;
 
