@@ -172,6 +172,11 @@ describe('DA auth', () => {
               "actions": "write",
             },
             {
+              "path": "/hark/hork/hoo",
+              "groups": "2345B0EA551D747",
+              "actions": "write",
+            },
+            {
               "path": "ACLTRACE",
               "groups": "joe@bloggs.org",
               "actions": "read",
@@ -292,6 +297,38 @@ describe('DA auth', () => {
           path: '/bar/+**',
           actions: [ 'read', 'write' ]
         }, trace[groupTraceIdx]);
+    });
+
+    it('test trace information2', async () => {
+      const users = [{
+        email: 'joe@bloggs.org',
+        groups: [
+          { orgIdent: '2345B0EA551D747', groupName: 4711 },
+          { orgIdent: '2345B0EA551D747', groupName: 'oxo' }
+        ]
+      }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/hark/hork/hoo');
+      const trace = aclCtx.actionTrace;
+
+      assert.strictEqual(3, trace.length);
+
+      const emailTraceIdx = trace[0].group === 'joebloggs.org' ? 0 : trace[1].group === 'joebloggs.org' ? 1 : 2;
+      const orgGrpTraceIdx = trace[0].group === '2345B0EA551D747/4711' ? 0 : trace[1].group === '2345B0EA551D747/4711' ? 1 : 2;
+      const orgTraceIdx = trace[0].group === '2345B0EA551D747' ? 0 : trace[1].group === '2345B0EA551D747' ? 1 : 2;
+
+      assert.deepStrictEqual({group: 'joe@bloggs.org', path: '/**', actions: ['read']}, trace[emailTraceIdx]);
+      assert.deepStrictEqual(
+        {
+          group: '2345B0EA551D747/4711',
+          path: '/**',
+          actions: [ 'read' ]
+        }, trace[orgGrpTraceIdx]);
+      assert.deepStrictEqual(
+        {
+          group: '2345B0EA551D747',
+          path: '/hark/hork/hoo',
+          actions: [ 'read', 'write' ]
+        }, trace[orgTraceIdx]);
     });
 
     it('test CONFIG api', async () => {

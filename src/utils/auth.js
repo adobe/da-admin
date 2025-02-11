@@ -92,7 +92,7 @@ export async function getUsers(req, env) {
 }
 
 function getIdents(user) {
-  return (user.groups || [])
+  const idents = (user.groups || [])
     .flatMap((group) => [
       `${group.orgIdent}`,
       `${group.orgIdent}/${group.groupName}`,
@@ -100,6 +100,9 @@ function getIdents(user) {
     ])
     .concat(user.email)
     .filter((e) => e !== undefined);
+
+  // remove duplicates
+  return [...new Set(idents)];
 }
 
 export function getUserActions(pathLookup, user, target) {
