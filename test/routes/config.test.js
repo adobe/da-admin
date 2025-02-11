@@ -110,7 +110,8 @@ describe('Config', () => {
     );
 
     const res = await getConfig({ env, daCtx: ctx });
-    assert.strictEqual(getKVCalled.length, 1, "Should always have get permission on config");
+    assert.strictEqual(getKVCalled.length, 0, "Should not have read permission on config");
+    assert.strictEqual(res.status, 403);
 
     const res2 = await postConfig({ req, env, daCtx: ctx });
     assert.strictEqual(res2.status, 403);
