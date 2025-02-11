@@ -9,14 +9,15 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { hasPermission } from '../../utils/auth.js';
+import { isAuthorized } from '../../utils/auth.js';
 
 async function isBucketAuthed(env, daCtx, bucket) {
   const { name, created } = bucket;
-
-  if (!hasPermission(daCtx, name, 'read')) {
-    return null;
-  }
+  const userAuth = await Promise.all(
+    daCtx.users.map(async (user) => isAuthorized(env, name, user)),
+  );
+  const notAuthed = userAuth.some((authed) => !authed);
+  if (notAuthed) return null;
   return { name, created };
 }
 

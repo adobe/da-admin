@@ -11,12 +11,9 @@
  */
 import moveObject from '../storage/object/move.js';
 import moveHelper from '../helpers/move.js';
-import { hasPermission } from '../utils/auth.js';
 
 export default async function moveRoute({ req, env, daCtx }) {
   const details = await moveHelper(req, daCtx);
   if (details.error) return details.error;
-  if (!hasPermission(daCtx, details.source, 'write')
-    || !hasPermission(daCtx, details.destination, 'write')) return { status: 403 };
   return moveObject(env, daCtx, details);
 }

@@ -24,10 +24,7 @@ export default {
 
     const daCtx = await getDaCtx(req, env);
     const { authorized, key } = daCtx;
-    if (!authorized) {
-      const status = daCtx.users[0].email === 'anonymous' ? 401 : 403;
-      return daResp({ status });
-    }
+    if (!authorized) return daResp({ status: 401 });
     if (key?.startsWith('.da-versions')) return daResp({ status: 404 });
 
     let respObj;
@@ -51,6 +48,6 @@ export default {
         respObj = unknownHandler();
     }
 
-    return daResp(respObj, daCtx);
+    return daResp(respObj);
   },
 };

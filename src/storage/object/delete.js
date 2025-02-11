@@ -18,7 +18,6 @@ import getS3Config from '../utils/config.js';
 import { invalidateCollab } from '../utils/object.js';
 // import { postObjectVersionWithLabel } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
-import { hasPermission } from '../../utils/auth.js';
 
 export async function deleteObject(client, daCtx, Key, env /* , isMove = false */) {
   // const fname = Key.split('/').pop();
@@ -53,9 +52,9 @@ export default async function deleteObjects(env, daCtx, details) {
 
   try {
     const { sourceKeys, continuationToken } = await listCommand(daCtx, details, client);
-
-    const deleteKeys = sourceKeys.filter((key) => hasPermission(daCtx, key, 'write'));
-    await Promise.all(deleteKeys.map(async (key) => deleteObject(client, daCtx, key, env)));
+    await Promise.all(sourceKeys.map(async (key) => {
+      await deleteObject(client, daCtx, key, env);
+    }));
 
     if (continuationToken) {
       return { body: JSON.stringify({ continuationToken }), status: 206 };

@@ -10,31 +10,12 @@
  * governing permissions and limitations under the License.
  */
 
-function checkConfigWriter(json) {
-  // Handle both single and multi-sheet
-  const data = json[':sheetname'] === 'permissions' && json[':type'] === 'sheet'
-    ? json.data
-    : json?.permissions?.data;
-
-  if (!data) return true; // Not a permission sheet
-
-  return data.some((e) => e.path?.trim() === 'CONFIG' && e.actions?.trim() === 'write' && e.groups?.trim().length > 0);
-}
-
 async function save(env, key, string) {
   let body;
   let status;
   try {
     // Parse it to at least validate its json
-    const json = JSON.parse(string);
-
-    if (!checkConfigWriter(json)) {
-      return {
-        body: JSON.stringify({ error: 'Should at least specify one user or group that has CONFIG write permission' }),
-        status: 400,
-      };
-    }
-
+    JSON.parse(string);
     // Put it (seems to not return a response)
     await env.DA_CONFIG.put(key, string);
     // Validate the content is there

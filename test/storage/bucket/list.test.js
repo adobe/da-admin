@@ -3,12 +3,8 @@ import listBuckets from '../../../src/storage/bucket/list.js';
 import env from './mocks/env.js';
 
 describe('List', () => {
-  const aclCtx = {
-    pathLookup: new Map()
-  };
-  const daCtx = { users: [{email: 'aparker@geometrixx.info'}], aclCtx };
+  const daCtx = { users: [{email: 'aparker@geometrixx.info'}] };
 
-  /* This test has to be rewritten
   describe('Lists authed buckets', async () => {
     const bucketsResp = await listBuckets(env, daCtx);
     const buckets = JSON.parse(bucketsResp.body);
@@ -17,7 +13,6 @@ describe('List', () => {
       assert.strictEqual(buckets.length, 2);
     });
   });
-  */
 
   describe('404s on any error', () => {
     it('Dies on null env', async () => {
