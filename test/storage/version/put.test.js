@@ -267,7 +267,7 @@ describe('Version Put', () => {
     assert.equal('[{\"email\":\"foo@acme.org\"},{\"email\":\"bar@acme.org\"}]', s3Sent[0].input.Metadata.Users);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
-    assert((s3Sent[0].input.Metadata.Preparsingstore - s3Sent[0].input.Metadata.Timestamp) < 100);
+    assert.equal(s3Sent[0].input.Metadata.Preparsingstore, s3Sent[0].input.Metadata.Timestamp);
   });
 
   it('Put First Object With Version', async () => {

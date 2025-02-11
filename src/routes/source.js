@@ -16,16 +16,13 @@ import { invalidateCollab } from '../storage/utils/object.js';
 
 import putHelper from '../helpers/source.js';
 import deleteHelper from '../helpers/delete.js';
-import { hasPermission } from '../utils/auth.js';
 
 export async function deleteSource({ req, env, daCtx }) {
-  if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
   const details = await deleteHelper(req);
   return /* await */ deleteObjects(env, daCtx, details);
 }
 
 export async function postSource({ req, env, daCtx }) {
-  if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
   const obj = await putHelper(req, env, daCtx);
   const resp = await putObject(env, daCtx, obj);
 
@@ -39,6 +36,5 @@ export async function postSource({ req, env, daCtx }) {
 }
 
 export async function getSource({ env, daCtx, head }) {
-  if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
   return getObject(env, daCtx, head);
 }

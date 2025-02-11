@@ -11,7 +11,6 @@
  */
 import { getSource } from '../routes/source.js';
 import getList from '../routes/list.js';
-import logout from '../routes/logout.js';
 import { getConfig } from '../routes/config.js';
 import { getVersionSource, getVersionList } from '../routes/version.js';
 
@@ -35,7 +34,6 @@ export default async function getHandler({ env, daCtx }) {
   if (path.startsWith('/config')) return getConfig({ env, daCtx });
   if (path.startsWith('/versionlist')) return getVersionList({ env, daCtx });
   if (path.startsWith('/versionsource')) return getVersionSource({ env, daCtx });
-  if (path.startsWith('/logout')) return logout({ env, daCtx });
 
   return undefined;
 }
