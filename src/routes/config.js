@@ -23,11 +23,9 @@ export async function postConfig({ req, env, daCtx }) {
 }
 
 export async function getConfig({ env, daCtx }) {
-  // // TODO maybe we should turn the order around?
-  // if (!hasPermission(daCtx, 'CONFIG', 'read', true)) {
-  //   const key = daCtx.key.startsWith('/') ? daCtx.key : `/${daCtx.key}`
-  //   if (!hasPermission(daCtx, key, 'read', true)) { // TODO
-  //     return { status: 403 };
-  // }
+  if (!hasPermission(daCtx, 'CONFIG', 'read', true)) {
+    return { status: 403 };
+  }
+
   return getKv(env, daCtx);
 }
