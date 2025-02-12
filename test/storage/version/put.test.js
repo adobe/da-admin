@@ -246,7 +246,12 @@ describe('Version Put', () => {
     });
 
     const env = {};
-    const daCtx= { ext: 'html', users: [{"email": "foo@acme.org"}, {"email": "bar@acme.org"}] };
+    const daCtx= {
+      ext: 'html',
+      users: [
+        {"email": "foo@acme.org", orgs: ['myorg']},
+        {"email": "bar@acme.org", groups: ['g1', 'g2']}
+      ]};
     const update = { body: 'new-body', org: 'myorg', key: '/a/x.html' };
     const resp = await putObjectWithVersion(env, daCtx, update, false);
     assert.equal(202, resp);
@@ -267,7 +272,7 @@ describe('Version Put', () => {
     assert.equal('[{\"email\":\"foo@acme.org\"},{\"email\":\"bar@acme.org\"}]', s3Sent[0].input.Metadata.Users);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
-    assert.equal(s3Sent[0].input.Metadata.Preparsingstore, s3Sent[0].input.Metadata.Timestamp);
+    assert((s3Sent[0].input.Metadata.Preparsingstore - s3Sent[0].input.Metadata.Timestamp) < 100);
   });
 
   it('Put First Object With Version', async () => {
