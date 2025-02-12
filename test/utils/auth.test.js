@@ -78,43 +78,21 @@ describe('DA auth', () => {
       assert.strictEqual('123', userValue.ident);
 
       const expectedOrgs = [
-        { orgName: 'Org1', orgIdent: '2345B0EA551D747' },
-        { orgName: 'Org No groups', orgIdent: '139024093' },
-        { orgName: 'ACME Inc.', orgIdent: 'EE23423423423' },
+        { orgName: 'Org1',
+          orgIdent: '2345B0EA551D747',
+          groups: [
+            { groupName: 'READ_WRITE_STANDARD@DEV' },
+            { groupName: 'READ_ONLY_STANDARD@PROD' },
+          ]},
+        { orgName: 'Org No groups', orgIdent: '139024093', groups: [] },
+        { orgName: 'ACME Inc.',
+          orgIdent: 'EE23423423423',
+          groups: [
+            { groupName: 'Emp' },
+            { groupName: 'org-test' },
+          ]},
       ];
       assert.deepStrictEqual(expectedOrgs, userValue.orgs);
-
-      const expectedGroups = [
-        {
-          "orgName": "Org1",
-          "orgIdent": "2345B0EA551D747",
-          "groupName": "READ_WRITE_STANDARD@DEV",
-          "groupDisplayName": "READ_WRITE_STANDARD@DEV",
-          "ident": 4711
-        },
-        {
-          "orgName": "Org1",
-          "orgIdent": "2345B0EA551D747",
-          "groupName": "READ_ONLY_STANDARD@PROD",
-          "groupDisplayName": "READ_ONLY_STANDARD@PROD",
-          "ident": 8080
-        },
-        {
-          "orgName": "ACME Inc.",
-          "orgIdent": "EE23423423423",
-          "groupName": "Emp",
-          "groupDisplayName": "Emp",
-          "ident": 12312312
-        },
-        {
-          "orgName": "ACME Inc.",
-          "orgIdent": "EE23423423423",
-          "groupName": "org-test",
-          "groupDisplayName": "org-test",
-          "ident": 34243
-        }
-      ];
-      assert.deepStrictEqual(expectedGroups, userValue.groups);
     });
   });
 
@@ -220,7 +198,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions', async () => {
       const key = '';
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}]}];
+      const users = [{orgs: [{orgIdent: '2345B0EA551D747', groups: [{groupName: '4711'}]}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -234,7 +212,7 @@ describe('DA auth', () => {
     });
 
     it('test hasPermissions2', async () => {
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 8080}]}];
+      const users = [{orgs: [{orgIdent: '2345B0EA551D747', groups: [{groupName: '8080'}]}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
 
       assert(hasPermission({users, org: 'test', key: '/test', aclCtx}, 'test', 'write'));
@@ -243,7 +221,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions3', async () => {
       const key = '/test';
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}, {orgIdent: '2345B0EA551D747', groupName: 8080}]}];
+      const users = [{orgs: [{orgIdent: '2345B0EA551D747', groups: [{groupName: '4711'},{groupName: '8080'}]}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -252,7 +230,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions4', async () => {
       const key = '';
-      const users = [{groups: []}];
+      const users = [{orgs: []}];
       const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(!hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -260,7 +238,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions5', async () => {
       const key = '';
-      const users = [{groups: [{ orgIdent: '123' }]}];
+      const users = [{orgs: [{ orgIdent: '123' }]}];
       const aclCtx = await getAclCtx(env2, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -268,7 +246,7 @@ describe('DA auth', () => {
     });
 
     it('test hasPermissions6', async () => {
-      const users = [{email: 'joe@bloggs.org', groups: []}];
+      const users = [{email: 'joe@bloggs.org', orgs: []}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
 
       assert(hasPermission({users, org: 'test', aclCtx, key: ''}, '/test', 'read'));
@@ -278,7 +256,7 @@ describe('DA auth', () => {
     });
 
     it('test trace information', async () => {
-      const users = [{email: 'joe@bloggs.org', groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}]}];
+      const users = [{email: 'joe@bloggs.org', orgs: [{orgIdent: '2345B0EA551D747', groups: [{groupName: '4711'}]}]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/bar/blah.html');
       const trace = aclCtx.actionTrace;
 
@@ -295,7 +273,7 @@ describe('DA auth', () => {
     });
 
     it('test CONFIG api', async () => {
-      const users = [{ groups: [{ orgIdent: "123" }]}];
+      const users = [{ orgs: [{ orgIdent: "123" }]}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/', 'config');
 
       assert(hasPermission({users, org: 'test', aclCtx, key: ''}, 'CONFIG', 'write', true));
@@ -303,7 +281,7 @@ describe('DA auth', () => {
     });
 
     it('test CONFIG always has read permission', async () => {
-      const users = [{ident: "blah@foo.org"}];
+      const users = [{email: "blah@foo.org"}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/', 'config');
       assert(aclCtx.actionSet.has('read'));
     })
@@ -369,7 +347,7 @@ describe('DA auth', () => {
 
     it('test hasPermissions', async () => {
       const key = '';
-      const users = [{groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}]}];
+      const users = [{orgs: [{orgIdent: '2345B0EA551D747', groups: [{groupName: '4711'}]}]}];
       const aclCtx = await getAclCtx(env, 'test', users, key);
 
       assert(hasPermission({users, org: 'test', aclCtx, key}, '/test', 'read'));
@@ -496,10 +474,6 @@ describe('DA auth', () => {
       const user = {
         email: 'joe@acme.com',
         ident: 'AAAA@bbb.e',
-        groups: [
-          {orgName: 'org1', orgIdent: 'ABCDEFG', ident: 123456, groupName: 'grp1'},
-          {orgName: 'org2', orgIdent: 'ZZZZZZZ', ident: 77777, groupName: 'grp2'},
-        ],
       };
 
       assert.deepStrictEqual(['read', 'write'],
@@ -537,10 +511,15 @@ describe('DA auth', () => {
     const user = {
       email: 'joe@acme.com',
       ident: 'AAAA@bbb.e',
-      groups: [
-        {orgName: 'org1', orgIdent: 'ABCDEFG', ident: 123456, groupName: 'grp1'},
-        {orgName: 'org2', orgIdent: 'ZZZZZZZ', ident: 77777, groupName: 'grp2'},
-      ],
+      orgs: [{
+        orgName: 'org1',
+        orgIdent: 'ABCDEFG',
+        groups: [{ groupName: 'grp1' }]
+      },{
+        orgName: 'org2',
+        orgIdent: 'ZZZZZZZ',
+        groups: [{ groupName: 'grp2' }]
+      }],
     };
     assert.deepStrictEqual(['read', 'write'],
       [...getUserActions(pathlookup, user, '/').actions]);
@@ -582,11 +561,16 @@ describe('DA auth', () => {
     const user = {
       email: 'foo@bar.org',
       ident: '1234@abcd',
-      groups: [
-        { orgName: 'org1', orgIdent: 'ABCDEFG', ident: 111, groupName: 'grp1' },
-        { orgName: 'org2', orgIdent: 'HIJKLMN', ident: 222, groupName: 'grp2' },
-      ]};
-
+      orgs: [{
+        orgName: 'org1',
+        orgIdent: 'ABCDEFG',
+        groups: [{ groupName: 'grp1' }]
+      },{
+        orgName: 'org2',
+        orgIdent: 'HIJKLMN',
+        groups: [{ groupName: 'grp2' }]
+      }]
+    };
     const pathLookup = new Map();
     pathLookup.set('ABCDEFG', [{ident: 'ABCDEFG', path: '/xyz', actions: ['read']}]);
     pathLookup.set('ABCDEFG/grp1', [{ident: 'ABCDEFG/grp1', path: '/xyz', actions: ['read']}]);
@@ -639,7 +623,7 @@ describe('DA auth', () => {
     pathLookup.forEach((value) => value.sort(pathSorter));
 
     const aclCtx = { pathLookup };
-    const daCtx = { users: [{email: 'a@foo.org', groups: [{orgIdent: 'ABCDEF'}]}], aclCtx, key: '/blah' };
+    const daCtx = { users: [{ email: 'a@foo.org', orgs: [{orgIdent: 'ABCDEF'}]}], aclCtx, key: '/blah' };
     getChildRules(daCtx);
     const rules = daCtx.aclCtx.childRules;
     assert.strictEqual(1, rules.length);
@@ -671,7 +655,7 @@ describe('DA auth', () => {
     assert.strictEqual('/blah/**=write', rules5[0]);
 
     delete daCtx.aclCtx.childRules;
-    const users = [{email: 'a@foo.org', groups: []}, {email: 'blah@foo.org', groups: [{orgIdent: 'ABCDEF'}]}];
+    const users = [{email: 'a@foo.org', orgs: []}, {email: 'blah@foo.org', orgs: [{orgIdent: 'ABCDEF'}]}];
     const daCtx3 = { users, aclCtx, key: '/blah' };
     getChildRules(daCtx3);
     const rules6 = daCtx3.aclCtx.childRules;

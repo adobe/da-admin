@@ -35,18 +35,25 @@ export async function setUser(userId, expiration, headers, env) {
 
   const organizationsJson = await resp.json();
 
+  const orgs = [];
+  for (const curOrg of organizationsJson) {
+    const org = {
+      orgName: curOrg.orgName,
+      orgIdent: curOrg.orgRef.ident,
+      groups: [],
+    };
+    for (const curGroup of curOrg.groups) {
+      org.groups.push({
+        groupName: curGroup.groupName,
+      });
+    }
+    orgs.push(org);
+  }
+
   const value = JSON.stringify({
     email: json.email,
     ident: json.userId,
-    orgs: organizationsJson.map(({ orgName, orgRef }) => ({
-      orgName, orgIdent: orgRef.ident,
-    })),
-    groups: organizationsJson
-      .map(({ orgName, orgRef, groups }) => groups
-        .map(({ groupName, groupDisplayName, ident }) => ({
-          orgName, orgIdent: orgRef.ident, groupName, groupDisplayName, ident,
-        })))
-      .flat(),
+    orgs,
   });
 
   await env.DA_AUTH.put(userId, value, { expiration });
@@ -92,14 +99,16 @@ export async function getUsers(req, env) {
 }
 
 function getIdents(user) {
-  return (user.groups || [])
-    .flatMap((group) => [
-      `${group.orgIdent}`,
-      `${group.orgIdent}/${group.groupName}`,
-      `${group.orgIdent}/${user.email}`,
-    ])
-    .concat(user.email)
-    .filter((e) => e !== undefined);
+  const idents = [user.email];
+  for (const org of user.orgs || []) {
+    idents.push(org.orgIdent);
+    idents.push(`${org.orgIdent}/${user.email}`);
+    for (const group of org.groups || []) {
+      idents.push(`${org.orgIdent}/${group.groupName}`);
+    }
+  }
+
+  return idents;
 }
 
 export function getUserActions(pathLookup, user, target) {
