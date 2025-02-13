@@ -181,7 +181,7 @@ describe('Object copy', () => {
 
       assert.strictEqual(1, collabcalls.length);
       assert.deepStrictEqual(collabcalls,
-        ['https://localhost/api/v1/syncAdmin?doc=somehost.sometld/source/foo/mydir/newdir/xyz.html']);
+        ['https://localhost/api/v1/syncadmin?doc=somehost.sometld/source/foo/mydir/newdir/xyz.html']);
     });
 
     it('Copies a file for rename', async () => {
@@ -219,7 +219,7 @@ describe('Object copy', () => {
       assert.ifError(input.Metadata);
 
       assert.deepStrictEqual(collabcalls,
-        ['https://localhost/api/v1/syncAdmin?doc=http://localhost:3000/source/testorg/mydir/dir2/myfile.html']);
+        ['https://localhost/api/v1/syncadmin?doc=http://localhost:3000/source/testorg/mydir/dir2/myfile.html']);
     });
 
     it('Adds copy condition', async () => {
@@ -297,7 +297,7 @@ describe('Object copy', () => {
         { aaa: 'bbb', 'cf-copy-destination-if-none-match': '*' });
 
       assert.deepStrictEqual(collabCalled,
-        ['https://localhost/api/v1/syncAdmin?doc=https://blahblah:7890/source/myorg/mydst/abc/def.html']);
+        ['https://localhost/api/v1/syncadmin?doc=https://blahblah:7890/source/myorg/mydst/abc/def.html']);
     });
 
     it('Copy content when destination already exists', async () => {
@@ -313,7 +313,9 @@ describe('Object copy', () => {
       };
       const mockGetObject = async (e, u, h) => {
         return {
-          body: 'original body',
+          body: {
+            transformToString: async () => 'original body',
+          },
           contentLength: 42,
           contentType: 'text/html',
         }
@@ -398,7 +400,7 @@ describe('Object copy', () => {
       const resp = await copyFile({}, env, daCtx, 'qqqsrc/abc/def.html', details, false);
       assert.strictEqual(resp.$metadata, error.$metadata);
       assert.deepStrictEqual(collabCalled,
-        ['https://localhost/api/v1/syncAdmin?doc=http://qqq/source/qqqorg/qqqdst/abc/def.html']);
+        ['https://localhost/api/v1/syncadmin?doc=http://qqq/source/qqqorg/qqqdst/abc/def.html']);
     });
   });
 
@@ -478,7 +480,7 @@ describe('Object copy', () => {
     it('handles a continuation token w/ more', async () => {
       const continuationToken = 'copy-mydir-mydir/newdir-uuid';
       const remaining = [];
-      for (let i = 0; i < 900; i++) {
+      for (let i = 0; i < 35; i++) {
         remaining.push(`mydir/file${i}.html`);
       }
       remaining.push('mydir/abc.html');
@@ -517,7 +519,7 @@ describe('Object copy', () => {
       const resp = await copyObject(env, ctx, details, false);
       assert.strictEqual(resp.status, 206);
       assert.deepStrictEqual(JSON.parse(resp.body), { continuationToken });
-      assert.strictEqual(s3Sent.length, 900);
+      assert.strictEqual(s3Sent.length, 35);
       assert.deepStrictEqual(JSON.parse(DA_JOBS[continuationToken]), ['mydir/abc.html']);
     });
 

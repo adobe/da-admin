@@ -78,7 +78,7 @@ function buildInput(bucket, org, key) {
   return {
     Bucket: bucket,
     Prefix: `${org}/${key}/`,
-    MaxKeys: 300,
+    MaxKeys: 35,
   };
 }
 

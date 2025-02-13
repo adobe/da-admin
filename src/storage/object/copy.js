@@ -21,7 +21,7 @@ import { putObjectWithVersion } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
 import { hasPermission } from '../../utils/auth.js';
 
-const MAX_KEYS = 2;
+const MAX_KEYS = 35;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
@@ -128,7 +128,7 @@ export default async function copyObject(env, daCtx, details, isRename) {
       let resp = await listCommand(daCtx, details, client);
       sourceKeys = resp.sourceKeys;
       if (resp.continuationToken) {
-        continuationToken = `copy-${details.source}-${details.destination}-${crypto.randomUUID()}`;
+        continuationToken = `copy-${daCtx.org}-${details.source}-${details.destination}-${crypto.randomUUID()}`;
         while (resp.continuationToken) {
           resp = await listCommand(daCtx, { continuationToken: resp.continuationToken }, client);
           remainingKeys.push(...resp.sourceKeys);
