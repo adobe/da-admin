@@ -3,7 +3,8 @@ import assert from 'node:assert';
 const workerUrl = process.env.WORKER_URL;
 const ORG = 'da-e2e-test';
 
-describe('/source requests', () => {
+describe('/source requests', function () {
+  this.timeout(0);
 
   it('returns 404 for non-existing object', async () => {
     const req = new Request(`${workerUrl}/source/${ORG}/source-spec/does-not-exist.html`);

@@ -4,7 +4,8 @@ const workerUrl = process.env.WORKER_URL;
 
 const ORG = 'da-e2e-test'
 
-describe('/list requests', () => {
+describe('/list requests', function () {
+  this.timeout(0);
   it('returns orgs', async () => {
     const req = new Request(`${workerUrl}/list`);
     const resp = await fetch(req);

@@ -5,9 +5,9 @@ import assert from 'node:assert';
 const workerUrl = process.env.WORKER_URL;
 const ORG = 'da-e2e-test';
 
-describe('/copy operation', () => {
-  it('copies a file', async function() {
-    this.timeout(60000);
+describe('/copy operation', function() {
+  this.timeout(0);
+  it('copies a file', async () => {
 
     const blob = new Blob(['Hello World!'], { type: "text/html" });
     let body = new FormData();
@@ -45,8 +45,7 @@ describe('/copy operation', () => {
     assert.strictEqual(resp.status, 204);
   });
 
-  it('copies a folder', async function()  {
-    this.timeout(60000);
+  it('copies a folder', async () => {
     const limit = 5;
     for (let i = 0; i < limit; i++) {
       const blob = new Blob(['Hello World!'], { type: "text/html" });

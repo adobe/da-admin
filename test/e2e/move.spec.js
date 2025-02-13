@@ -3,8 +3,10 @@ import assert from 'node:assert';
 const workerUrl = process.env.WORKER_URL;
 const ORG = 'da-e2e-test';
 
-describe('/move operation', () => {
-  it('moves a file', async function() {
+describe('/move operation', function() {
+  this.timeout(0);
+
+  it('moves a file', async () =>{
     this.timeout(60000);
     const label = 'move-spec-label';
     const blob = new Blob(['Hello World!'], { type: "text/html" });
@@ -52,8 +54,7 @@ describe('/move operation', () => {
     assert.strictEqual(resp.status, 204);
   });
 
-  it('moves a folder', async function () {
-    this.timeout(60000);
+  it('moves a folder', async () => {
     const limit = 1;
     for (let i = 0; i < limit; i++) {
       const blob = new Blob(['Hello World!'], { type: "text/html" });

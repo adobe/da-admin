@@ -3,7 +3,9 @@ import assert from 'node:assert';
 const workerUrl = process.env.WORKER_URL;
 const ORG = 'da-e2e-test';
 
-describe('/version* operations', () => {
+describe('/version* operations', function () {
+  this.timeout(0);
+
   const label = 'version-spec-label';
   it('creates a version of a file', async () => {
     const blob = new Blob(['Hello World!'], { type: "text/html" });

@@ -43,6 +43,7 @@ jobs:
         id: deploy-worker
         uses: cloudflare/wrangler-action@v3
         with:
+          quiet: true
           preCommands: node prepare-deploy.js
           command: deploy -e stage -c wrangler-versioned.toml
           apiToken: ${{ secrets.CLOUDFLARE_AUTH }}
