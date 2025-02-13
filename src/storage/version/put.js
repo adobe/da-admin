@@ -16,7 +16,7 @@ import {
 
 import getS3Config from '../utils/config.js';
 import {
-  createBucketIfMissing, ifMatch, ifNoneMatch,
+  ifMatch, ifNoneMatch,
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
@@ -39,7 +39,7 @@ export async function putVersion(config, {
 }, noneMatch = true) {
   const length = ContentLength ?? getContentLength(Body);
 
-  const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
+  const client = noneMatch ? ifNoneMatch(config) : new S3Client(config);
   const input = {
     Bucket, Key: `${Org}/.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
   };
@@ -118,7 +118,6 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
       Label,
     },
   });
-
   if (versionResp.status !== 200 && versionResp.status !== 412) {
     return versionResp.status;
   }
@@ -132,7 +131,6 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   });
   try {
     const resp = await client.send(command);
-
     return resp.$metadata.httpStatusCode;
   } catch (e) {
     if (e.$metadata.httpStatusCode === 412) {

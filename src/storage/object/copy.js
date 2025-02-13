@@ -21,11 +21,10 @@ import { putObjectWithVersion } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
 import { hasPermission } from '../../utils/auth.js';
 
-const MAX_KEYS = 900;
+const MAX_KEYS = 2;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
-
   if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) {
     return {
       $metadata: {
@@ -81,11 +80,12 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
           env,
           { bucket: daCtx.bucket, org: daCtx.org, key: sourceKey },
         );
+        const body = await original.body.transformToString();
         return /* await */ putObjectWithVersion(env, daCtx, {
           bucket: daCtx.bucket,
           org: daCtx.org,
           key: Key,
-          body: original.body,
+          body,
           contentLength: original.contentLength,
           type: original.contentType,
         });
@@ -105,7 +105,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
   } finally {
     if (Key.endsWith('.html')) {
       // Reset the collab cached state for the copied object
-      await invalidateCollab('syncAdmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+      await invalidateCollab('syncadmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
     }
   }
 };
