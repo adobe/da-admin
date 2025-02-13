@@ -46,6 +46,7 @@ jobs:
           preCommands: node prepare-deploy.js
           command: deploy -e stage -c wrangler-versioned.toml
           apiToken: ${{ secrets.CLOUDFLARE_AUTH }}
+          accountId: ${{secrets.CLOUDFLARE_ACCOUNT}}
       - name: Post-Deployment Integration Test
         run: WORKER_URL="${{ steps.deploy-worker.outputs.deployment-url }}" npm run test:it
       - name: Semantic Release (Dry Run)
