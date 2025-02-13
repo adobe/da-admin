@@ -22,9 +22,9 @@ r2_buckets = [
 [env.stage]
 vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.live", DA_BUCKET_NAME = "da-content-stage", VERSION = "@@VERSION@@" }
 
-#services = [
-#  { binding = "dacollab", service = "da-collab-stage" }
-#]
+services = [
+  { binding = "dacollab", service = "da-collab-stage" }
+]
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
