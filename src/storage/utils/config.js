@@ -17,5 +17,6 @@ export default function getS3Config(env) {
       accessKeyId: env.S3_ACCESS_KEY_ID,
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     },
+    forcePathStyle: true,
   };
 }
