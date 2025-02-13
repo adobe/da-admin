@@ -13,25 +13,8 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 
-export function createBucketIfMissing(client) {
-  client.middlewareStack.add(
-    (next) => async (args) => {
-      // eslint-disable-next-line no-param-reassign
-      args.request.headers['cf-create-bucket-if-missing'] = 'true';
-      return next(args);
-    },
-    {
-      step: 'build',
-      name: 'createIfMissingMiddleware',
-      tags: ['METADATA', 'CREATE-BUCKET-IF-MISSING'],
-    },
-  );
-  return client;
-}
-
 export function ifNoneMatch(config) {
   const client = new S3Client(config);
-  createBucketIfMissing(client);
   client.middlewareStack.add(
     (next) => async (args) => {
       // eslint-disable-next-line no-param-reassign
@@ -49,7 +32,6 @@ export function ifNoneMatch(config) {
 
 export function ifMatch(config, match) {
   const client = new S3Client(config);
-  createBucketIfMissing(client);
   client.middlewareStack.add(
     (next) => async (args) => {
       // eslint-disable-next-line no-param-reassign

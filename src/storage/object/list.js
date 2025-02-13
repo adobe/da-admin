@@ -37,7 +37,6 @@ export default async function listObjects(env, daCtx, maxKeys) {
   const command = new ListObjectsV2Command(input);
   try {
     const resp = await client.send(command);
-    // console.log(resp);
     const body = formatList(resp);
     return {
       body: JSON.stringify(body),

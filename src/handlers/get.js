@@ -26,6 +26,7 @@ function getRobots() {
 
 export default async function getHandler({ env, daCtx }) {
   const { path } = daCtx;
+  if (path === '/') return get404();
 
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();

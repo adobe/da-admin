@@ -78,7 +78,7 @@ function buildInput(bucket, org, key) {
   return {
     Bucket: bucket,
     Prefix: `${org}/${key}/`,
-    MaxKeys: 300,
+    MaxKeys: 35,
   };
 }
 
@@ -106,7 +106,7 @@ export async function listCommand(daCtx, details, s3client) {
   const resp = await s3client.send(command);
 
   const { Contents = [], NextContinuationToken } = resp;
-  sourceKeys.push(...Contents.map(({ Key }) => Key));
+  sourceKeys.push(...Contents.map(({ Key }) => Key.replace(`${daCtx.org}/`, '')));
 
   return { sourceKeys, continuationToken: NextContinuationToken };
 }

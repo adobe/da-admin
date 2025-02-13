@@ -21,11 +21,10 @@ import { putObjectWithVersion } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
 import { hasPermission } from '../../utils/auth.js';
 
-const MAX_KEYS = 900;
+const MAX_KEYS = 35;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
-
   if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) {
     return {
       $metadata: {
@@ -69,6 +68,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
         tags: ['METADATA', 'IF-NONE-MATCH'],
       },
     );
+
     const resp = await client.send(new CopyObjectCommand(input));
     return resp;
   } catch (e) {
@@ -76,12 +76,16 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
       // Not the happy path - something is at the destination already.
       if (!isRename) {
         // This is a copy so just put the source into the target to keep the history.
-
-        const original = await getObject(env, { org: daCtx.org, key: sourceKey });
+        const original = await getObject(
+          env,
+          { bucket: daCtx.bucket, org: daCtx.org, key: sourceKey },
+        );
+        const body = await original.body.transformToString();
         return /* await */ putObjectWithVersion(env, daCtx, {
+          bucket: daCtx.bucket,
           org: daCtx.org,
           key: Key,
-          body: original.body,
+          body,
           contentLength: original.contentLength,
           type: original.contentType,
         });
@@ -101,14 +105,13 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
   } finally {
     if (Key.endsWith('.html')) {
       // Reset the collab cached state for the copied object
-      await invalidateCollab('syncAdmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+      await invalidateCollab('syncadmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
     }
   }
 };
 
 export default async function copyObject(env, daCtx, details, isRename) {
   if (details.source === details.destination) return { body: '', status: 409 };
-
   const config = getS3Config(env);
   const client = new S3Client(config);
 
@@ -125,7 +128,7 @@ export default async function copyObject(env, daCtx, details, isRename) {
       let resp = await listCommand(daCtx, details, client);
       sourceKeys = resp.sourceKeys;
       if (resp.continuationToken) {
-        continuationToken = `copy-${details.source}-${details.destination}-${crypto.randomUUID()}`;
+        continuationToken = `copy-${daCtx.org}-${details.source}-${details.destination}-${crypto.randomUUID()}`;
         while (resp.continuationToken) {
           resp = await listCommand(daCtx, { continuationToken: resp.continuationToken }, client);
           remainingKeys.push(...resp.sourceKeys);
