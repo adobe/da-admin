@@ -49,7 +49,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_AUTH }}
           accountId: ${{secrets.CLOUDFLARE_ACCOUNT}}
       - name: Post-Deployment Integration Test
-        run: WORKER_URL="${{ steps.deploy-worker.outputs.deployment-url }} npm run test:e2e
+        run: WORKER_URL="${{ steps.deploy-worker.outputs.deployment-url }}" npm run test:e2e
         env:
           WORKER_URL: ${{ secrets.STAGE_WORKER_URL }}
       - name: Semantic Release (Dry Run)
