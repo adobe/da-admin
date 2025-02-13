@@ -69,6 +69,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
         tags: ['METADATA', 'IF-NONE-MATCH'],
       },
     );
+
     const resp = await client.send(new CopyObjectCommand(input));
     return resp;
   } catch (e) {
@@ -76,9 +77,12 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
       // Not the happy path - something is at the destination already.
       if (!isRename) {
         // This is a copy so just put the source into the target to keep the history.
-
-        const original = await getObject(env, { org: daCtx.org, key: sourceKey });
+        const original = await getObject(
+          env,
+          { bucket: daCtx.bucket, org: daCtx.org, key: sourceKey },
+        );
         return /* await */ putObjectWithVersion(env, daCtx, {
+          bucket: daCtx.bucket,
           org: daCtx.org,
           key: Key,
           body: original.body,
@@ -108,7 +112,6 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
 
 export default async function copyObject(env, daCtx, details, isRename) {
   if (details.source === details.destination) return { body: '', status: 409 };
-
   const config = getS3Config(env);
   const client = new S3Client(config);
 
