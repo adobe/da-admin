@@ -1,5 +1,6 @@
 .vscode/*
 coverage/*
 dist/*
-!.releaserc.js
+.releaserc.js
 test/*
+node_modules/*

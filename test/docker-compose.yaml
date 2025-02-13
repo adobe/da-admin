@@ -1,0 +1,9 @@
+services:
+  s3mock:
+    image: adobe/s3mock:latest
+    environment:
+      - debug=true
+      - initialBuckets=da-content-dev
+      - root=s3root
+    ports:
+      - 9090:9090

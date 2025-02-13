@@ -138,3 +138,5 @@ dist
 
 .vscode
 
+# Generated files
+wrangler-versioned.toml
