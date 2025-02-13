@@ -2,11 +2,11 @@ name = "da-admin"
 main = "src/index.js"
 compatibility_date = "2023-10-30"
 
-vars = { DA_COLLAB = "https://collab.da.live", DA_BUCKET_NAME = "da-content" }
+vars = { ENVIRONMENT = "production", DA_COLLAB = "https://collab.da.live", DA_BUCKET_NAME = "da-content", VERSION = "@@VERSION@@"  }
 
-services = [
-  { binding = "dacollab", service = "da-collab" }
-]
+#services = [
+#  { binding = "dacollab", service = "da-collab" }
+#]
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "f8978fd2270f4c4fbcc8c9f04248a034" },
@@ -20,11 +20,11 @@ r2_buckets = [
 
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.live", DA_BUCKET_NAME = "da-content-stage" }
+vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.live", DA_BUCKET_NAME = "da-content-stage", VERSION = "@@VERSION@@" }
 
-services = [
-  { binding = "dacollab", service = "da-collab-stage" }
-]
+#services = [
+#  { binding = "dacollab", service = "da-collab-stage" }
+#]
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
@@ -38,7 +38,7 @@ r2_buckets = [
 
 
 [env.dev]
-vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", DA_BUCKET_NAME = "da-content-dev" }
+vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", DA_BUCKET_NAME = "da-content-dev", VERSION = "@@VERSION@@"  }
 
 services = [
   { binding = "dacollab", service = "da-collab-local" }
