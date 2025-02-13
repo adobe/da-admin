@@ -29,5 +29,8 @@ describe('/list requests', () => {
     assert.strictEqual(resp.status, 200);
     const json = await resp.json();
     assert(json.some(org => org.path === `/${ORG}/list-spec/test-file.html`));
+
+    resp = await fetch(`${workerUrl}/source/${ORG}/list-spec/test-file.html`, { method: 'DELETE' });
+    assert.strictEqual(resp.status, 204);
   });
 });

@@ -6,7 +6,9 @@ const workerUrl = process.env.WORKER_URL;
 const ORG = 'da-e2e-test';
 
 describe('/copy operation', () => {
-  it('copies a file', async () => {
+  it('copies a file', async function() {
+    this.timeout(60000);
+
     const blob = new Blob(['Hello World!'], { type: "text/html" });
     let body = new FormData();
     body.append('data', blob);
@@ -35,9 +37,16 @@ describe('/copy operation', () => {
     assert.strictEqual(resp.status, 200);
     const content = await resp.text();
     assert.strictEqual(content, 'Hello World!');
+
+    resp = await fetch(`${workerUrl}/source/${ORG}/copy-spec/test-file.html`, { method: 'DELETE' });
+    assert.strictEqual(resp.status, 204);
+
+    resp = await fetch(`${workerUrl}/source/${ORG}/copy-spec/test-file-copy.html`, { method: 'DELETE' });
+    assert.strictEqual(resp.status, 204);
   });
 
-  it('copies a folder', async () => {
+  it('copies a folder', async function()  {
+    this.timeout(60000);
     const limit = 5;
     for (let i = 0; i < limit; i++) {
       const blob = new Blob(['Hello World!'], { type: "text/html" });
@@ -65,6 +74,11 @@ describe('/copy operation', () => {
       assert.strictEqual(resp.status, 200);
       resp = await fetch(`${workerUrl}/source/${ORG}/copy-spec/test-folder-copy/index${i}.html`);
       assert.strictEqual(resp.status, 200);
+
+      resp = await fetch(`${workerUrl}/source/${ORG}/copy-spec/test-folder/index${i}.html`, { method: 'DELETE' });
+      assert.strictEqual(resp.status, 204);
+      resp = await fetch(`${workerUrl}/source/${ORG}/copy-spec/test-folder-copy/index${i}.html`, { method: 'DELETE' });
+      assert.strictEqual(resp.status, 204);
     }
   });
 });

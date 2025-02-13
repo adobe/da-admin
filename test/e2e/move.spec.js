@@ -4,7 +4,8 @@ const workerUrl = process.env.WORKER_URL;
 const ORG = 'da-e2e-test';
 
 describe('/move operation', () => {
-  it('moves a file', async () => {
+  it('moves a file', async function() {
+    this.timeout(60000);
     const label = 'move-spec-label';
     const blob = new Blob(['Hello World!'], { type: "text/html" });
     let body = new FormData();
@@ -46,9 +47,13 @@ describe('/move operation', () => {
     resp = await fetch(`${workerUrl}/versionlist/${ORG}/move-spec/test-file-moved.html`);
     const json = await resp.json();
     assert(json.some((ver) => ver.label === label));
+
+    resp = await fetch(`${workerUrl}/source/${ORG}/move-spec/test-file-moved.html`, { method: 'DELETE' });
+    assert.strictEqual(resp.status, 204);
   });
 
-  it('moves a folder', async () => {
+  it('moves a folder', async function () {
+    this.timeout(60000);
     const limit = 1;
     for (let i = 0; i < limit; i++) {
       const blob = new Blob(['Hello World!'], { type: "text/html" });
@@ -76,6 +81,8 @@ describe('/move operation', () => {
       assert.strictEqual(resp.status, 404);
       resp = await fetch(`${workerUrl}/source/${ORG}/move-spec/test-folder-moved/index${i}.html`);
       assert.strictEqual(resp.status, 200);
+      resp = await fetch(`${workerUrl}/source/${ORG}/move-spec/test-folder-moved/index${i}.html`, { method: 'DELETE' });
+      assert.strictEqual(resp.status, 204);
     }
   });
 });

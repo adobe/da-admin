@@ -60,5 +60,8 @@ describe('/version* operations', () => {
     const currentContent = await resp.text();
     assert.strictEqual(currentContent, 'Changed Body!');
     assert.notStrictEqual(labeledContent, currentContent);
+
+    resp = await fetch(`${workerUrl}/source/${ORG}/version-spec/test-file.html`, { method: 'DELETE' });
+    assert.strictEqual(resp.status, 204);
   });
 });
