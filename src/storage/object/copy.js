@@ -19,16 +19,25 @@ import getS3Config from '../utils/config.js';
 import { invalidateCollab } from '../utils/object.js';
 import { putObjectWithVersion } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
+import { hasPermission } from '../../utils/auth.js';
 
 const MAX_KEYS = 900;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
 
+  if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) {
+    return {
+      $metadata: {
+        httpStatusCode: 403,
+      },
+    };
+  }
+
   const input = {
-    Bucket: `${daCtx.org}-content`,
-    Key,
-    CopySource: `${daCtx.org}-content/${sourceKey}`,
+    Bucket: daCtx.bucket,
+    Key: `${daCtx.org}/${Key}`,
+    CopySource: `${daCtx.bucket}/${daCtx.org}/${sourceKey}`,
   };
 
   // We only want to keep the history if this was a rename. In case of an actual

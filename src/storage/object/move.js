@@ -17,18 +17,19 @@ import {
 import getS3Config from '../utils/config.js';
 import { deleteObject } from './delete.js';
 import { copyFile } from './copy.js';
+import { hasPermission } from '../../utils/auth.js';
 
-function buildInput(org, key) {
+function buildInput(bucket, org, key) {
   return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
+    Bucket: bucket,
+    Prefix: `${org}/${key}/`,
   };
 }
 
 export default async function moveObject(env, daCtx, details) {
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
+  const input = buildInput(daCtx.bucket, daCtx.org, details.source);
 
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.
@@ -49,18 +50,21 @@ export default async function moveObject(env, daCtx, details) {
       const { Contents = [], NextContinuationToken } = resp;
       sourceKeys.push(...Contents.map(({ Key }) => Key));
 
-      const movedLoad = sourceKeys.map(async (key) => {
-        const result = { key };
-        const copied = await copyFile(config, env, daCtx, key, details, true);
-        // Only delete the source if the file was successfully copied
-        if (copied.$metadata.httpStatusCode === 200) {
-          const deleted = await deleteObject(client, daCtx, key, env, true);
-          result.status = deleted.status === 204 ? 204 : deleted.status;
-        } else {
-          result.status = copied.$metadata.httpStatusCode;
-        }
-        return result;
-      });
+      const movedLoad = sourceKeys
+        .filter((key) => hasPermission(daCtx, key, 'write'))
+        .filter((key) => hasPermission(daCtx, key.replace(details.source, details.destination), 'write'))
+        .map(async (key) => {
+          const result = { key };
+          const copied = await copyFile(config, env, daCtx, key, details, true);
+          // Only delete the source if the file was successfully copied
+          if (copied.$metadata.httpStatusCode === 200) {
+            const deleted = await deleteObject(client, daCtx, key, env, true);
+            result.status = deleted.status === 204 ? 204 : deleted.status;
+          } else {
+            result.status = copied.$metadata.httpStatusCode;
+          }
+          return result;
+        });
 
       results.push(...await Promise.all(movedLoad));
 
