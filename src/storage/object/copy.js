@@ -21,7 +21,7 @@ import { putObjectWithVersion } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
 import { hasPermission } from '../../utils/auth.js';
 
-const MAX_KEYS = 35;
+const MAX_KEYS = 900;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = `${sourceKey.replace(details.source, details.destination)}`;
