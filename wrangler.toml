@@ -4,9 +4,9 @@ compatibility_date = "2023-10-30"
 
 vars = { ENVIRONMENT = "production", DA_COLLAB = "https://collab.da.live", DA_BUCKET_NAME = "da-content", VERSION = "@@VERSION@@"  }
 
-#services = [
-#  { binding = "dacollab", service = "da-collab" }
-#]
+services = [
+  { binding = "dacollab", service = "da-collab" }
+]
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "f8978fd2270f4c4fbcc8c9f04248a034" },
