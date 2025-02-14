@@ -480,7 +480,7 @@ describe('Object copy', () => {
     it('handles a continuation token w/ more', async () => {
       const continuationToken = 'copy-mydir-mydir/newdir-uuid';
       const remaining = [];
-      for (let i = 0; i < 35; i++) {
+      for (let i = 0; i < 900; i++) {
         remaining.push(`mydir/file${i}.html`);
       }
       remaining.push('mydir/abc.html');
@@ -519,7 +519,7 @@ describe('Object copy', () => {
       const resp = await copyObject(env, ctx, details, false);
       assert.strictEqual(resp.status, 206);
       assert.deepStrictEqual(JSON.parse(resp.body), { continuationToken });
-      assert.strictEqual(s3Sent.length, 35);
+      assert.strictEqual(s3Sent.length, 900);
       assert.deepStrictEqual(JSON.parse(DA_JOBS[continuationToken]), ['mydir/abc.html']);
     });
 
