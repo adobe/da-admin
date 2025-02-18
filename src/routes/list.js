@@ -11,8 +11,13 @@
  */
 import listBuckets from '../storage/bucket/list.js';
 import listObjects from '../storage/object/list.js';
+import { getChildRules, hasPermission } from '../utils/auth.js';
 
-export default function getList({ env, daCtx }) {
+export default async function getList({ env, daCtx }) {
   if (!daCtx.org) return listBuckets(env, daCtx);
-  return listObjects(env, daCtx);
+  if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
+
+  // Get the child rules of the current folder and store this in daCtx.aclCtx
+  getChildRules(daCtx);
+  return /* await */ listObjects(env, daCtx);
 }
