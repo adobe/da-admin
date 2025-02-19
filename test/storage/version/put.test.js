@@ -246,7 +246,12 @@ describe('Version Put', () => {
     });
 
     const env = {};
-    const daCtx= { ext: 'html', users: [{"email": "foo@acme.org"}, {"email": "bar@acme.org"}] };
+    const daCtx= {
+      ext: 'html',
+      users: [
+        {"email": "foo@acme.org", orgs: ['myorg']},
+        {"email": "bar@acme.org", groups: ['g1', 'g2']}
+      ]};
     const update = { body: 'new-body', org: 'myorg', key: '/a/x.html' };
     const resp = await putObjectWithVersion(env, daCtx, update, false);
     assert.equal(202, resp);

@@ -252,7 +252,7 @@ describe('Object copy', () => {
       const daCtx = {
         org: 'myorg',
         origin: 'https://blahblah:7890',
-        users: ['joe@bloggs.org'],
+        users: [{email: 'joe@bloggs.org', otherstuff: 'blah'}],
       };
       daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
       const details = {
@@ -267,7 +267,7 @@ describe('Object copy', () => {
       assert.strictEqual(resp.input.CopySource, 'myorg-content/mysrc/abc/def.html');
       assert.strictEqual(resp.input.MetadataDirective, 'REPLACE');
       assert.strictEqual(resp.input.Metadata.Path, 'mydst/abc/def.html');
-      assert.strictEqual(resp.input.Metadata.Users, '["joe@bloggs.org"]');
+      assert.strictEqual(resp.input.Metadata.Users, '[{"email":"joe@bloggs.org"}]');
       const mdts = Number(resp.input.Metadata.Timestamp);
       assert(mdts + 1000 > Date.now(), 'Should not be longer than a second ago');
 
