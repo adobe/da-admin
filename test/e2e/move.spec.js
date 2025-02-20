@@ -55,7 +55,7 @@ describe('/move operation', function() {
   });
 
   it('moves a folder', async () => {
-    const limit = 1;
+    const limit = 5;
     for (let i = 0; i < limit; i++) {
       const blob = new Blob(['Hello World!'], { type: "text/html" });
       let body = new FormData();
