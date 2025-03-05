@@ -209,7 +209,12 @@ describe('Source Route', () => {
       }
     };
 
-    const daCtx = { users: [{groups: [{orgIdent: '2345B0EA551D747', groupName: 4711}]}], org: 'test-source', env};
+    const daCtx = { users: [{
+      orgs: [{
+        orgIdent: '2345B0EA551D747',
+        groups: [{'groupName': '4711'}]
+      }]}],
+      org: 'test-source', env};
 
     const called = [];
     const getResp = async (e, c) => {

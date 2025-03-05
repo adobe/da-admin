@@ -18,6 +18,7 @@ import getObject from './get.js';
 import getS3Config from '../utils/config.js';
 import { invalidateCollab } from '../utils/object.js';
 import { putObjectWithVersion } from '../version/put.js';
+import { getUsersForMetadata } from '../utils/version.js';
 import { listCommand } from '../utils/list.js';
 import { hasPermission } from '../../utils/auth.js';
 
@@ -49,7 +50,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
       ID: crypto.randomUUID(),
       Version: crypto.randomUUID(),
       Timestamp: `${Date.now()}`,
-      Users: JSON.stringify(daCtx.users),
+      Users: JSON.stringify(getUsersForMetadata(daCtx.users)),
       Path: Key,
     };
     input.MetadataDirective = 'REPLACE';

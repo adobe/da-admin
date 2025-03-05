@@ -64,3 +64,11 @@ export function ifMatch(config, match) {
   );
   return client;
 }
+
+export function getUsersForMetadata(users) {
+  if (!users) {
+    return undefined;
+  }
+
+  return users.map((user) => ({ email: user.email }));
+}

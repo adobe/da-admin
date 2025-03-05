@@ -16,7 +16,7 @@ import {
 
 import getS3Config from '../utils/config.js';
 import {
-  createBucketIfMissing, ifMatch, ifNoneMatch,
+  createBucketIfMissing, getUsersForMetadata, ifMatch, ifNoneMatch,
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
@@ -72,7 +72,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
 
   const ID = current.metadata?.id || crypto.randomUUID();
   const Version = current.metadata?.version || crypto.randomUUID();
-  const Users = JSON.stringify(daCtx.users);
+  const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
   const input = buildInput(update);
   const Timestamp = `${Date.now()}`;
   const Path = update.key;
