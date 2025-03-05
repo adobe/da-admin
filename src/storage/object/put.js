@@ -37,21 +37,6 @@ function buildInput({
   };
 }
 
-function createBucketIfMissing(client) {
-  client.middlewareStack.add(
-    (next) => async (args) => {
-      // eslint-disable-next-line no-param-reassign
-      args.request.headers['cf-create-bucket-if-missing'] = 'true';
-      return next(args);
-    },
-    {
-      step: 'build',
-      name: 'createIfMissingMiddleware',
-      tags: ['METADATA', 'CREATE-BUCKET-IF-MISSING'],
-    },
-  );
-}
-
 /**
  * Check to see if the org is in the existing list of orgs
  *
@@ -77,9 +62,6 @@ export default async function putObject(env, daCtx, obj) {
   // Only allow creating a new bucket for orgs and repos
   if (key.split('/').length <= 1) {
     await checkOrgIndex(env, org);
-
-    // R2 ONLY FEATURE
-    createBucketIfMissing(client);
   }
 
   const inputs = [];

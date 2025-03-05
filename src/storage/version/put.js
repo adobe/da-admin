@@ -16,7 +16,7 @@ import {
 
 import getS3Config from '../utils/config.js';
 import {
-  createBucketIfMissing, getUsersForMetadata, ifMatch, ifNoneMatch,
+  getUsersForMetadata, ifMatch, ifNoneMatch,
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
@@ -39,7 +39,7 @@ export async function putVersion(config, {
 }, noneMatch = true) {
   const length = ContentLength ?? getContentLength(Body);
 
-  const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
+  const client = noneMatch ? ifNoneMatch(config) : new S3Client(config);
   const input = {
     Bucket, Key: `${Org}/.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
   };
