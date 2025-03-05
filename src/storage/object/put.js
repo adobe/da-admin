@@ -29,11 +29,11 @@ function getObjectBody(data) {
 }
 
 function buildInput({
-  org, key, body, type,
+  bucket, org, key, body, type,
 }) {
-  const Bucket = `${org}-content`;
+  const Bucket = bucket;
   return {
-    Bucket, Key: key, Body: body, ContentType: type,
+    Bucket, Key: `${org}/${key}`, Body: body, ContentType: type,
   };
 }
 
@@ -70,7 +70,9 @@ export default async function putObject(env, daCtx, obj) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const { org, key, propsKey } = daCtx;
+  const {
+    bucket, org, key, propsKey,
+  } = daCtx;
 
   // Only allow creating a new bucket for orgs and repos
   if (key.split('/').length <= 1) {
@@ -88,13 +90,13 @@ export default async function putObject(env, daCtx, obj) {
       const isFile = obj.data instanceof File;
       const { body, type } = isFile ? await getFileBody(obj.data) : getObjectBody(obj.data);
       status = await putObjectWithVersion(env, daCtx, {
-        org, key, body, type,
+        bucket, org, key, body, type,
       });
     }
   } else {
     const { body, type } = getObjectBody({});
     const inputConfig = {
-      org, key: propsKey, body, type,
+      bucket, org, key: propsKey, body, type,
     };
     inputs.push(buildInput(inputConfig));
   }
