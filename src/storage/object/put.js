@@ -82,14 +82,17 @@ export default async function putObject(env, daCtx, obj) {
 
   const inputs = [];
 
+  let metadata = {};
   let status = 201;
   if (obj) {
     if (obj.data) {
       const isFile = obj.data instanceof File;
       const { body, type } = isFile ? await getFileBody(obj.data) : getObjectBody(obj.data);
-      status = await putObjectWithVersion(env, daCtx, {
+      const res = await putObjectWithVersion(env, daCtx, {
         org, key, body, type,
       });
+      status = res.status;
+      metadata = res.metadata;
     }
   } else {
     const { body, type } = getObjectBody({});
@@ -105,5 +108,7 @@ export default async function putObject(env, daCtx, obj) {
   }
 
   const body = sourceRespObject(daCtx);
-  return { body: JSON.stringify(body), status, contentType: 'application/json' };
+  return {
+    body: JSON.stringify(body), status, contentType: 'application/json', metadata,
+  };
 }
