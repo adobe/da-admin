@@ -63,14 +63,20 @@ function buildInput({
   };
 }
 
-export async function putObjectWithVersion(env, daCtx, update, body) {
+export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   const config = getS3Config(env);
   // While we are automatically storing the body once for the 'Collab Parse' changes, we never
   // do a HEAD, because we may need the content. Once we don't need to do this automatic store
   // any more, we can change the 'false' argument in the next line back to !body.
   const current = await getObject(env, update, false);
 
-  const ID = current.metadata?.id || crypto.randomUUID();
+  let ID = current.metadata?.id;
+  if (!ID) {
+    ID = guid || crypto.randomUUID();
+  } else if (guid && ID !== guid) {
+    return { status: 409, metadata: { id: ID } };
+  }
+
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
   const input = buildInput(update);
