@@ -166,7 +166,7 @@ export async function getAclCtx(env, org, users, key, api) {
 
     // The ACLTRACE keyword is handled specially as its used for every request
     if (path.trim() === 'ACLTRACE' && actions?.includes('read')) {
-      groups.split(',').forEach((g) => aclTrace.push(g.trim()));
+      groups.split(',').forEach((g) => aclTrace.push(g.trim().toLowerCase()));
       return; // Don't add it to the list of paths
     }
 
