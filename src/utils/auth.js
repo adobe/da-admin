@@ -9,6 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+
 import { decodeJwt } from 'jose';
 
 export async function logout({ daCtx, env }) {
@@ -16,8 +17,13 @@ export async function logout({ daCtx, env }) {
   return { status: 200 };
 }
 
-export async function setUser(userId, expiration, headers, env) {
+export async function setUser(userId, expiration, reqHeaders, env) {
+  const headers = new Headers(reqHeaders);
+  // Local Cloudflare Struggles with this property and IMS
+  headers.delete('cf-connecting-ip');
+
   let resp = await fetch(`${env.IMS_ORIGIN}/ims/profile/v1`, { headers });
+
   if (!resp.ok) {
     // Something went wrong - either with the connection or the token isn't valid
     // assume we are anon for now (but don't cache so we can try again next time)

@@ -2,36 +2,35 @@ name = "da-admin"
 main = "src/index.js"
 compatibility_date = "2023-10-30"
 
-vars = { DA_COLLAB = "https://collab.da.live", DA_BUCKET = "da-content" }
+vars = { DA_COLLAB = "https://collab.da.page", DA_BUCKET = "da-content" }
 
 services = [
   { binding = "dacollab", service = "da-collab" }
 ]
 
 kv_namespaces = [
-  { binding = "DA_AUTH", id = "d6217b7c63ef40889583ba5c080c3908" },
-  { binding = "DA_CONFIG", id = "feb8618620bb4ca3a866f1c71adbe8ef" },
-  { binding = "DA_JOBS", id = "0ba6184767b2470ea05a1d082f974134" }
+  { binding = "DA_AUTH", id = "f8978fd2270f4c4fbcc8c9f04248a034" },
+  { binding = "DA_CONFIG", id = "a20824737cd8499bae0f0d887ac6db21" },
+  { binding = "DA_JOBS", id = "7056c4ab4e0c4604b6304607404eba1a" }
 ]
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.live", DA_BUCKET = "da-content-stg" }
+vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.page", DA_BUCKET = "da-content-stage" }
 
 services = [
   { binding = "dacollab", service = "da-collab-stage" }
 ]
 
 kv_namespaces = [
-  { binding = "DA_AUTH", id = "21693f3b20f54fcbb850ddc8947335ba" },
-  { binding = "DA_CONFIG", id = "c44cb8dc69f041dc87c5aaef41b97df9" },
-  { binding = "DA_JOBS", id = "87f20eee7ca542fd9fc80a1325722fa1" }
+  { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
+  { binding = "DA_CONFIG", id = "3f6f6db5c27348fabee7c2a8ed39be17" },
+  { binding = "DA_JOBS", id = "66265e68cb2b422d8dc7a34b9fe2b0c9" }
 ]
-
 
 [env.dev]
 vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", DA_BUCKET = "da-content-dev" }
 kv_namespaces = [
-  { binding = "DA_AUTH", id = "21693f3b20f54fcbb850ddc8947335ba" },
-  { binding = "DA_CONFIG", id = "c44cb8dc69f041dc87c5aaef41b97df9" },
-  { binding = "DA_JOBS", id = "87f20eee7ca542fd9fc80a1325722fa1" }
+  { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
+  { binding = "DA_CONFIG", id = "3f6f6db5c27348fabee7c2a8ed39be17" },
+  { binding = "DA_JOBS", id = "66265e68cb2b422d8dc7a34b9fe2b0c9" }
 ]
