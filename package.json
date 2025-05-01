@@ -33,7 +33,7 @@
     "esmock": "^2.6.4",
     "mocha": "^10.2.0",
     "nock": "^13.5.6",
-    "wrangler": "^3.57.0"
+    "wrangler": "^3.107.3"
   },
   "lint-staged": {
     "*.js": "eslint",
@@ -43,6 +43,6 @@
     "@aws-sdk/client-s3": "^3.456.0",
     "@aws-sdk/s3-request-presigner": "^3.468.0",
     "@ssttevee/cfw-formdata-polyfill": "^0.2.1",
-    "jose": "^5.9.6"
+    "jose": "^6.0.8"
   }
 }
