@@ -132,7 +132,12 @@ export async function getUsers(req, env) {
 
     if (!payload) return { email: 'anonymous' };
 
-    const { type, user_id: userId, created_at: createdAt, expires_in: expiresIn } = payload;
+    const {
+      type,
+      user_id: userId,
+      created_at: createdAt,
+      expires_in: expiresIn,
+    } = payload;
 
     if (type !== 'access_token') return { email: 'anonymous' };
 
