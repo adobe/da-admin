@@ -15,6 +15,7 @@ const jwtVerify = (token) => {
   expires_in += created_at;
   return {
     payload: {
+      type: 'access_token',
       user_id: email,
       created_at,
       expires_in: expires_in || created_at + 1000,
