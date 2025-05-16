@@ -9,8 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-
-import { decodeJwt } from 'jose';
+import { createRemoteJWKSet, jwtVerify, jwksCache } from 'jose';
 
 export async function logout({ daCtx, env }) {
   await Promise.all(daCtx.users.map((u) => env.DA_AUTH.delete(u.ident)));
@@ -66,6 +65,42 @@ export async function setUser(userId, expiration, reqHeaders, env) {
   return value;
 }
 
+/**
+ * Retrieve cached IMS keys from KV Store
+ * @param {*} env
+ * @param {string} keysUrl
+ * @returns {Promise<import('jose').ExportedJWKSCache>}
+ */
+async function getPreviouslyCachedJWKS(env, keysUrl) {
+  const cachedJwks = await env.DA_AUTH.get(keysUrl);
+  if (!cachedJwks) return {};
+
+  return JSON.parse(cachedJwks);
+}
+
+/**
+ * Store new set of IMS keys in the KV Store
+ * @param {*} env
+ * @param {string} keysUrl
+ * @param {import('jose').ExportedJWKSCache} keysCache
+ * @returns {Promise<void>}
+ */
+async function storeJWSInCache(env, keysUrl, keysCache) {
+  try {
+    await env.DA_AUTH.put(
+      keysUrl,
+      JSON.stringify(keysCache),
+      {
+        expirationTtl: 24 * 60 * 60, // 24 hours in seconds
+      },
+    );
+  } catch (err) {
+    // An error may be thrown if a write to the same key is made within 1 second
+    // eslint-disable-next-line no-console
+    console.error('Failed to store keys in cache', err);
+  }
+}
+
 export async function getUsers(req, env) {
   const authHeader = req.headers?.get('authorization');
   if (!authHeader) return [{ email: 'anonymous' }];
@@ -73,7 +108,44 @@ export async function getUsers(req, env) {
   async function parseUser(token) {
     if (!token || token.trim().length === 0) return { email: 'anonymous' };
 
-    const { user_id: userId, created_at: createdAt, expires_in: expiresIn } = decodeJwt(token);
+    let payload;
+    try {
+      const keysURL = `${env.IMS_ORIGIN}/ims/keys`;
+
+      const keysCache = await getPreviouslyCachedJWKS(env, keysURL);
+      const { uat } = keysCache;
+
+      const jwks = createRemoteJWKSet(
+        new URL(keysURL),
+        {
+          [jwksCache]: keysCache,
+          cooldownDuration: 30000,
+          cacheMaxAge: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+        },
+      );
+
+      ({ payload } = await jwtVerify(token, jwks));
+
+      if (uat !== keysCache.uat) {
+        await storeJWSInCache(env, keysURL, keysCache);
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.log('IMS token offline verification failed', e);
+      return { email: 'anonymous' };
+    }
+
+    if (!payload) return { email: 'anonymous' };
+
+    const {
+      type,
+      user_id: userId,
+      created_at: createdAt,
+      expires_in: expiresIn,
+    } = payload;
+
+    if (type !== 'access_token') return { email: 'anonymous' };
+
     const expires = Number(createdAt) + Number(expiresIn);
     const now = Math.floor(new Date().getTime() / 1000);
 
