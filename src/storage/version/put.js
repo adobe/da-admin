@@ -157,7 +157,7 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
     org, key, body, contentLength, type: contentType, label,
   }, true);
 
-  return { status: resp === 200 ? 201 : resp.status };
+  return { status: resp.status === 200 ? 201 : resp.status };
 }
 
 export async function postObjectVersion(req, env, daCtx) {
