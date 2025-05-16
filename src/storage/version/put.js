@@ -63,14 +63,20 @@ function buildInput({
   };
 }
 
-export async function putObjectWithVersion(env, daCtx, update, body) {
+export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   const config = getS3Config(env);
   // While we are automatically storing the body once for the 'Collab Parse' changes, we never
   // do a HEAD, because we may need the content. Once we don't need to do this automatic store
   // any more, we can change the 'false' argument in the next line back to !body.
   const current = await getObject(env, update, false);
 
-  const ID = current.metadata?.id || crypto.randomUUID();
+  let ID = current.metadata?.id;
+  if (!ID) {
+    ID = guid || crypto.randomUUID();
+  } else if (guid && ID !== guid) {
+    return { status: 409, metadata: { id: ID } };
+  }
+
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
   const input = buildInput(update);
@@ -87,12 +93,14 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
     });
     try {
       const resp = await client.send(command);
-      return resp.$metadata.httpStatusCode === 200 ? 201 : resp.$metadata.httpStatusCode;
+      return resp.$metadata.httpStatusCode === 200
+        ? { status: 201, metadata: { id: ID } }
+        : { status: resp.$metadata.httpStatusCode, metadata: { id: ID } };
     } catch (e) {
       if (e.$metadata.httpStatusCode === 412) {
         return putObjectWithVersion(env, daCtx, update, body);
       }
-      return e.$metadata.httpStatusCode;
+      return { status: e.$metadata.httpStatusCode, metadata: { id: ID } };
     }
   }
 
@@ -119,7 +127,7 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   });
 
   if (versionResp.status !== 200 && versionResp.status !== 412) {
-    return versionResp.status;
+    return { status: versionResp.status, metadata: { id: ID } };
   }
 
   const client = ifMatch(config, `${current.etag}`);
@@ -132,12 +140,12 @@ export async function putObjectWithVersion(env, daCtx, update, body) {
   try {
     const resp = await client.send(command);
 
-    return resp.$metadata.httpStatusCode;
+    return { status: resp.$metadata.httpStatusCode, metadata: { id: ID } };
   } catch (e) {
     if (e.$metadata.httpStatusCode === 412) {
       return putObjectWithVersion(env, daCtx, update, body);
     }
-    return e.$metadata.httpStatusCode;
+    return { status: e.$metadata.httpStatusCode, metadata: { id: ID } };
   }
 }
 
@@ -149,7 +157,7 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
     org, key, body, contentLength, type: contentType, label,
   }, true);
 
-  return { status: resp === 200 ? 201 : resp };
+  return { status: resp.status === 200 ? 201 : resp.status };
 }
 
 export async function postObjectVersion(req, env, daCtx) {

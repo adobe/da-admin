@@ -24,9 +24,10 @@ describe('Object storage', () => {
   describe('Put success', async () => {
     it('Successfully puts text data', async () => {
       const daCtx = { org: 'adobe', site: 'geometrixx', key: 'geometrixx', propsKey: 'geometrixx.props' };
-      const obj = { data: '<html></html>' };
+      const obj = { data: '<html></html>', guid: '8888' };
       const resp = await putObject(env, daCtx, obj);
       assert.strictEqual(resp.status, 201);
+      assert.strictEqual(resp.metadata.id, '8888');
     });
 
     it('Successfully puts file data', async () => {
