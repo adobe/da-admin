@@ -1,4 +1,5 @@
 # Document Authoring Admin
+
 ## Introduction
 Document Authoring Admin is the API used to store and retrieve files and details from the Document Authoring content repository.
 
@@ -18,6 +19,7 @@ You can read the official API docs here: https://docs.da.live
 ```bash
 git clone git@github.com:adobe/da-admin
 ```
+
 #### 2. Install
 In a terminal, run `npm install` this repo's folder.
 
@@ -29,6 +31,7 @@ KV is used for high-performance R/W operations. This value is stored locally.
 ```bash
 npx wrangler kv:key put orgs '[{"name":"aemsites","created":"2023-10-31T17:43:13.390Z"}]' --binding=DA_AUTH --local
 ```
+
 #### 5. Start the local server
 At the root of the project folder, run `npm run dev`.
 

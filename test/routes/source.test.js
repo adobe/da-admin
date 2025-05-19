@@ -146,7 +146,7 @@ describe('Source Route', () => {
     assert.deepStrictEqual(called, ['getObject']);
   });
 
-  it('Test getSource with', async () => {
+  it('Test getSource with 204', async () => {
     const env = {};
     const daCtx = { aclCtx: { pathLookup: new Map() }};
 
@@ -311,5 +311,40 @@ describe('Source Route', () => {
     await postSource({ req: { headers: new Headers() }, env: {}, daCtx: { key: 'haha.png' }});
     assert.strictEqual(putCalled.length, 1);
     assert.strictEqual(putCalled[0].c.key, 'haha.png');
+  });
+
+  it('Test postSource with provided guid', async () => {
+    const putCalled = [];
+    const putCall = (e, c, o) => {
+      putCalled.push({e, c, o});
+      return { status: 202 }; // 202 skips the invalidate collab which is easy for the test
+    };
+
+    const ctx = { key: '/foo/bar.png' };
+    const hasPermission = () => true
+
+    const { postSource } = await esmock(
+      '../../src/routes/source.js', {
+        '../../src/storage/object/put.js': {
+          default: putCall
+        },
+        '../../src/utils/auth.js': {
+          hasPermission
+        },
+      }
+    );
+
+    const body = new FormData();
+    body.append('data', 'some data');
+    body.append('guid', 'aaaa-bbbb-1234-5678');
+
+    const opts = { body, method: 'POST' };
+    const req = new Request('https://blah.org', opts);
+
+    const resp = await postSource({ req, env: {}, daCtx: ctx });
+    assert.strictEqual(1, putCalled.length);
+    assert.strictEqual('aaaa-bbbb-1234-5678', putCalled[0].o.guid);
+    assert.strictEqual('some data', putCalled[0].o.data);
+    assert.strictEqual(202, resp.status);
   });
 });
