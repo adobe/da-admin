@@ -15,7 +15,7 @@ describe('Source helper', () => {
       assert.strictEqual(helped, null);
     });
 
-    it('Returns null if unssupported content type', async () => {
+    it('Returns null if unsupported content type', async () => {
       const opts = {
         headers: new Headers({
           'Content-Type': `custom/form; boundary`,
@@ -58,6 +58,19 @@ describe('Source helper', () => {
 
       const helped = await putHelper(req, env, daCtx);
       assert.strictEqual(Object.keys(helped).length, 0);
+    });
+
+    it('Form with data field', async () => {
+      const body = new FormData();
+      body.append('data', 'foo');
+      body.append('guid', '12345');
+
+      const opts = { body, method: 'PUT' };
+      const req = new Request(MOCK_URL, opts);
+
+      const helped = await putHelper(req, env, daCtx);
+      assert.strictEqual('foo', helped.data);
+      assert.strictEqual('12345', helped.guid);
     });
   });
 });
