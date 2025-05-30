@@ -74,7 +74,7 @@ export default async function putObject(env, daCtx, obj) {
 
   // Only allow creating a new bucket for orgs and repos
   if (key.split('/').length <= 1) {
-    await checkOrgIndex(env, org);
+    // await checkOrgIndex(env, org);
 
     // R2 ONLY FEATURE
     createBucketIfMissing(client);
