@@ -42,6 +42,7 @@ function getFormEntries(formData) {
 
   if (formData.get('data')) {
     entries.data = formData.get('data');
+    entries.guid = formData.get('guid');
   }
 
   return entries;
