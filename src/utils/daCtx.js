@@ -33,7 +33,7 @@ export default async function getDaCtx(req, env) {
   const api = split.shift();
   const fullKey = split.join('/');
   const [org, ...parts] = split;
-  const bucket = env.DA_BUCKET;
+  const bucket = env.DA_BUCKET_NAME;
 
   // Set base details
   const daCtx = {

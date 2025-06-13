@@ -48,7 +48,7 @@ export default async function moveObject(env, daCtx, details) {
       const resp = await client.send(command);
 
       const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key));
+      sourceKeys.push(...Contents.map(({ Key }) => Key.replace(`${daCtx.org}/`, '')));
 
       const movedLoad = sourceKeys
         .filter((key) => hasPermission(daCtx, key, 'write'))
