@@ -19,17 +19,17 @@ import { deleteObject } from './delete.js';
 import { copyFile } from './copy.js';
 import { hasPermission } from '../../utils/auth.js';
 
-function buildInput(org, key) {
+function buildInput(bucket, org, key) {
   return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
+    Bucket: bucket,
+    Prefix: `${org}/${key}/`,
   };
 }
 
 export default async function moveObject(env, daCtx, details) {
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const input = buildInput(daCtx.org, details.source);
+  const input = buildInput(daCtx.bucket, daCtx.org, details.source);
 
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.

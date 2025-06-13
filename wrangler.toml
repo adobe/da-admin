@@ -2,7 +2,7 @@ name = "da-admin"
 main = "src/index.js"
 compatibility_date = "2024-11-11"
 
-vars = { DA_COLLAB = "https://collab.da.live" }
+vars = { DA_COLLAB = "https://collab.da.live", DA_BUCKET = "da-content" }
 
 services = [
   { binding = "dacollab", service = "da-collab" }
@@ -15,7 +15,7 @@ kv_namespaces = [
 ]
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.live" }
+vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.live", DA_BUCKET = "da-content-stg" }
 
 services = [
   { binding = "dacollab", service = "da-collab-stage" }
@@ -29,7 +29,7 @@ kv_namespaces = [
 
 
 [env.dev]
-vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711" }
+vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", DA_BUCKET = "da-content-dev" }
 kv_namespaces = [
   { binding = "DA_AUTH", id = "21693f3b20f54fcbb850ddc8947335ba" },
   { binding = "DA_CONFIG", id = "feb8618620bb4ca3a866f1c71adbe8ef" },
