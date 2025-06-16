@@ -29,56 +29,21 @@ function getObjectBody(data) {
 }
 
 function buildInput({
-  org, key, body, type,
+  bucket, org, key, body, type,
 }) {
-  const Bucket = `${org}-content`;
+  const Bucket = bucket;
   return {
-    Bucket, Key: key, Body: body, ContentType: type,
+    Bucket, Key: `${org}/${key}`, Body: body, ContentType: type,
   };
-}
-
-function createBucketIfMissing(client) {
-  client.middlewareStack.add(
-    (next) => async (args) => {
-      // eslint-disable-next-line no-param-reassign
-      args.request.headers['cf-create-bucket-if-missing'] = 'true';
-      return next(args);
-    },
-    {
-      step: 'build',
-      name: 'createIfMissingMiddleware',
-      tags: ['METADATA', 'CREATE-BUCKET-IF-MISSING'],
-    },
-  );
-}
-
-/**
- * Check to see if the org is in the existing list of orgs
- *
- * @param {Object} env the cloud provider environment
- * @param {*} org the org associated with the bucket
- * @returns null
- */
-async function checkOrgIndex(env, org) {
-  const orgs = await env.DA_AUTH.get('orgs', { type: 'json' });
-  if (orgs.some((existingOrg) => existingOrg.name === org)) return;
-  orgs.push({ name: org, created: new Date().toISOString() });
-  await env.DA_AUTH.put('orgs', JSON.stringify(orgs));
 }
 
 export default async function putObject(env, daCtx, obj) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const { org, key, propsKey } = daCtx;
-
-  // Only allow creating a new bucket for orgs and repos
-  if (key.split('/').length <= 1) {
-    // await checkOrgIndex(env, org);
-
-    // R2 ONLY FEATURE
-    createBucketIfMissing(client);
-  }
+  const {
+    bucket, org, key, propsKey,
+  } = daCtx;
 
   const inputs = [];
 
@@ -89,7 +54,7 @@ export default async function putObject(env, daCtx, obj) {
       const isFile = obj.data instanceof File;
       const { body, type } = isFile ? await getFileBody(obj.data) : getObjectBody(obj.data);
       const res = await putObjectWithVersion(env, daCtx, {
-        org, key, body, type,
+        bucket, org, key, body, type,
       }, false, obj.guid);
       status = res.status;
       metadata = res.metadata;
@@ -97,7 +62,7 @@ export default async function putObject(env, daCtx, obj) {
   } else {
     const { body, type } = getObjectBody({});
     const inputConfig = {
-      org, key: propsKey, body, type,
+      bucket, org, key: propsKey, body, type,
     };
     inputs.push(buildInput(inputConfig));
   }

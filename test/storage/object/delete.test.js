@@ -305,6 +305,7 @@ describe('Object delete', () => {
         }
       };
       const getSignedUrl = (c, dc) => {
+        assert.strictEqual(dc.input.Bucket, 'testbucket');
         return dc.input.Key;
       }
       const mockS3Client = class {};
@@ -331,7 +332,7 @@ describe('Object delete', () => {
       ]);
       const aclCtx = { pathLookup };
       const users = [{ email: 'harry@foo.org' }];
-      const ctx = { aclCtx, users, key: 'notused' };
+      const ctx = { bucket: 'testbucket', org: 'myorg', aclCtx, users, key: 'notused' };
 
       const fetchURLs = [];
       const savedFetch = globalThis.fetch;
@@ -346,7 +347,7 @@ describe('Object delete', () => {
       } finally {
         globalThis.fetch = savedFetch;
       }
-      assert.deepStrictEqual(['c'], fetchURLs);
+      assert.deepStrictEqual(['myorg/c'], fetchURLs);
     });
   });
 });
