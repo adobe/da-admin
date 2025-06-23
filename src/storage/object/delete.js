@@ -31,7 +31,7 @@ export async function deleteObject(client, daCtx, Key, env /* , isMove = false *
 
   let resp;
   try {
-    const delCommand = new DeleteObjectCommand({ Bucket: `${daCtx.org}-content`, Key });
+    const delCommand = new DeleteObjectCommand({ Bucket: daCtx.bucket, Key: `${daCtx.org}/${Key}` });
     const url = await getSignedUrl(client, delCommand, { expiresIn: 3600 });
     resp = await fetch(url, { method: 'DELETE' });
   } catch (e) {

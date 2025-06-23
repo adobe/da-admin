@@ -18,16 +18,16 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import getS3Config from '../utils/config.js';
 
-function buildInput({ org, key }) {
-  const Bucket = `${org}-content`;
-  return { Bucket, Key: key };
+function buildInput({ bucket, org, key }) {
+  const Bucket = bucket;
+  return { Bucket, Key: `${org}/${key}` };
 }
 
-export default async function getObject(env, { org, key }, head = false) {
+export default async function getObject(env, { bucket, org, key }, head = false) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const input = buildInput({ org, key });
+  const input = buildInput({ bucket, org, key });
   if (!head) {
     try {
       const resp = await client.send(new GetObjectCommand(input));

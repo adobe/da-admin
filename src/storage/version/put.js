@@ -16,7 +16,7 @@ import {
 
 import getS3Config from '../utils/config.js';
 import {
-  createBucketIfMissing, getUsersForMetadata, ifMatch, ifNoneMatch,
+  getUsersForMetadata, ifMatch, ifNoneMatch,
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 
@@ -35,13 +35,13 @@ export function getContentLength(body) {
 }
 
 export async function putVersion(config, {
-  Bucket, Body, ID, Version, Ext, Metadata, ContentLength,
+  Bucket, Org, Body, ID, Version, Ext, Metadata, ContentLength,
 }, noneMatch = true) {
   const length = ContentLength ?? getContentLength(Body);
 
-  const client = noneMatch ? ifNoneMatch(config) : createBucketIfMissing(new S3Client(config));
+  const client = noneMatch ? ifNoneMatch(config) : new S3Client(config);
   const input = {
-    Bucket, Key: `.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
+    Bucket, Key: `${Org}/.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
   };
   const command = new PutObjectCommand(input);
   try {
@@ -53,13 +53,13 @@ export async function putVersion(config, {
 }
 
 function buildInput({
-  org, key, body, type, contentLength,
+  bucket, org, key, body, type, contentLength,
 }) {
   const length = contentLength ?? getContentLength(body);
 
-  const Bucket = `${org}-content`;
+  const Bucket = bucket;
   return {
-    Bucket, Key: key, Body: body, ContentType: type, ContentLength: length,
+    Bucket, Key: `${org}/${key}`, Body: body, ContentType: type, ContentLength: length,
   };
 }
 
@@ -113,6 +113,7 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
 
   const versionResp = await putVersion(config, {
     Bucket: input.Bucket,
+    Org: daCtx.org,
     Body: (body || storeBody ? current.body : ''),
     ContentLength: (body || storeBody ? current.contentLength : undefined),
     ID,
@@ -151,10 +152,10 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
 
 export async function postObjectVersionWithLabel(label, env, daCtx) {
   const { body, contentLength, contentType } = await getObject(env, daCtx);
-  const { org, key } = daCtx;
+  const { bucket, org, key } = daCtx;
 
   const resp = await putObjectWithVersion(env, daCtx, {
-    org, key, body, contentLength, type: contentType, label,
+    bucket, org, key, body, contentLength, type: contentType, label,
   }, true);
 
   return { status: resp.status === 200 ? 201 : resp.status };
