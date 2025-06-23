@@ -185,7 +185,7 @@ describe('Object copy', () => {
     });
 
     it('Copies a file for rename', async () => {
-      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'mydir/dir1/myfile.html' }] });
+      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'testorg/mydir/dir1/myfile.html' }] });
 
       const s3Sent = [];
       s3Mock.on(CopyObjectCommand).callsFake((input => {
@@ -312,10 +312,14 @@ describe('Object copy', () => {
         middlewareStack = { add: () => {} };
       };
       const mockGetObject = async (e, u, h) => {
-        return {
-          body: 'original body',
-          contentLength: 42,
-          contentType: 'text/html',
+        if (u.bucket === 'mybucket'
+          && u.org === 'xorg'
+          && u.key === 'xsrc/abc/def.html') {
+          return {
+            body: 'original body',
+            contentLength: 42,
+            contentType: 'text/html',
+          }
         }
       };
       const puwv = []
@@ -344,7 +348,7 @@ describe('Object copy', () => {
           fetch: (x) => { collabCalled.push(x); },
         },
       };
-      const daCtx = { org: 'xorg' };
+      const daCtx = { bucket: 'mybucket', org: 'xorg' };
       daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
       const details = {
         source: 'xsrc',

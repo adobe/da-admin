@@ -17,9 +17,9 @@ describe('Move', () => {
     const mockS3Client = class {
       send(c) {
         return { Contents: [
-          { Key: 'somewhere/x.html' },
-          { Key: 'somewhere/y.png' },
-          { Key: 'somewhere/z.html' },
+          { Key: 'myorg/somewhere/x.html' },
+          { Key: 'myorg/somewhere/y.png' },
+          { Key: 'myorg/somewhere/z.html' },
         ]};
       }
     };
@@ -59,7 +59,7 @@ describe('Move', () => {
     ]);
     const aclCtx = { pathLookup };
     const users = [ { email: 'blah@foo.org' }];
-    const ctx = { aclCtx, users, key: 'q.html' };
+    const ctx = { org: 'myorg', aclCtx, users, key: 'q.html' };
 
     const details = { source: 'somewhere', destination: 'nonpermdest' };
     const resp = await moveObject({}, ctx, details);
