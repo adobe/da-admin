@@ -146,6 +146,7 @@ describe('Version Put', () => {
           metadata: {
             id: 'x123',
             version: 'aaa-bbb',
+            timestamp: 1750765279755,
           },
           status: 200
         };
@@ -201,7 +202,7 @@ describe('Version Put', () => {
     assert.equal('x123', s3Sent[0].input.Metadata.ID);
     assert.equal('/a/x.html', s3Sent[0].input.Metadata.Path);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
-    assert(s3Sent[0].input.Metadata.Timestamp > 0);
+    assert.strictEqual(1750765279755, s3Sent[0].input.Metadata.Timestamp);
   });
 
   it('Put Object With Version don\'t store content', async () => {
@@ -498,8 +499,8 @@ describe('Version Put', () => {
     assert.equal('', input.Body, 'Empty body for HEAD');
     assert.equal(0, input.ContentLength, 'Should have used 0 as content length for HEAD');
     assert.equal('/q', input.Metadata.Path);
-    assert.equal(123, input.Metadata.Timestamp);
     assert.equal('[{"email":"anonymous"}]', input.Metadata.Users);
+    assert(input.Metadata.Timestamp > 0);
   });
 
   it('Test putObjectWithVersion BODY', async () => {
@@ -563,8 +564,8 @@ describe('Version Put', () => {
     assert.equal('Somebody...', input.Body);
     assert.equal(616, input.ContentLength);
     assert.equal('/qwerty', input.Metadata.Path);
-    assert.equal(1234, input.Metadata.Timestamp);
     assert.equal('[{"email":"anonymous"}]', input.Metadata.Users);
+    assert(input.Metadata.Timestamp > 0);
 
     assert.equal(1, sentToS3_2.length);
     const input2 = sentToS3_2[0].input;
@@ -574,6 +575,7 @@ describe('Version Put', () => {
     assert.equal('/mypath', input2.Key);
     assert.equal('/mypath', input2.Metadata.Path);
     assert.equal('[{"email":"hi@acme.com"}]', input2.Metadata.Users);
+    assert.strictEqual(1234, input2.Metadata.Timestamp);
     assert(input2.Metadata.Version && input2.Metadata.Version !== 101);
   });
 });

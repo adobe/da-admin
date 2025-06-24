@@ -120,7 +120,7 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     Ext: daCtx.ext,
     Metadata: {
       Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
-      Timestamp: current.metadata?.timestamp || Timestamp,
+      Timestamp,
       Path: current.metadata?.path || Path,
       Label,
     },
@@ -134,7 +134,12 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   const command = new PutObjectCommand({
     ...input,
     Metadata: {
-      ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Preparsingstore,
+      ID,
+      Version: crypto.randomUUID(),
+      Users,
+      Timestamp: current.metadata?.timestamp || Timestamp,
+      Path,
+      Preparsingstore,
     },
   });
   try {
