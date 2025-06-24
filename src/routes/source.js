@@ -21,7 +21,7 @@ import { hasPermission } from '../utils/auth.js';
 export async function deleteSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
   const details = await deleteHelper(req);
-  return deleteObjects(env, daCtx, details);
+  return /* await */ deleteObjects(env, daCtx, details);
 }
 
 export async function postSource({ req, env, daCtx }) {
