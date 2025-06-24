@@ -52,20 +52,6 @@ function createBucketIfMissing(client) {
   );
 }
 
-/**
- * Check to see if the org is in the existing list of orgs
- *
- * @param {Object} env the cloud provider environment
- * @param {*} org the org associated with the bucket
- * @returns null
- */
-async function checkOrgIndex(env, org) {
-  const orgs = await env.DA_AUTH.get('orgs', { type: 'json' });
-  if (orgs.some((existingOrg) => existingOrg.name === org)) return;
-  orgs.push({ name: org, created: new Date().toISOString() });
-  await env.DA_AUTH.put('orgs', JSON.stringify(orgs));
-}
-
 export default async function putObject(env, daCtx, obj) {
   const config = getS3Config(env);
   const client = new S3Client(config);
@@ -74,8 +60,6 @@ export default async function putObject(env, daCtx, obj) {
 
   // Only allow creating a new bucket for orgs and repos
   if (key.split('/').length <= 1) {
-    // await checkOrgIndex(env, org);
-
     // R2 ONLY FEATURE
     createBucketIfMissing(client);
   }
