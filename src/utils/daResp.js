@@ -29,6 +29,10 @@ export default function daResp({
     headers.append('X-da-id', metadata.id);
   }
 
+  if (metadata?.timestamp) {
+    headers.append('Last-Modified', new Date(parseInt(metadata.timestamp, 10)).toUTCString());
+  }
+
   if (ctx?.aclCtx && status < 500) {
     headers.append('X-da-actions', `/${ctx.key}=${[...ctx.aclCtx.actionSet]}`);
 
