@@ -19,7 +19,7 @@ describe('DA Resp', () => {
     const aclCtx = { actionSet: ['read', 'write'], pathLookup: new Map() };
     const ctx = { key: 'foo/bar.html', aclCtx };
     const body = 'foobar';
-    const metadata = { id: '1234' };
+    const metadata = { id: '1234', timestamp: '1719235200000' };
 
     const resp = daResp({status: 200, body, contentType: 'text/plain', contentLength: 777, metadata}, ctx);
     assert.strictEqual(body, await resp.text());
@@ -32,6 +32,7 @@ describe('DA Resp', () => {
     assert.strictEqual('777', resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/bar.html=read,write', resp.headers.get('X-da-actions'));
     assert.strictEqual('1234', resp.headers.get('X-da-id'));
+    assert.strictEqual('Mon, 24 Jun 2024 13:20:00 GMT', resp.headers.get('Last-Modified'));
     assert(resp.headers.get('X-da-acltrace') === null);
   });
 
