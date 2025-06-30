@@ -19,7 +19,7 @@ describe('DA Resp', () => {
     const aclCtx = { actionSet: ['read', 'write'], pathLookup: new Map() };
     const ctx = { key: 'foo/bar.html', aclCtx };
     const body = 'foobar';
-    const metadata = { id: '1234', timestamp: '1719235200000' };
+    const metadata = { id: '1234', LastModified: '2024-06-24T13:20:00.000Z' };
 
     const resp = daResp({status: 200, body, contentType: 'text/plain', contentLength: 777, metadata}, ctx);
     assert.strictEqual(body, await resp.text());
