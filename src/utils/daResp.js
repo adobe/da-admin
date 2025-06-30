@@ -29,8 +29,8 @@ export default function daResp({
     headers.append('X-da-id', metadata.id);
   }
 
-  if (metadata?.LastModified) {
-    headers.append('Last-Modified', new Date(metadata.LastModified).toUTCString());
+  if (metadata?.timestamp) {
+    headers.append('Last-Modified', new Date(parseInt(metadata.timestamp, 10)).toUTCString());
   }
 
   if (ctx?.aclCtx && status < 500) {

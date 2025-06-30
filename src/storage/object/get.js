@@ -36,10 +36,7 @@ export default async function getObject(env, { org, key }, head = false) {
         status: resp.$metadata.httpStatusCode,
         contentType: resp.ContentType,
         contentLength: resp.ContentLength,
-        metadata: {
-          ...resp.Metadata,
-          LastModified: resp.LastModified,
-        },
+        metadata: resp.Metadata,
         etag: resp.ETag,
       };
     } catch (e) {
@@ -59,10 +56,7 @@ export default async function getObject(env, { org, key }, head = false) {
     status: resp.status,
     contentType: resp.headers.get('content-type'),
     contentLength: resp.headers.get('content-length'),
-    metadata: {
-      ...resp.Metadata,
-      LastModified: resp.headers.get('last-modified'),
-    },
+    metadata: Metadata,
     etag: resp.headers.get('etag'),
   };
 }
