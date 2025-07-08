@@ -1,6 +1,7 @@
 name = "da-admin"
 main = "src/index.js"
 compatibility_date = "2024-11-11"
+keep_vars = true
 
 vars = { DA_COLLAB = "https://collab.da.page", DA_BUCKET_NAME = "da-content" }
 
