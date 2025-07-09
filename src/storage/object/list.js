@@ -17,30 +17,56 @@ import {
 import getS3Config from '../utils/config.js';
 import formatList from '../utils/list.js';
 
-function buildInput({ org, key, maxKeys }) {
+function buildInput({
+  org, key, maxKeys, continuationToken,
+}) {
   const input = {
     Bucket: `${org}-content`,
     Prefix: key ? `${key}/` : null,
     Delimiter: '/',
   };
   if (maxKeys) input.MaxKeys = maxKeys;
+  if (continuationToken) input.ContinuationToken = continuationToken;
   return input;
 }
 
-export default async function listObjects(env, daCtx, maxKeys) {
+async function scanFiles({
+  daCtx, env, offset, limit,
+}) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const input = buildInput({ ...daCtx, maxKeys });
-  const command = new ListObjectsV2Command(input);
-  try {
+  let continuationToken = null;
+  const visibleFiles = [];
+
+  while (visibleFiles.length < offset + limit) {
+    const numKeys = Math.min(1000, (offset + limit) * 2);
+
+    const input = buildInput({ ...daCtx, maxKeys: numKeys, continuationToken });
+    const command = new ListObjectsV2Command(input);
+
     const resp = await client.send(command);
-    // console.log(resp);
-    const body = formatList(resp, daCtx);
+    continuationToken = resp.NextContinuationToken;
+    visibleFiles.push(...formatList(resp, daCtx));
+
+    if (!continuationToken) break;
+  }
+
+  return {
+    body: visibleFiles.slice(offset, offset + limit),
+    status: 200,
+  };
+}
+
+export default async function listObjects(env, daCtx, maxKeys = 1000, offset = 0) {
+  try {
+    const { body, status, contentType } = await scanFiles({
+      daCtx, env, limit: maxKeys, offset,
+    });
     return {
       body: JSON.stringify(body),
-      status: resp.$metadata.httpStatusCode,
-      contentType: resp.ContentType,
+      status,
+      contentType,
     };
   } catch (e) {
     return { body: '', status: 404 };

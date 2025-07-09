@@ -24,14 +24,14 @@ function getRobots() {
   return { body, status: 200 };
 }
 
-export default async function getHandler({ env, daCtx }) {
+export default async function getHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
   if (path.startsWith('/source')) return getSource({ env, daCtx });
-  if (path.startsWith('/list')) return getList({ env, daCtx });
+  if (path.startsWith('/list')) return getList({ req, env, daCtx });
   if (path.startsWith('/config')) return getConfig({ env, daCtx });
   if (path.startsWith('/versionlist')) return getVersionList({ env, daCtx });
   if (path.startsWith('/versionsource')) return getVersionSource({ env, daCtx });
