@@ -3,7 +3,7 @@ main = "src/index.js"
 compatibility_date = "2024-11-11"
 keep_vars = true
 
-vars = { DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "da-content" }
+vars = { DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "aem-content" }
 
 services = [
   { binding = "dacollab", service = "da-collab" }
@@ -37,7 +37,7 @@ r2_buckets = [
 ]
 
 [env.dev]
-vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", AEM_BUCKET_NAME = "da-content-dev" }
+vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", AEM_BUCKET_NAME = "aem-content-dev" }
 
 services = [
   { binding = "dacollab", service = "da-collab-local" }
