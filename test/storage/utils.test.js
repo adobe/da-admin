@@ -43,7 +43,7 @@ function getMock() {
   };
 }
 
-const daCtx = getDaCtx('/source/adobecom');
+const daCtx = { url: 'https://admin.da.live/list/foo/bar' };
 
 describe('Format object list', () => {
   const list = formatList(getMock(), daCtx);
