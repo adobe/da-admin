@@ -13,7 +13,7 @@ import listBuckets from '../storage/bucket/list.js';
 import { listObjectsPaginated } from '../storage/object/list.js';
 import { getChildRules, hasPermission } from '../utils/auth.js';
 
-export default async function getList({ req, env, daCtx }) {
+export default async function getListPaginated({ req, env, daCtx }) {
   if (!daCtx.org) return listBuckets(env, daCtx);
   if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
 
