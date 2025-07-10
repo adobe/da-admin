@@ -15,7 +15,9 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
-import formatList from '../utils/list.js';
+import formatList, { formatPaginatedList } from '../utils/list.js';
+
+const LIST_LIMIT = 5000;
 
 function buildInput({
   org, key, maxKeys, continuationToken,
@@ -40,33 +42,58 @@ async function scanFiles({
   const visibleFiles = [];
 
   while (visibleFiles.length < offset + limit) {
-    const numKeys = Math.min(1000, (offset + limit) * 2);
+    const remainingKeys = offset + limit - visibleFiles.length;
+    // fetch 25 extra to account for some hidden files
+    const numKeysToFetch = Math.min(1000, remainingKeys + 25);
 
-    const input = buildInput({ ...daCtx, maxKeys: numKeys, continuationToken });
+    const input = buildInput({ ...daCtx, maxKeys: numKeysToFetch, continuationToken });
     const command = new ListObjectsV2Command(input);
 
     const resp = await client.send(command);
     continuationToken = resp.NextContinuationToken;
-    visibleFiles.push(...formatList(resp, daCtx));
+    visibleFiles.push(...formatPaginatedList(resp, daCtx));
 
     if (!continuationToken) break;
   }
 
-  return {
-    body: visibleFiles.slice(offset, offset + limit),
-    status: 200,
-  };
+  return visibleFiles.slice(offset, offset + limit);
 }
 
-export default async function listObjects(env, daCtx, maxKeys = 1000, offset = 0) {
+export async function listObjectsPaginated(env, daCtx, maxKeys = 1000, offset = 0) {
+  if (offset + maxKeys > LIST_LIMIT) {
+    return { status: 400 };
+  }
+
   try {
-    const { body, status, contentType } = await scanFiles({
+    const files = await scanFiles({
       daCtx, env, limit: maxKeys, offset,
     });
     return {
+      body: JSON.stringify({
+        offset,
+        limit: maxKeys,
+        data: files,
+      }),
+      status: 200,
+    };
+  } catch (e) {
+    return { body: '', status: 404 };
+  }
+}
+
+export default async function listObjects(env, daCtx, maxKeys) {
+  const config = getS3Config(env);
+  const client = new S3Client(config);
+
+  const input = buildInput({ ...daCtx, maxKeys });
+  const command = new ListObjectsV2Command(input);
+  try {
+    const resp = await client.send(command);
+    const body = formatList(resp, daCtx);
+    return {
       body: JSON.stringify(body),
-      status,
-      contentType,
+      status: resp.$metadata.httpStatusCode,
+      contentType: resp.ContentType,
     };
   } catch (e) {
     return { body: '', status: 404 };
