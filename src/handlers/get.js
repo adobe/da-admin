@@ -11,7 +11,7 @@
  */
 import { getSource } from '../routes/source.js';
 import getList from '../routes/list.js';
-import getListV2 from '../routes/list-paginated.js';
+import getListPaginated from '../routes/list-paginated.js';
 import logout from '../routes/logout.js';
 import { getConfig } from '../routes/config.js';
 import { getVersionSource, getVersionList } from '../routes/version.js';
@@ -32,7 +32,7 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/robots.txt')) return getRobots();
 
   if (path.startsWith('/source')) return getSource({ env, daCtx });
-  if (path.startsWith('/list-paginated')) return getListV2({ req, env, daCtx });
+  if (path.startsWith('/list-paginated')) return getListPaginated({ req, env, daCtx });
   if (path.startsWith('/list')) return getList({ env, daCtx });
   if (path.startsWith('/config')) return getConfig({ env, daCtx });
   if (path.startsWith('/versionlist')) return getVersionList({ env, daCtx });
