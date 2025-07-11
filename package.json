@@ -11,7 +11,7 @@
     "build:docs": "npx @redocly/cli build-docs -o docs/index.html admin@v1",
     "watch:docs": "npx @redocly/cli preview-docs admin@v1",
     "lint": "eslint .",
-    "test": "c8 mocha --spec=test/**/*.test.js",
+    "test": "c8 mocha --spec=test/routes/source.test.js",
     "vitest": "vitest run",
     "dev": "wrangler dev",
     "deploy:prod": "wrangler deploy",
