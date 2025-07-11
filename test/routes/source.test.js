@@ -9,12 +9,50 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
-import esmock from 'esmock';
-
+import { describe, it, afterEach, vi, expect, beforeAll } from 'vitest';
+import { getSource, postSource, deleteSource } from '../../src/routes/source.js';
+import getObject from '../../src/storage/object/get.js';
+import putObject from '../../src/storage/object/put.js';
+import deleteObjects from '../../src/storage/object/delete.js';
+import { invalidateCollab } from '../../src/storage/utils/object.js';
+import putHelper from '../../src/helpers/source.js';
+import deleteHelper from '../../src/helpers/delete.js';
+import { hasPermission } from '../../src/utils/auth.js';
 import { getAclCtx } from '../../src/utils/auth.js';
 
 describe('Source Route', () => {
+  beforeAll(() => {
+    vi.mock('../../src/storage/object/get.js', () => ({
+      default: vi.fn()
+    }));
+    vi.mock('../../src/storage/object/put.js', () => ({
+      default: vi.fn()
+    }));
+    vi.mock('../../src/storage/object/delete.js', () => ({
+      default: vi.fn()
+    }));
+    vi.mock('../../src/storage/utils/object.js', async () => ({
+      invalidateCollab: vi.fn()
+    }));
+    vi.mock('../../src/helpers/source.js', () => ({
+      default: vi.fn()
+    }));
+    vi.mock('../../src/helpers/delete.js', () => ({
+      default: vi.fn()
+    }));
+    vi.mock('../../src/utils/auth.js', async () => {
+      const actual = await vi.importActual('../../src/utils/auth.js');
+      return {
+        ...actual,
+        hasPermission: vi.fn(actual.hasPermission)
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('Test invalidate using service binding', async () => {
     const sb_callbacks = [];
     const dacollab = {
@@ -26,18 +64,9 @@ describe('Source Route', () => {
     };
 
     const daCtx = { aclCtx: { pathLookup: new Map() }};
-    const putResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        return { status: 200 };
-      }
-    };
 
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: putResp
-      }
-    });
+    putObject.mockImplementation(() => ({ status: 200 }));
+    putHelper.mockImplementation(() => ({ data: 'test' }));
 
     const headers = new Map();
     headers.set('x-da-initiator', 'blah');
@@ -48,17 +77,13 @@ describe('Source Route', () => {
     };
 
     const resp = await postSource({ req, env, daCtx });
-    assert.equal(200, resp.status);
-    assert.deepStrictEqual(['https://localhost/api/v1/syncadmin?doc=http://localhost:9876/source/somedoc.html'], sb_callbacks);
+    expect(resp.status).to.eq(200);
+    expect(invalidateCollab).toHaveBeenCalledWith('syncadmin', req.url, env);
   });
 
   it('Test postSource from collab does not trigger invalidate callback', async () => {
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: async () => ({ status: 201 })
-      }
-    });
+    putObject.mockImplementation(() => ({ status: 201 }));
+    putHelper.mockImplementation(() => ({ data: 'test' }));
 
     const savedFetch = globalThis.fetch;
     try {
@@ -80,21 +105,16 @@ describe('Source Route', () => {
       const daCtx = { aclCtx: { pathLookup: new Map() }};
 
       const resp = await postSource({ req, env, daCtx });
-      assert.equal(201, resp.status);
-      assert.equal(0, callbacks.length);
+      expect(resp.status).to.eq(201);
+      expect(callbacks.length).to.eq(0);
     } finally {
       globalThis.fetch = savedFetch;
     }
   });
 
   it('Test failing postSource does not trigger callback', async () => {
-    const callbacks = [];
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: async () => ({ status: 500 })
-      }
-    });
+    putObject.mockImplementation(() => ({ status: 500 }));
+    putHelper.mockImplementation(() => ({ data: 'test' }));
 
     const savedFetch = globalThis.fetch;
     try {
@@ -115,8 +135,8 @@ describe('Source Route', () => {
       const daCtx = { aclCtx: { pathLookup: new Map() }};
 
       const resp = await postSource({ req, env, daCtx });
-      assert.equal(500, resp.status);
-      assert.equal(0, callbacks.length);
+      expect(resp.status).to.eq(500);
+      expect(callbacks.length).to.eq(0);
     } finally {
       globalThis.fetch = savedFetch;
     }
@@ -126,46 +146,22 @@ describe('Source Route', () => {
     const env = {};
     const daCtx = { aclCtx: { pathLookup: new Map() }};
 
-    const called = [];
-    const getResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        called.push('getObject');
-        return {status: 200};
-      }
-    };
+    getObject.mockImplementation(() => ({ status: 200 }));
 
-    const { getSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/get.js': {
-          default: getResp
-        }
-      }
-    );
-    const resp = await getSource({env, daCtx});
-    assert.equal(200, resp.status);
-    assert.deepStrictEqual(called, ['getObject']);
+    const resp = await getSource({ env, daCtx });
+    expect(resp.status).to.eq(200);
+    expect(getObject).toHaveBeenCalledWith(env, daCtx, undefined);
   });
 
-  it('Test getSource with 204', async () => {
+  it('Test deleteSource with 204', async () => {
     const env = {};
     const daCtx = { aclCtx: { pathLookup: new Map() }};
 
-    const deleteResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        return {status: 204};
-      }
-    };
+    deleteObjects.mockImplementation(() => ({ status: 204 }));
+    deleteHelper.mockImplementation(() => ({ key: 'test' }));
 
-    const { deleteSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/delete.js': {
-          default: deleteResp
-        }
-      }
-    );
-
-    const resp = await deleteSource({env, daCtx});
-    assert.equal(204, resp.status);
+    const resp = await deleteSource({ req: {}, env, daCtx });
+    expect(resp.status).to.eq(204);
   });
 
   it('Test getSource with permissions', async () => {
@@ -216,123 +212,70 @@ describe('Source Route', () => {
       }]}],
       org: 'test-source', env};
 
-    const called = [];
-    const getResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        called.push('getObject');
-        return {status: 200};
-      }
-    };
-
-    const { getSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/get.js': {
-          default: getResp
-        }
-      }
-    );
+    getObject.mockImplementation(() => ({ status: 200 }));
 
     daCtx.key = '/test';
     daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, daCtx.key);
-    const resp = await getSource({env, daCtx});
-    assert.equal(200, resp.status);
-    assert.deepStrictEqual(called, ['getObject']);
+    const resp = await getSource({ env, daCtx });
+    expect(resp.status).to.eq(200);
+    expect(getObject).toHaveBeenCalledWith(env, daCtx, undefined);
 
     daCtx.key = '/bar';
     daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, daCtx.key);
-    const resp2 = await getSource({env, daCtx});
-    assert.equal(403, resp2.status);
+    const resp2 = await getSource({ env, daCtx });
+    expect(resp2.status).to.eq(403);
   });
 
   it('Test deleteSource with permissions', async() => {
-    const deleteCalled = [];
-    const deleteCall = (e, c, d) => {
-      deleteCalled.push({e, c, d});
-    };
-
     const ctx = { key: '/a/b/c.html' };
-    const hasPermission = (c, k, a) => {
+
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === '/a/b/c.html' && a === 'write') {
         return false;
       }
       return true;
-    }
+    });
 
-    const { deleteSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/delete.js': {
-          default: deleteCall
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        },
-      }
-    );
+    deleteHelper.mockImplementation(() => ({ key: 'test' }));
 
     const resp = await deleteSource({ req: {}, env: {}, daCtx: ctx });
-    assert.strictEqual(403, resp.status);
-    assert.strictEqual(deleteCalled.length, 0);
+    expect(resp.status).to.eq(403);
+    expect(deleteObjects).not.toHaveBeenCalled();
 
-    await deleteSource({ req: {}, env: {}, daCtx: { key: 'foobar.html' }});
-    assert.strictEqual(deleteCalled.length, 1);
-    assert.strictEqual(deleteCalled[0].c.key, 'foobar.html');
+    deleteObjects.mockReturnValueOnce({ status: 200 });
+    const resp2 = await deleteSource({ req: {}, env: {}, daCtx: { key: 'foobar.html' }});
+    expect(resp2.status).to.eq(200);
+    expect(deleteObjects).toHaveBeenCalledWith({}, { key: 'foobar.html' }, { key: 'test' });
   });
 
   it('Test postSource with permissions', async () => {
-    const putCalled = [];
-    const putCall = (e, c, o) => {
-      putCalled.push({e, c, o});
-      return { status: 202 }; // 202 skips the invalidate collab which is easy for the test
-    };
-
     const ctx = { key: '/foo/bar.png' };
-    const hasPermission = (c, k, a) => {
+
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === '/foo/bar.png' && a === 'write') {
         return false;
       }
       return true;
-    }
+    });
 
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: putCall
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        },
-      }
-    );
+    putObject.mockImplementation(() => ({ status: 202 }));
+    putHelper.mockImplementation(() => ({ data: 'test' }));
 
     const resp = await postSource({ req: {}, env: {}, daCtx: ctx });
-    assert.strictEqual(403, resp.status);
-    assert.strictEqual(putCalled.length, 0);
+    expect(resp.status).to.eq(403);
+    expect(putObject).not.toHaveBeenCalled();
 
-    await postSource({ req: { headers: new Headers() }, env: {}, daCtx: { key: 'haha.png' }});
-    assert.strictEqual(putCalled.length, 1);
-    assert.strictEqual(putCalled[0].c.key, 'haha.png');
+    const resp2 = await postSource({ req: { headers: new Headers() }, env: {}, daCtx: { key: 'haha.png' }});
+    expect(resp2.status).to.eq(202);
+    expect(putObject).toHaveBeenCalledWith({}, { key: 'haha.png' }, { data: 'test' });
   });
 
   it('Test postSource with provided guid', async () => {
-    const putCalled = [];
-    const putCall = (e, c, o) => {
-      putCalled.push({e, c, o});
-      return { status: 202 }; // 202 skips the invalidate collab which is easy for the test
-    };
-
     const ctx = { key: '/foo/bar.png' };
-    const hasPermission = () => true
 
-    const { postSource } = await esmock(
-      '../../src/routes/source.js', {
-        '../../src/storage/object/put.js': {
-          default: putCall
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        },
-      }
-    );
+    hasPermission.mockImplementation(() => true);
+    putObject.mockImplementation(() => ({ status: 202 }));
+    putHelper.mockImplementation(() => ({ data: 'some data', guid: 'aaaa-bbbb-1234-5678' }));
 
     const body = new FormData();
     body.append('data', 'some data');
@@ -342,9 +285,7 @@ describe('Source Route', () => {
     const req = new Request('https://blah.org', opts);
 
     const resp = await postSource({ req, env: {}, daCtx: ctx });
-    assert.strictEqual(1, putCalled.length);
-    assert.strictEqual('aaaa-bbbb-1234-5678', putCalled[0].o.guid);
-    assert.strictEqual('some data', putCalled[0].o.data);
-    assert.strictEqual(202, resp.status);
+    expect(resp.status).to.eq(202);
+    expect(putObject).toHaveBeenCalledWith({}, ctx, { data: 'some data', guid: 'aaaa-bbbb-1234-5678' });
   });
 });

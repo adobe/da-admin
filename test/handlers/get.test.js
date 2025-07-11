@@ -11,6 +11,8 @@
  */
 import assert from 'assert';
 
+import { describe, it } from 'vitest';
+
 import getHandler from '../../src/handlers/get.js';
 
 describe('Get Route', () => {

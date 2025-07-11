@@ -10,9 +10,33 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'assert';
-import esmock from 'esmock';
+
+import { describe, it, beforeAll, afterEach, vi } from 'vitest';
+
+import {putObjectWithVersion, postObjectVersion} from '../../../src/storage/version/put.js';
+import {ifNoneMatch, ifMatch} from "../../../src/storage/utils/version.js";
+import getObject from "../../../src/storage/object/get.js";
 
 describe('Version Put', () => {
+  beforeAll(() => {
+    vi.mock('../../../src/storage/object/get.js', () => ({
+      default: vi.fn()
+    }));
+    vi.mock('../../../src/storage/utils/version.js', async () => {
+      const actual = await vi.importActual('../../../src/storage/utils/version.js');
+
+      return ({
+        ...actual,
+        ifNoneMatch: vi.fn(),
+        ifMatch: vi.fn(),
+      });
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  })
+
   it('Test putObjectWithVersion retry on new document', async () => {
     const getObjectCalls = []
     const mockGetObject = async (e, u, nb) => {
@@ -42,14 +66,8 @@ describe('Version Put', () => {
       }
     };
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifNoneMatch: () => mockS3Client
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifNoneMatch.mockImplementation(() => mockS3Client);
 
     const mockEnv = { foo: 'bar' };
     const mockUpdate = 'haha';
@@ -109,15 +127,9 @@ describe('Version Put', () => {
       }
     };
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifMatch: () => mockS3Client,
-        ifNoneMatch: () => mockS3PutClient
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifMatch.mockImplementation(() => mockS3Client);
+    ifNoneMatch.mockImplementation(() => mockS3PutClient);
 
     const mockEnv = { hi: 'ha' };
     const mockUpdate = 'hoho';
@@ -170,15 +182,9 @@ describe('Version Put', () => {
     };
     const mockIfMatch = () => mockS3Client
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockIfNoneMatch,
-        ifMatch: mockIfMatch,
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifNoneMatch.mockImplementation(mockIfNoneMatch);
+    ifMatch.mockImplementation(mockIfMatch);
 
     const env = {};
     const daCtx= { ext: 'html' };
@@ -237,15 +243,9 @@ describe('Version Put', () => {
     };
     const mockIfMatch = () => mockS3Client
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockIfNoneMatch,
-        ifMatch: mockIfMatch,
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifNoneMatch.mockImplementation(mockIfNoneMatch);
+    ifMatch.mockImplementation(mockIfMatch);
 
     const env = {};
     const daCtx= {
@@ -300,14 +300,8 @@ describe('Version Put', () => {
     };
     const mockIfNoneMatch = () => mockS3Client;
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockIfNoneMatch
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifNoneMatch.mockImplementation(mockIfNoneMatch);
 
     const env = {};
     const daCtx= {};
@@ -329,11 +323,7 @@ describe('Version Put', () => {
       return { metadata: { id: 'x123' }, status: 200 };
     }
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
 
     const resp = await putObjectWithVersion({}, {}, {}, false, 'y999');
     assert.equal(409, resp.status);
@@ -357,14 +347,8 @@ describe('Version Put', () => {
     };
     const mockIfNoneMatch = () => mockS3Client;
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockIfNoneMatch
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifNoneMatch.mockImplementation(mockIfNoneMatch);
 
     const update = { org: 'orgOne', key: '/root/somedoc.html' };
     const resp = await putObjectWithVersion({}, {}, update, true, 'myidAAA');
@@ -395,7 +379,6 @@ describe('Version Put', () => {
       }
     }
 
-
     const s3Sent = [];
     const mockS3Client = {
       send: (c) => {
@@ -422,15 +405,9 @@ describe('Version Put', () => {
     };
     const mockIfNoneMatch = () => mockS3INMClient;
 
-    const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifMatch: mockIfMatch,
-        ifNoneMatch: mockIfNoneMatch
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifMatch.mockImplementation(mockIfMatch);
+    ifNoneMatch.mockImplementation(mockIfNoneMatch);
 
     const resp = await postObjectVersion(req, env, ctx);
     assert.equal(201, resp.status);
@@ -483,14 +460,8 @@ describe('Version Put', () => {
     };
     const mockS3Client = () => s3Client;
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockS3Client
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifNoneMatch.mockImplementation(mockS3Client);
 
     const resp = await putObjectWithVersion({}, {}, {});
     assert.equal(1, sentToS3.length);
@@ -539,15 +510,9 @@ describe('Version Put', () => {
     };
     const mockS3Client2 = () => s3Client2;
 
-    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject
-      },
-      '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockS3Client,
-        ifMatch: mockS3Client2
-      },
-    });
+    getObject.mockImplementation(mockGetObject);
+    ifNoneMatch.mockImplementation(mockS3Client);
+    ifMatch.mockImplementation(mockS3Client2);
 
     const update = {
       body: 'foobar',

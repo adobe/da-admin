@@ -9,18 +9,30 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
-import esmock from 'esmock';
+import { describe, it, afterEach, vi, expect, beforeAll } from 'vitest';
+import copyHandler from '../../src/routes/copy.js';
+import copy from '../../src/storage/object/copy.js';
+import { hasPermission } from "../../src/utils/auth.js";
 
 describe('Copy Route', () => {
-  it('Test copyHandler with permissions', async () => {
-    const copyCalled = [];
-    const copyObject = (e, c, d, m) => {
-      copyCalled.push({e, c, d, m});
-      return { status: 200 };
-    };
 
-    const hasPermission = (c, k, a) => {
+  beforeAll(() => {
+    vi.mock('../../src/storage/object/copy.js', () => ({
+      default: vi.fn(),
+    }))
+    vi.mock('../../src/utils/auth.js', () => ({
+      hasPermission: vi.fn(),
+    }))
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  })
+
+  it('Test copyHandler with permissions', async () => {
+    copy.mockImplementation(() => ({ status: 200 }));
+
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === 'my/src.html' && a === 'read') {
         return false;
       }
@@ -28,16 +40,7 @@ describe('Copy Route', () => {
         return false;
       }
       return true;
-    }
-    const copyHandler = await esmock(
-      '../../src/routes/copy.js', {
-        '../../src/storage/object/copy.js': {
-          default: copyObject
-        },
-        '../../src/utils/auth.js': {
-          hasPermission        }
-      }
-    );
+    });
 
     const formdata = new Map();
     formdata.set('destination', '/myorg/MY/dest.html')
@@ -46,12 +49,12 @@ describe('Copy Route', () => {
     };
 
     const resp = await copyHandler({ req, env: {}, daCtx: { key: 'my/src.html' }});
-    assert.strictEqual(403, resp.status);
-    assert.strictEqual(copyCalled.length, 0);
+    expect(resp.status).to.eq(403);
+    expect(copy).not.toHaveBeenCalled();
 
     const resp2 = await copyHandler({ req, env: {}, daCtx: { key: 'my/src2.html' }});
-    assert.strictEqual(403, resp2.status);
-    assert.strictEqual(copyCalled.length, 0);
+    expect(resp2.status).to.eq(403);
+    expect(copy).not.toHaveBeenCalled();
 
     const formdata2 = new Map();
     formdata2.set('destination', '/myorg/MY/dest2.html')
@@ -60,14 +63,14 @@ describe('Copy Route', () => {
     };
 
     const resp3 = await copyHandler({ req: req2, env: {}, daCtx: { key: 'my/src.html' }});
-    assert.strictEqual(403, resp3.status);
-    assert.strictEqual(copyCalled.length, 0);
+    expect(resp3.status).to.eq(403);
+    expect(copy).not.toHaveBeenCalled();
 
     const resp4 = await copyHandler({ req: req2, env: {}, daCtx: { key: 'my/src2.html' }});
-    assert.strictEqual(200, resp4.status);
-    assert.strictEqual(copyCalled.length, 1);
-    assert.strictEqual('my/src2.html', copyCalled[0].d.source);
-    assert.strictEqual('my/dest2.html', copyCalled[0].d.destination);
-    assert.strictEqual(false, copyCalled[0].m);
+    expect(resp4.status).to.eq(200);
+    expect(copy).toHaveBeenCalled();
+    expect(copy.mock.calls[0][2].source).to.eq('my/src2.html');
+    expect(copy.mock.calls[0][2].destination).to.eq('my/dest2.html');
+    expect(copy.mock.calls[0][3]).to.be.false;
   });
 });

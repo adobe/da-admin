@@ -10,45 +10,62 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'assert';
-import esmock from 'esmock';
+import { describe, it, afterEach, vi, beforeAll } from 'vitest';
+import getListPaginated from '../../src/routes/list-paginated.js';
+import { listObjectsPaginated } from '../../src/storage/object/list.js';
+import { hasPermission, getChildRules } from '../../src/utils/auth.js';
 
 describe('List Route', () => {
+  beforeAll(() => {
+    vi.mock('../../src/storage/object/list.js', () => ({
+      listObjectsPaginated: vi.fn()
+    }));
+    vi.mock('../../src/utils/auth.js', async () => {
+      const actual = await vi.importActual('../../src/utils/auth.js');
+      return {
+        ...actual,
+        hasPermission: vi.fn(),
+        getChildRules: vi.fn()
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('Test getListPaginated with permissions', async () => {
     const loCalled = [];
-    const listObjectsPaginated = (e, c) => {
+    listObjectsPaginated.mockImplementation((e, c) => {
       loCalled.push({ e, c });
       return {};
-    }
+    });
 
     const ctx = { org: 'foo', key: 'q/q/q' };
-    const hasPermission = (c, k, a) => {
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === 'q/q/q' && a === 'read') {
         return false;
       }
       return true;
-    }
-
-    const getListPaginated = await esmock(
-      '../../src/routes/list-paginated.js', {
-        '../../src/storage/object/list.js': {
-          listObjectsPaginated
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        }
-      }
-    );
+    });
 
     const req = {
       url: new URL('https://admin.da.live/list/foo/bar'),
-    }
+    };
 
     const resp = await getListPaginated({ req, env: {}, daCtx: ctx, aclCtx: {} });
     assert.strictEqual(403, resp.status);
     assert.strictEqual(0, loCalled.length);
 
     const aclCtx = { pathLookup: new Map() };
-    await getListPaginated({ req, env: {}, daCtx: { org: 'bar', key: 'q/q', users: [], aclCtx }});
+    const daCtx = { org: 'bar', key: 'q/q', users: [], aclCtx };
+    
+    // Mock getChildRules to set childRules on the aclCtx
+    getChildRules.mockImplementation((ctx) => {
+      ctx.aclCtx.childRules = ['/q/q/**=read,write'];
+    });
+
+    await getListPaginated({ req, env: {}, daCtx });
     assert.strictEqual(1, loCalled.length);
     assert.strictEqual('q/q', loCalled[0].c.key);
 
@@ -59,27 +76,16 @@ describe('List Route', () => {
 
   it('parses request params', async () => {
     const loCalled = [];
-    const listObjectsPaginated = (e, c, limit, offset) => {
-      console.log({offset, limit})
+    listObjectsPaginated.mockImplementation((e, c, limit, offset) => {
+      console.log({offset, limit});
       loCalled.push({ offset, limit });
       return {};
-    }
+    });
 
-    const hasPermission = () => true;
+    hasPermission.mockImplementation(() => true);
+    getChildRules.mockImplementation(() => {});
 
-    const getListPaginated = await esmock(
-      '../../src/routes/list-paginated.js', {
-        '../../src/storage/object/list.js': {
-          listObjectsPaginated
-        },
-        '../../src/utils/auth.js': {
-          hasPermission,
-          getChildRules: () => {}
-        }
-      }
-    );
-
-    const ctx = { org: 'foo', };
+    const ctx = { org: 'foo' };
     const reqs = [
       { url: 'https://admin.da.live/list/foo/bar?limit=12&offset=1' },
       { url: 'https://admin.da.live/list/foo/bar?limit=asdf&offset=17' },
