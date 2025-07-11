@@ -13,8 +13,28 @@ import listBuckets from '../storage/bucket/list.js';
 import { listObjectsPaginated } from '../storage/object/list.js';
 import { getChildRules, hasPermission } from '../utils/auth.js';
 
+async function handleBuckets({ env, daCtx }) {
+  const res = await listBuckets(env, daCtx);
+
+  if (res.status !== 200) return { body: '', status: res.status };
+
+  try {
+    const parsedBody = JSON.parse(res.body);
+    return {
+      body: JSON.stringify({
+        data: parsedBody,
+        limit: 1000,
+        offset: 0,
+      }),
+      status: 200,
+    };
+  } catch (e) {
+    return { body: '', status: 500 };
+  }
+}
+
 export default async function getListPaginated({ req, env, daCtx }) {
-  if (!daCtx.org) return listBuckets(env, daCtx);
+  if (!daCtx.org) return handleBuckets({ env, daCtx });
   if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
 
   // Get the child rules of the current folder and store this in daCtx.aclCtx
