@@ -10,10 +10,9 @@
  * governing permissions and limitations under the License.
  */
 
-import assert from 'node:assert';
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { mockClient } from 'aws-sdk-client-mock';
-import { describe, it, beforeEach } from 'vitest';
+import { describe, it, beforeEach, expect, afterEach, vi } from 'vitest';
 
 const s3Mock = mockClient(S3Client);
 
@@ -31,6 +30,10 @@ describe('List Objects', () => {
     s3Mock.reset();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('populates file metadata', async () => {
     s3Mock.on(ListObjectsV2Command, {
       Bucket: 'adobe-content',
@@ -41,8 +44,8 @@ describe('List Objects', () => {
     const daCtx = { org: 'adobe', key: 'wknd' };
     const resp = await listObjects({}, daCtx);
     const data = JSON.parse(resp.body);
-    assert.strictEqual(data.length, 3);
-    assert(data.every((item) => item.ext && item.lastModified));
+    expect(data.length).toBe(3);
+    expect(data.every((item) => item.ext && item.lastModified)).toBe(true);
   });
 
   it('limits the results', async () => {
@@ -56,6 +59,6 @@ describe('List Objects', () => {
     const daCtx = { org: 'adobe', key: 'wknd' };
     const resp = await listObjects({}, daCtx, 2);
     const data = JSON.parse(resp.body);
-    assert.strictEqual(data.length, 2, 'Should only return 2 items');
+    expect(data.length).toBe(2);
   });
-})
+});
