@@ -13,6 +13,7 @@
 import assert from 'node:assert';
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { mockClient } from 'aws-sdk-client-mock';
+import { describe, it, beforeEach } from 'vitest';
 
 const s3Mock = mockClient(S3Client);
 

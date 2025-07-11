@@ -4,6 +4,8 @@ import assert from 'assert';
 import { getDaCtx } from '../../src/utils/daCtx.js';
 import formatList from '../../src/storage/utils/list.js';
 
+import { describe, it } from 'vitest';
+
 const MOCK = {
   CommonPrefixes: [
     { Prefix: 'blog/' },
@@ -16,26 +18,32 @@ const MOCK = {
   Contents: [
     {
       Key: 'blog.props',
+      LastModified: new Date(),
     },
     {
       Key: 'da.props',
+      LastModified: new Date(),
     },
     {
       Key: 'folder-only.props',
+      LastModified: new Date(),
     },
     {
       Key: 'test.html',
+      LastModified: new Date(),
     },
     {
       Key: 'dark-alley.jpg.props',
+      LastModified: new Date(),
     },
     {
       Key: 'dark-alley.jpg',
+      LastModified: new Date(),
     }
   ],
 };
 
-const daCtx = getDaCtx('/source/adobecom');
+const daCtx = { url: 'https://admin.da.live/list/foo/bar' };
 
 describe('Format object list', () => {
   const list = formatList(MOCK, daCtx);
