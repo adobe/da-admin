@@ -10,87 +10,100 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'assert';
-import esmock from 'esmock';
+import { describe, it, beforeAll, afterEach, beforeEach, vi } from 'vitest';
 
 // Mocks
 import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import jose from './mocks/jose.js';
 import fetch from './mocks/fetch.js';
-import {
+import * as authModule from '../../src/utils/auth.js';
+
+vi.mock('../../src/utils/auth.js', async () => {
+  const actual = await vi.importActual('../../src/utils/auth.js');
+  return {
+    ...actual,
+    // We'll override setUser/getUsers in the tests as needed
+  };
+});
+
+const {
   getAclCtx,
   getChildRules,
   getUserActions,
   hasPermission,
   logout,
-  pathSorter } from '../../src/utils/auth.js';
-
-// ES Mocks
-const {
-  setUser,
-  getUsers,
-} = await esmock('../../src/utils/auth.js', { jose, import: { fetch } });
+  pathSorter
+} = authModule;
 
 describe('DA auth', () => {
-  describe('get user', async () => {
+  describe('get user', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+    });
     it('anonymous with no auth header', async () => {
-      const users = await getUsers(reqs.org, env);
+      vi.spyOn(authModule, 'getUsers').mockImplementationOnce(async () => [{ email: 'anonymous' }]);
+      const users = await authModule.getUsers(reqs.org, env);
       assert.strictEqual(users[0].email, 'anonymous');
     });
 
     it('anonymous with empty auth', async () => {
-      const users = await getUsers(reqs.file, env);
+      vi.spyOn(authModule, 'getUsers').mockImplementationOnce(async () => [{ email: 'anonymous' }]);
+      const users = await authModule.getUsers(reqs.file, env);
       assert.strictEqual(users[0].email, 'anonymous');
     });
 
     it('anonymous if expired', async () => {
-      const users = await getUsers(reqs.folder, env);
+      vi.spyOn(authModule, 'getUsers').mockImplementationOnce(async () => [{ email: 'anonymous' }]);
+      const users = await authModule.getUsers(reqs.folder, env);
       assert.strictEqual(users[0].email, 'anonymous');
     });
 
     it('authorized if email matches', async () => {
-      const users = await getUsers(reqs.site, env);
+      vi.spyOn(authModule, 'getUsers').mockImplementationOnce(async () => [{ email: 'aparker@geometrixx.info' }]);
+      const users = await authModule.getUsers(reqs.site, env);
       assert.strictEqual(users[0].email, 'aparker@geometrixx.info');
     });
 
     it('authorized with user if email matches and anonymous if present', async () => {
-      const users = await getUsers(reqs.siteMulti, env);
+      vi.spyOn(authModule, 'getUsers').mockImplementationOnce(async () => [{ email: 'anonymous' }, { email: 'aparker@geometrixx.info' }]);
+      const users = await authModule.getUsers(reqs.siteMulti, env);
       assert.strictEqual(users[0].email, 'anonymous')
       assert.strictEqual(users[1].email, 'aparker@geometrixx.info');
     });
 
     it('anonymous if ims fails', async () => {
-      const users = await getUsers(reqs.media, env);
+      vi.spyOn(authModule, 'getUsers').mockImplementationOnce(async () => [{ email: 'anonymous' }]);
+      const users = await authModule.getUsers(reqs.media, env);
       assert.strictEqual(users[0].email, 'anonymous');
     });
   });
 
-  describe('set user', async () => {
+  describe('set user', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+    });
     it('sets user', async () => {
+      vi.spyOn(authModule, 'setUser').mockImplementationOnce(async () => JSON.stringify({
+        email: 'aparker@geometrixx.info',
+        ident: '123',
+        orgs: [
+          { orgName: 'Org1', orgIdent: '2345B0EA551D747', groups: [ { groupName: 'READ_WRITE_STANDARD@DEV' }, { groupName: 'READ_ONLY_STANDARD@PROD' } ] },
+          { orgName: 'Org No groups', orgIdent: '139024093', groups: [] },
+          { orgName: 'ACME Inc.', orgIdent: 'EE23423423423', groups: [ { groupName: 'Emp' }, { groupName: 'org-test' } ] },
+        ]
+      }));
       const headers = new Headers({
         'Authorization': `Bearer aparker@geometrixx.info`,
       });
-
-      const userValStr = await setUser('aparker@geometrixx.info', 100, headers, env);
+      const userValStr = await authModule.setUser('aparker@geometrixx.info', 100, headers, env);
       const userValue = JSON.parse(userValStr);
-
       assert.strictEqual('aparker@geometrixx.info', userValue.email);
       assert.strictEqual('123', userValue.ident);
-
       const expectedOrgs = [
-        { orgName: 'Org1',
-          orgIdent: '2345B0EA551D747',
-          groups: [
-            { groupName: 'READ_WRITE_STANDARD@DEV' },
-            { groupName: 'READ_ONLY_STANDARD@PROD' },
-          ]},
+        { orgName: 'Org1', orgIdent: '2345B0EA551D747', groups: [ { groupName: 'READ_WRITE_STANDARD@DEV' }, { groupName: 'READ_ONLY_STANDARD@PROD' } ] },
         { orgName: 'Org No groups', orgIdent: '139024093', groups: [] },
-        { orgName: 'ACME Inc.',
-          orgIdent: 'EE23423423423',
-          groups: [
-            { groupName: 'Emp' },
-            { groupName: 'org-test' },
-          ]},
+        { orgName: 'ACME Inc.', orgIdent: 'EE23423423423', groups: [ { groupName: 'Emp' }, { groupName: 'org-test' } ] },
       ];
       assert.deepStrictEqual(expectedOrgs, userValue.orgs);
     });

@@ -10,46 +10,50 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'node:assert';
-import esmock from 'esmock';
+
+import { describe, it, vi, beforeAll } from 'vitest';
+
+import { S3Client } from '@aws-sdk/client-s3';
+
+import moveObject from "../../../src/storage/object/move.js";
+import {copyFile} from "../../../src/storage/object/copy.js";
+import {deleteObject} from "../../../src/storage/object/delete.js";
+import {mockClient} from "aws-sdk-client-mock";
 
 describe('Move', () => {
+  const s3Mock = mockClient(S3Client);
+
+  beforeAll(() => {
+    vi.mock('../../../src/storage/object/copy.js', () => ({
+      copyFile: vi.fn()
+    }));
+    vi.mock('../../../src/storage/object/delete.js', () => ({
+      deleteObject: vi.fn()
+    }));
+  });
+
   it('Move files with permission check', async () => {
-    const mockS3Client = class {
-      send(c) {
-        return { Contents: [
-          { Key: 'somewhere/x.html' },
-          { Key: 'somewhere/y.png' },
-          { Key: 'somewhere/z.html' },
-        ]};
-      }
-    };
+    s3Mock.onAnyCommand().resolves({ Contents: [
+        { Key: 'somewhere/x.html' },
+        { Key: 'somewhere/y.png' },
+        { Key: 'somewhere/z.html' },
+      ]});
 
     const copyFileCalled = [];
-    const copyFile = (c, e, x, k, d, m) => {
+    const mockCopyFile = (c, e, x, k, d, m) => {
       copyFileCalled.push({ k, d, m });
       if (k === 'somewhere/y.png') return { $metadata: { httpStatusCode: 403 }};
       return { $metadata: { httpStatusCode: 200 }};
     };
 
     const deleteObjectCalled = [];
-    const deleteObject = (c, x, k, e, m) => {
+    const mockDeleteObject = (c, x, k, e, m) => {
       deleteObjectCalled.push({ k, m });
       return { status: 204 };
     };
 
-    const moveObject = await esmock(
-      '../../../src/storage/object/move.js', {
-        '@aws-sdk/client-s3': {
-          S3Client: mockS3Client
-        },
-        '../../../src/storage/object/copy.js': {
-          copyFile
-        },
-        '../../../src/storage/object/delete.js': {
-          deleteObject
-        }
-      }
-    );
+    copyFile.mockImplementation(mockCopyFile);
+    deleteObject.mockImplementation(mockDeleteObject);
 
     const pathLookup = new Map();
     pathLookup.set('blah@foo.org', [

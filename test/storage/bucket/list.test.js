@@ -1,6 +1,5 @@
-import assert from 'assert';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import listBuckets from '../../../src/storage/bucket/list.js';
-import env from './mocks/env.js';
 
 describe('List', () => {
   const aclCtx = {
@@ -14,7 +13,7 @@ describe('List', () => {
     const buckets = JSON.parse(bucketsResp.body);
 
     it('Only authed and anon buckets are listed', () => {
-      assert.strictEqual(buckets.length, 2);
+      expect(buckets.length).to.eq(2);
     });
   });
   */
@@ -22,7 +21,7 @@ describe('List', () => {
   describe('404s on any error', () => {
     it('Dies on null env', async () => {
       const bucketsResp = await listBuckets(null, daCtx);
-      assert.strictEqual(bucketsResp.status, 404);
+      expect(bucketsResp.status).to.eq(404);
     });
   });
 });

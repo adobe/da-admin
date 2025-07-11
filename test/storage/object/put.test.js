@@ -6,6 +6,8 @@ import env from '../../utils/mocks/env.js';
 import { mockClient } from 'aws-sdk-client-mock';
 import { S3Client } from '@aws-sdk/client-s3';
 
+import { describe, it, beforeEach } from 'vitest';
+
 const s3Mock = mockClient(S3Client);
 
 import { putObjectWithVersion, postObjectVersion } from './mocks/version/put.js';

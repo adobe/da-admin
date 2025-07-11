@@ -9,17 +9,43 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
-import esmock from 'esmock';
+import { describe, it, afterEach, vi, expect, beforeAll } from 'vitest';
+import moveRoute from '../../src/routes/move.js';
+import moveObject from '../../src/storage/object/move.js';
+import moveHelper from '../../src/helpers/move.js';
+import { hasPermission } from '../../src/utils/auth.js';
 
 describe('Move Route', () => {
+  beforeAll(() => {
+    vi.mock('../../src/storage/object/move.js', () => ({
+      default: vi.fn(() => ({ status: 200 }))
+    }));
+    vi.mock('../../src/helpers/move.js', () => ({
+      default: vi.fn()
+    }));
+    vi.mock('../../src/utils/auth.js', async () => {
+      const actual = await vi.importActual('../../src/utils/auth.js');
+      return {
+        ...actual,
+        hasPermission: vi.fn()
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('Test moveRoute with permissions', async () => {
-    const moCalled = [];
-    const moveObject = (e, c, d) => {
-      moCalled.push({e, c, d});
+    const req = {
+      formData: () => {
+        const formdata = new Map();
+        formdata.set('destination', '/someorg/somedest/');
+        return formdata;
+      }
     };
 
-    const hasPermission = (c, k, a) => {
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === 'abc.html' && a === 'write') {
         return false;
       }
@@ -27,46 +53,53 @@ describe('Move Route', () => {
         return false;
       }
       return true;
-    };
+    });
 
-    const moveRoute = await esmock(
-      '../../src/routes/move.js', {
-        '../../src/storage/object/move.js': {
-          default: moveObject
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        }
-      }
-    );
-
-    const formdata = new Map();
-    formdata.set('destination', '/someorg/somedest/');
-    const req = {
-      formData: () => formdata
-    }
+    moveHelper.mockImplementation(() => ({
+      source: 'abc.html',
+      destination: 'somedest'
+    }));
 
     const resp = await moveRoute({ req, env: {}, daCtx: { key: 'abc.html' }});
-    assert.strictEqual(403, resp.status);
-    assert.strictEqual(0, moCalled.length);
+    expect(resp.status).to.eq(403);
+    expect(moveObject).not.toHaveBeenCalled();
+
+    moveHelper.mockImplementation(() => ({
+      source: 'zzz.html',
+      destination: 'somedest'
+    }));
 
     const resp2 = await moveRoute({ req, env: {}, daCtx: { key: 'zzz.html' }});
-    assert.strictEqual(403, resp2.status);
-    assert.strictEqual(0, moCalled.length);
+    expect(resp2.status).to.eq(403);
+    expect(moveObject).not.toHaveBeenCalled();
 
-    const formdata2 = new Map();
-    formdata2.set('destination', '/someorg/someotherdest/');
     const req2 = {
-      formData: () => formdata2
-    }
+      formData: () => {
+        const formdata = new Map();
+        formdata.set('destination', '/someorg/someotherdest/');
+        return formdata;
+      }
+    };
+
+    moveHelper.mockImplementation(() => ({
+      source: 'abc.html',
+      destination: 'someotherdest'
+    }));
 
     const resp3 = await moveRoute({ req: req2, env: {}, daCtx: { key: 'abc.html' }});
-    assert.strictEqual(403, resp3.status);
-    assert.strictEqual(0, moCalled.length);
+    expect(resp3.status).to.eq(403);
+    expect(moveObject).not.toHaveBeenCalled();
 
-    await moveRoute({ req: req2, env: {}, daCtx: { key: 'zzz.html' }});
-    assert.strictEqual(1, moCalled.length);
-    assert.strictEqual('zzz.html', moCalled[0].d.source);
-    assert.strictEqual('someotherdest', moCalled[0].d.destination);
+    moveHelper.mockImplementation(() => ({
+      source: 'zzz.html',
+      destination: 'someotherdest'
+    }));
+
+    const resp4 = await moveRoute({ req: req2, env: {}, daCtx: { key: 'zzz.html' }});
+    expect(resp4.status).to.eq(200);
+    expect(moveObject).toHaveBeenCalledWith({}, { key: 'zzz.html' }, {
+      source: 'zzz.html',
+      destination: 'someotherdest'
+    });
   });
 });

@@ -1,4 +1,4 @@
-import assert from 'assert';
+import { describe, it, expect } from 'vitest';
 
 import getKv from '../../../src/storage/kv/get.js';
 import putKv from '../../../src/storage/kv/put.js';
@@ -26,8 +26,8 @@ describe('KV storage', () => {
     const daCtx = { fullKey: 'adobe/geometrixx' };
 
     const resp = await getKv(env, daCtx);
-    assert.strictEqual(resp.body, MOCK_CONFIG);
-    assert.strictEqual(resp.status, 200);
+    expect(resp.body).to.eq(MOCK_CONFIG);
+    expect(resp.status).to.eq(200);
   });
 
   it('Get not found', async () => {
@@ -35,8 +35,8 @@ describe('KV storage', () => {
     const daCtx = { fullKey: 'adobe/geometrixx' };
 
     const resp = await getKv(env, daCtx);
-    assert.strictEqual(resp.body, '{"error":"not found"}');
-    assert.strictEqual(resp.status, 404);
+    expect(resp.body).to.eq('{"error":"not found"}');
+    expect(resp.status).to.eq(404);
   });
 
   it('Put success', async () => {
@@ -52,8 +52,8 @@ describe('KV storage', () => {
     };
     const daCtx = { fullKey: 'adobe/geometrixx' };
     const resp = await putKv(req, env, daCtx);
-    assert.strictEqual(resp.body, MOCK_CONFIG);
-    assert.strictEqual(resp.status, 201);
+    expect(resp.body).to.eq(MOCK_CONFIG);
+    expect(resp.status).to.eq(201);
   });
 
   it('Put without form data', async () => {
@@ -61,8 +61,8 @@ describe('KV storage', () => {
     const env = {};
     const daCtx = { fullKey: 'adobe/geometrixx' };
     const resp = await putKv(req, env, daCtx);
-    assert.strictEqual(resp.body, '{"error":"No config or form data."}');
-    assert.strictEqual(resp.status, 400);
+    expect(resp.body).to.eq('{"error":"No config or form data."}');
+    expect(resp.status).to.eq(400);
   });
 
   it('Put with malformed config', async () => {
@@ -78,8 +78,8 @@ describe('KV storage', () => {
     };
     const daCtx = { fullKey: 'adobe/geometrixx' };
     const resp = await putKv(req, env, daCtx);
-    assert.strictEqual(resp.body, '{"error":"Couldn\'t parse or save config."}');
-    assert.strictEqual(resp.status, 400);
+    expect(resp.body).to.eq('{"error":"Couldn\'t parse or save config."}');
+    expect(resp.status).to.eq(400);
   });
 });
 
@@ -107,9 +107,9 @@ describe('Validate permission sheet', () => {
     };
 
     const resp = await putKv(req, env, {});
-    assert.strictEqual(resp.status, 201);
-    assert.strictEqual(stored.length, 1);
-    assert.strictEqual(stored[0], JSON.stringify(config));
+    expect(resp.status).to.eq(201);
+    expect(stored.length).to.eq(1);
+    expect(stored[0]).to.eq(JSON.stringify(config));
   });
 
   it('Check that put is successful when CONFIG write permission is set - multisheet', async () => {
@@ -136,9 +136,9 @@ describe('Validate permission sheet', () => {
     };
 
     const resp = await putKv(req, env, {});
-    assert.strictEqual(resp.status, 201);
-    assert.strictEqual(stored.length, 1);
-    assert.strictEqual(stored[0], JSON.stringify(config));
+    expect(resp.status).to.eq(201);
+    expect(stored.length).to.eq(1);
+    expect(stored[0]).to.eq(JSON.stringify(config));
   });
 
   it('Check that put is not successful when CONFIG write permission is missing', async () => {
@@ -163,10 +163,10 @@ describe('Validate permission sheet', () => {
     };
 
     const resp = await putKv(req, env, {});
-    assert.strictEqual(resp.status, 400);
+    expect(resp.status).to.eq(400);
     const error = JSON.parse(resp.body);
-    assert.strictEqual(error.error, 'Should at least specify one user or group that has CONFIG write permission');
-    assert.strictEqual(stored.length, 0);
+    expect(error.error).to.eq('Should at least specify one user or group that has CONFIG write permission');
+    expect(stored.length).to.eq(0);
   });
 
   it('Check that put is not successful when CONFIG write permission is missing - multisheet', async () => {
@@ -192,10 +192,10 @@ describe('Validate permission sheet', () => {
     };
 
     const resp = await putKv(req, env, {});
-    assert.strictEqual(resp.status, 400);
+    expect(resp.status).to.eq(400);
     const error = JSON.parse(resp.body);
-    assert.strictEqual(error.error, 'Should at least specify one user or group that has CONFIG write permission');
-    assert.strictEqual(stored.length, 0);
+    expect(error.error).to.eq('Should at least specify one user or group that has CONFIG write permission');
+    expect(stored.length).to.eq(0);
   });
 
   it('Check that put is successful if permission sheet is not there', async () => {
@@ -217,8 +217,8 @@ describe('Validate permission sheet', () => {
     };
 
     const resp = await putKv(req, env, {});
-    assert.strictEqual(resp.status, 201);
-    assert.strictEqual(stored.length, 1);
-    assert.strictEqual(stored[0], JSON.stringify(config));
+    expect(resp.status).to.eq(201);
+    expect(stored.length).to.eq(1);
+    expect(stored[0]).to.eq(JSON.stringify(config));
   });
 });

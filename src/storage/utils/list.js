@@ -13,6 +13,68 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 
+function mapPrefixes(CommonPrefixes, daCtx) {
+  return CommonPrefixes?.map((prefix) => {
+    const name = prefix.Prefix.slice(0, -1).split('/').pop();
+    const splitName = name.split('.');
+
+    // Do not add any extension folders
+    if (splitName.length > 1) return null;
+
+    const path = `/${daCtx.org}/${prefix.Prefix.slice(0, -1)}`;
+
+    return { path, name };
+  }).filter((x) => !!x) ?? [];
+}
+
+function mapContents(Contents, folders, daCtx) {
+  return Contents?.map((content) => {
+    const itemName = content.Key.split('/').pop();
+    const splitName = itemName.split('.');
+    // file.jpg.props should not be a part of the list
+    // hidden files (.props) should not be a part of this list
+    if (splitName.length !== 2) return null;
+
+    const [name, ext, props] = splitName;
+
+    // Do not show any props sidecar files
+    if (props) return null;
+
+    // See if the folder is already in the list
+    if (ext === 'props') {
+      if (folders.some((item) => item.name === name)) return null;
+
+      // Remove props from the key so it can look like a folder
+      // eslint-disable-next-line no-param-reassign
+      content.Key = content.Key.replace('.props', '');
+    }
+
+    // Do not show any hidden files.
+    if (!name) return null;
+    const item = { path: `/${daCtx.org}/${content.Key}`, name };
+    if (ext !== 'props') {
+      item.ext = ext;
+      item.lastModified = content.LastModified.getTime();
+    }
+
+    return item;
+  }).filter((x) => !!x) ?? [];
+}
+
+// Performs the same as formatList, but doesn't sort
+// This prevents bugs when sorting across pages of the paginated api response
+// However, the order is slightly different to the formatList return value
+export function formatPaginatedList(resp, daCtx) {
+  const { Contents } = resp;
+
+  const combined = [];
+
+  const files = mapContents(Contents, [], daCtx);
+  combined.push(...files);
+
+  return combined;
+}
+
 export default function formatList(resp, daCtx) {
   function compare(a, b) {
     if (a.name < b.name) return -1;
@@ -24,52 +86,11 @@ export default function formatList(resp, daCtx) {
 
   const combined = [];
 
-  if (CommonPrefixes) {
-    CommonPrefixes.forEach((prefix) => {
-      const name = prefix.Prefix.slice(0, -1).split('/').pop();
-      const splitName = name.split('.');
+  const folders = mapPrefixes(CommonPrefixes, daCtx);
+  combined.push(...folders);
 
-      // Do not add any extension folders
-      if (splitName.length > 1) return;
-
-      const path = `/${daCtx.org}/${prefix.Prefix.slice(0, -1)}`;
-      combined.push({ path, name });
-    });
-  }
-
-  if (Contents) {
-    Contents.forEach((content) => {
-      const itemName = content.Key.split('/').pop();
-      const splitName = itemName.split('.');
-      // file.jpg.props should not be a part of the list
-      // hidden files (.props) should not be a part of this list
-      if (splitName.length !== 2) return;
-
-      const [name, ext, props] = splitName;
-
-      // Do not show any props sidecar files
-      if (props) return;
-
-      // See if the folder is already in the list
-      if (ext === 'props') {
-        if (combined.some((item) => item.name === name)) return;
-
-        // Remove props from the key so it can look like a folder
-        // eslint-disable-next-line no-param-reassign
-        content.Key = content.Key.replace('.props', '');
-      }
-
-      // Do not show any hidden files.
-      if (!name) return;
-      const item = { path: `/${daCtx.org}/${content.Key}`, name };
-      if (ext !== 'props') {
-        item.ext = ext;
-        item.lastModified = content.LastModified.getTime();
-      }
-
-      combined.push(item);
-    });
-  }
+  const files = mapContents(Contents, folders, daCtx);
+  combined.push(...files);
 
   return combined.sort(compare);
 }

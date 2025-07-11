@@ -9,46 +9,67 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
-import esmock from 'esmock';
+import { describe, it, afterEach, vi, expect, beforeAll } from 'vitest';
+import getList from '../../src/routes/list.js';
+import listObjects from '../../src/storage/object/list.js';
+import listBuckets from '../../src/storage/bucket/list.js';
+import { hasPermission } from '../../src/utils/auth.js';
 
 describe('List Route', () => {
-  it('Test getList with permissions', async () => {
-    const loCalled = [];
-    const listObjects = (e, c) => {
-      loCalled.push({ e, c });
-      return {};
-    }
+  beforeAll(() => {
+    vi.mock('../../src/storage/object/list.js', () => ({
+      default: vi.fn(() => ({ status: 200 }))
+    }));
+    vi.mock('../../src/storage/bucket/list.js', () => ({
+      default: vi.fn(() => ({ status: 200 }))
+    }));
+    vi.mock('../../src/utils/auth.js', async () => {
+      const actual = await vi.importActual('../../src/utils/auth.js');
+      return {
+        ...actual,
+        hasPermission: vi.fn(),
+      };
+    });
+  });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('Test getList with permissions', async () => {
     const ctx = { org: 'foo', key: 'q/q/q' };
-    const hasPermission = (c, k, a) => {
+    const env = {};
+
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === 'q/q/q' && a === 'read') {
         return false;
       }
       return true;
-    }
+    });
 
-    const getList = await esmock(
-      '../../src/routes/list.js', {
-        '../../src/storage/object/list.js': {
-          default: listObjects
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        }
-      }
-    );
-    const resp = await getList({ env: {}, daCtx: ctx, aclCtx: {} });
-    assert.strictEqual(403, resp.status);
-    assert.strictEqual(0, loCalled.length);
+    const resp = await getList({ env, daCtx: ctx, aclCtx: {} });
+    expect(resp.status).to.eq(403);
+    expect(listObjects).not.toHaveBeenCalled();
 
     const aclCtx = { pathLookup: new Map() };
-    await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q', users: [], aclCtx }});
-    assert.strictEqual(1, loCalled.length);
-    assert.strictEqual('q/q', loCalled[0].c.key);
+    const ctx2 = { org: 'bar', key: 'q/q', users: [], aclCtx };
+    
+    const resp2 = await getList({ env, daCtx: ctx2 });
+    expect(resp2.status).to.eq(200);
+    expect(listObjects).toHaveBeenCalledWith(env, ctx2);
 
     const childRules = aclCtx.childRules;
-    assert.strictEqual(1, childRules.length);
-    assert(childRules[0].startsWith('/q/q/**='), 'Should have defined some child rule');
+    expect(childRules.length).to.eq(1);
+    expect(childRules[0]).to.match(/^\/q\/q\/\*\*=/);
+  });
+
+  it('Test getList without org returns buckets', async () => {
+    const ctx = {};
+    const env = {};
+
+    const resp = await getList({ env, daCtx: ctx });
+    expect(resp.status).to.eq(200);
+    expect(listBuckets).toHaveBeenCalledWith(env, ctx);
+    expect(listObjects).not.toHaveBeenCalled();
   });
 });
