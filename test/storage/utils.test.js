@@ -1,10 +1,9 @@
 /* eslint-env mocha */
 import assert from 'assert';
 
-import { getDaCtx } from '../../src/utils/daCtx.js';
-import formatList from '../../src/storage/utils/list.js';
-
 import { describe, it } from 'vitest';
+
+import formatList from '../../src/storage/utils/list.js';
 
 const MOCK = {
   CommonPrefixes: [
