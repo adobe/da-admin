@@ -1,21 +1,21 @@
-/* eslint-env mocha */
 import assert from 'assert';
-import { strict as esmock } from 'esmock';
+import { describe, it, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 
 // Mocks
 import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import auth from './mocks/auth.js';
 
-const getDaCtx = await esmock(
-  '../../src/utils/daCtx.js', { '../../src/utils/auth.js': auth },
-);
+vi.mock('../../src/utils/auth.js', () => ({
+  ...auth
+}));
+import getDaCtx from '../../src/utils/daCtx.js';
 
 describe('DA context', () => {
-  describe('API context', async () => {
+  describe('API context', () => {
     let daCtx;
 
-    before(async () => {
+    beforeAll(async () => {
       daCtx = await getDaCtx(reqs.api, env);
     });
 
@@ -24,10 +24,10 @@ describe('DA context', () => {
     });
   });
 
-  describe('Org context', async () => {
+  describe('Org context', () => {
     let daCtx;
 
-    before(async () => {
+    beforeAll(async () => {
       daCtx = await getDaCtx(reqs.org, env);
     });
 
@@ -43,7 +43,7 @@ describe('DA context', () => {
   describe('Site context', () => {
     let daCtx;
 
-    before(async () => {
+    beforeAll(async () => {
       daCtx = await getDaCtx(reqs.site, env);
     });
 
@@ -52,10 +52,10 @@ describe('DA context', () => {
     });
   });
 
-  describe('Sanitize string', async () => {
+  describe('Sanitize string', () => {
     let daCtx;
 
-    before(async () => {
+    beforeAll(async () => {
       daCtx = await getDaCtx(reqs.file, env);
     });
 
@@ -64,10 +64,10 @@ describe('DA context', () => {
     });
   });
 
-  describe('Folder context', async () => {
+  describe('Folder context', () => {
     let daCtx;
 
-    before(async () => {
+    beforeAll(async () => {
       daCtx = await getDaCtx(reqs.folder, env);
     });
 
@@ -92,10 +92,10 @@ describe('DA context', () => {
     });
   });
 
-  describe('File context', async () => {
+  describe('File context', () => {
     let daCtx;
 
-    before(async () => {
+    beforeAll(async () => {
       daCtx = await getDaCtx(reqs.file, env);
     });
 
@@ -117,10 +117,10 @@ describe('DA context', () => {
     });
   });
 
-  describe('Media context', async () => {
+  describe('Media context', () => {
     let daCtx;
 
-    before(async () => {
+    beforeAll(async () => {
       daCtx = await getDaCtx(reqs.media, env);
     });
 

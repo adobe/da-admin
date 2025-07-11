@@ -32,6 +32,8 @@ import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import env from './mocks/env.js';
 import { getUsers } from '../../src/utils/auth.js';
 
+import { describe, it, beforeEach, vi } from 'vitest';
+
 async function generateMockKeyPair(kid) {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
   const publicKeyJwk = await exportJWK(publicKey);
