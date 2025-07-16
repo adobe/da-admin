@@ -11,6 +11,8 @@
  */
 import assert from 'assert';
 
+import { describe, it } from 'vitest';
+
 import postHandler from '../../src/handlers/post.js';
 
 describe('Post Route', () => {

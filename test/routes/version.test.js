@@ -9,120 +9,107 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
-import esmock from 'esmock';
+import { describe, it, afterEach, vi, expect, beforeAll } from 'vitest';
+import { getVersionList, getVersionSource, postVersionSource } from '../../src/routes/version.js';
+import { listObjectVersions } from '../../src/storage/version/list.js';
+import { postObjectVersion } from '../../src/storage/version/put.js';
+import { getObjectVersion } from '../../src/storage/version/get.js';
+import { hasPermission } from '../../src/utils/auth.js';
 
 describe('Version Route', () => {
+  beforeAll(() => {
+    vi.mock('../../src/storage/version/list.js', () => ({
+      listObjectVersions: vi.fn()
+    }));
+    vi.mock('../../src/storage/version/put.js', () => ({
+      postObjectVersion: vi.fn()
+    }));
+    vi.mock('../../src/storage/version/get.js', () => ({
+      getObjectVersion: vi.fn()
+    }));
+    vi.mock('../../src/utils/auth.js', async () => {
+      const actual = await vi.importActual('../../src/utils/auth.js');
+      return {
+        ...actual,
+        hasPermission: vi.fn(actual.hasPermission)
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('get version list with permissions', async () => {
-    const lovCalled = [];
-    const listObjectVersions = (e, c) => {
-      lovCalled.push({e, c});
-      return { status: 200 };
-    };
-    const hasPermission = (c, k, a) => {
+    listObjectVersions.mockImplementation(() => ({ status: 200 }));
+
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === 'a/b/c.html' && a === 'read') {
         return false;
       }
       return true;
-    };
-
-    const { getVersionList } = await esmock(
-      '../../src/routes/version.js', {
-        '../../src/storage/version/list.js': {
-          listObjectVersions
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        },
-      }
-    );
+    });
 
     const resp = await getVersionList({ env: {}, daCtx: { key: 'a/b/c.html' }});
-    assert.strictEqual(403, resp.status);
-    assert.strictEqual(0, lovCalled.length);
+    expect(resp.status).to.eq(403);
+    expect(listObjectVersions).not.toHaveBeenCalled();
 
     const resp2 = await getVersionList({ env: {}, daCtx: { key: 'a/b/c/d.html' }});
-    assert.strictEqual(200, resp2.status);
-    assert.strictEqual(1, lovCalled.length);
-    assert.strictEqual('a/b/c/d.html', lovCalled[0].c.key);
+    expect(resp2.status).to.eq(200);
+    expect(listObjectVersions).toHaveBeenCalledWith({}, { key: 'a/b/c/d.html' });
   });
 
   it('post version source with permissions', async () => {
-    const povCalled = [];
-    const postObjectVersion = (r, e, c) => {
-      povCalled.push({r, e, c});
-      return { status: 201 };
-    };
-    const hasPermission = (c, k, a) => {
+    postObjectVersion.mockImplementation(() => ({ status: 201 }));
+
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === 'hi.html' && a === 'write') {
         return false;
       }
       return true;
-    };
-
-    const { postVersionSource } = await esmock(
-      '../../src/routes/version.js', {
-        '../../src/storage/version/put.js': {
-          postObjectVersion
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        },
-      }
-    );
+    });
 
     const resp = await postVersionSource({ req: {}, env: {}, daCtx: { key: 'hi.html' }});
-    assert.strictEqual(403, resp.status);
-    assert.strictEqual(0, povCalled.length);
+    expect(resp.status).to.eq(403);
+    expect(postObjectVersion).not.toHaveBeenCalled();
 
     const resp2 = await postVersionSource({ req: {}, env: {}, daCtx: { key: 'ho.html' }});
-    assert.strictEqual(201, resp2.status);
-    assert.strictEqual(1, povCalled.length);
-    assert.strictEqual('ho.html', povCalled[0].c.key);
+    expect(resp2.status).to.eq(201);
+    expect(postObjectVersion).toHaveBeenCalledWith({}, {}, { key: 'ho.html' });
   });
 
   it('get version source with permission', async () => {
-    let mdPath;
-    const govCalled = [];
-    const getObjectVersion = (e, c, h) => {
-      govCalled.push({e, c, h});
-      return {
-        status: 200,
-        metadata: {
-          path: mdPath
-        }
-      }
-    };
-    const hasPermission = (c, k, a) => {
+    hasPermission.mockImplementation((c, k, a) => {
       if (k === 'x/yyy/zzz.json' && a === 'read') {
         return false;
       }
       return true;
-    };
+    });
 
-    const { getVersionSource } = await esmock(
-      '../../src/routes/version.js', {
-        '../../src/storage/version/get.js': {
-          getObjectVersion
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        },
+    getObjectVersion.mockImplementation((env, daCtx, head) => {
+      if (head) {
+        return {
+          status: 200,
+          metadata: {
+            path: 'huh.json'
+          }
+        };
+      } else {
+        return {
+          status: 200,
+          metadata: {
+            path: 'x/yyy/zzz.json'
+          }
+        };
       }
-    );
+    });
 
-    mdPath = 'huh.json';
     const resp = await getVersionSource({ env: {}, daCtx: { key: 'aaaa/bbbb.html' }, head: true});
-    assert.strictEqual(200, resp.status);
-    assert.strictEqual(1, govCalled.length);
-    assert.strictEqual('aaaa/bbbb.html', govCalled[0].c.key);
-    assert(govCalled[0].h);
+    expect(resp.status).to.eq(200);
+    expect(getObjectVersion).toHaveBeenCalledWith({}, { key: 'aaaa/bbbb.html' }, true);
 
-    mdPath = 'x/yyy/zzz.json';
     const resp2 = await getVersionSource({ env: {}, daCtx: { key: 'aaaa/bbbb.html' }, head: false});
-    assert.strictEqual(403, resp2.status);
-    assert.strictEqual(2, govCalled.length);
-    assert.strictEqual('aaaa/bbbb.html', govCalled[1].c.key);
-    assert(!govCalled[1].h);
+    expect(resp2.status).to.eq(403);
+    expect(getObjectVersion).toHaveBeenCalledWith({}, { key: 'aaaa/bbbb.html' }, false);
   });
 });

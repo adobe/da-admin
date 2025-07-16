@@ -10,8 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'assert';
-import esmock from 'esmock';
-
+import { describe, it } from 'vitest';
 import daResp from '../../src/utils/daResp.js';
 
 describe('DA Resp', () => {

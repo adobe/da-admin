@@ -1,6 +1,8 @@
 import assert from 'assert';
 import unknownHandler from '../../src/handlers/unknown.js';
 
+import { describe, it } from 'vitest';
+
 describe('unknownHandler', () => {
   it('should return unknown response', async () => {
     const result = await unknownHandler({});
