@@ -42,7 +42,7 @@ function mapContents(Contents, folders, daCtx) {
 
     // See if the folder is already in the list
     if (ext === 'props') {
-      if (folders.some((item) => item.name === name)) return null;
+      if (folders.some((item) => item.name === name && !item.ext)) return null;
 
       // Remove props from the key so it can look like a folder
       // eslint-disable-next-line no-param-reassign
