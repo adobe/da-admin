@@ -29,7 +29,17 @@ import {
 const {
   setUser,
   getUsers,
-} = await esmock('../../src/utils/auth.js', { jose, import: { fetch } });
+} = await esmock('../../src/utils/auth.js', { jose });
+
+async function withMockedFetch(act) {
+  const savedFetch = globalThis.fetch;
+  globalThis.fetch = fetch;
+  try {
+    await act();
+  } finally {
+    globalThis.fetch = savedFetch;
+  }
+}
 
 describe('DA auth', () => {
   describe('get user', async () => {
@@ -49,14 +59,18 @@ describe('DA auth', () => {
     });
 
     it('authorized if email matches', async () => {
-      const users = await getUsers(reqs.site, env);
-      assert.strictEqual(users[0].email, 'aparker@geometrixx.info');
+      await withMockedFetch(async () => {
+        const users = await getUsers(reqs.site, env);
+        assert.strictEqual(users[0].email, 'aparker@geometrixx.info');
+      });
     });
 
     it('authorized with user if email matches and anonymous if present', async () => {
-      const users = await getUsers(reqs.siteMulti, env);
-      assert.strictEqual(users[0].email, 'anonymous')
-      assert.strictEqual(users[1].email, 'aparker@geometrixx.info');
+      await withMockedFetch(async () => {
+        const users = await getUsers(reqs.siteMulti, env);
+        assert.strictEqual(users[0].email, 'anonymous')
+        assert.strictEqual(users[1].email, 'aparker@geometrixx.info');
+      })
     });
 
     it('anonymous if ims fails', async () => {
@@ -71,8 +85,12 @@ describe('DA auth', () => {
         'Authorization': `Bearer aparker@geometrixx.info`,
       });
 
-      const userValStr = await setUser('aparker@geometrixx.info', 100, headers, env);
-      const userValue = JSON.parse(userValStr);
+      let userValue;
+
+      await withMockedFetch(async () => {
+        const userValStr = await setUser('aparker@geometrixx.info', 100, headers, env);
+        userValue = JSON.parse(userValStr);
+      });
 
       assert.strictEqual('aparker@geometrixx.info', userValue.email);
       assert.strictEqual('123', userValue.ident);

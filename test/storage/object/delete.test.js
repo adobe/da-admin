@@ -252,11 +252,6 @@ describe('Object delete', () => {
             getSignedUrl: mockSignedUrl,
           }
         },
-        {
-          import: {
-            fetch: async () => ({ status: 200 }),
-          }
-        }
       );
       s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }] });
       const resp = await deleteObjects(env, daCtx, {});
@@ -287,11 +282,6 @@ describe('Object delete', () => {
             getSignedUrl: mockSignedUrl,
           }
         },
-        {
-          import: {
-            fetch: async () => ({ status: 200 }),
-          }
-        }
       );
       s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }], NextContinuationToken: 'token' });
       const resp = await deleteObjects(env, daCtx, {});
