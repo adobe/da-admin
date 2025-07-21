@@ -12,8 +12,7 @@
 import assert from 'node:assert';
 import esmock from 'esmock';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DeleteObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 
 const s3Mock = mockClient(S3Client);
 
@@ -252,11 +251,6 @@ describe('Object delete', () => {
             getSignedUrl: mockSignedUrl,
           }
         },
-        {
-          import: {
-            fetch: async () => ({ status: 200 }),
-          }
-        }
       );
       s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }] });
       const resp = await deleteObjects(env, daCtx, {});
@@ -287,11 +281,6 @@ describe('Object delete', () => {
             getSignedUrl: mockSignedUrl,
           }
         },
-        {
-          import: {
-            fetch: async () => ({ status: 200 }),
-          }
-        }
       );
       s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }], NextContinuationToken: 'token' });
       const resp = await deleteObjects(env, daCtx, {});
