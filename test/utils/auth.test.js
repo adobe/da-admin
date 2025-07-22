@@ -70,7 +70,7 @@ describe('DA auth', () => {
         const users = await getUsers(reqs.siteMulti, env);
         assert.strictEqual(users[0].email, 'anonymous')
         assert.strictEqual(users[1].email, 'aparker@geometrixx.info');
-      })
+      });
     });
 
     it('anonymous if ims fails', async () => {
