@@ -15,16 +15,75 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
-import formatList from '../utils/list.js';
+import formatList, { formatPaginatedList } from '../utils/list.js';
 
-function buildInput({ org, key, maxKeys }) {
+const LIST_LIMIT = 5000;
+
+function buildInput({
+  org, key, maxKeys, continuationToken,
+}) {
   const input = {
     Bucket: `${org}-content`,
     Prefix: key ? `${key}/` : null,
     Delimiter: '/',
   };
   if (maxKeys) input.MaxKeys = maxKeys;
+  if (continuationToken) input.ContinuationToken = continuationToken;
   return input;
+}
+
+async function scanFiles({
+  daCtx, env, offset, limit,
+}) {
+  const config = getS3Config(env);
+  const client = new S3Client(config);
+
+  let continuationToken = null;
+  let visibleFiles = [];
+  const fetchedItems = [];
+  const fetchedPrefixes = [];
+
+  while (visibleFiles.length < offset + limit) {
+    const remainingKeys = offset + limit - visibleFiles.length;
+    // fetch 25 extra to account for some hidden files (reduce likelihood of continuation token)
+    const numKeysToFetch = Math.min(1000, remainingKeys + 25);
+
+    const input = buildInput({ ...daCtx, maxKeys: numKeysToFetch, continuationToken });
+    const command = new ListObjectsV2Command(input);
+
+    const resp = await client.send(command);
+    continuationToken = resp.NextContinuationToken;
+
+    fetchedItems.push(...(resp.Contents ?? []));
+    fetchedPrefixes.push(...(resp.CommonPrefixes ?? []));
+    visibleFiles = formatPaginatedList(fetchedItems, fetchedPrefixes, daCtx);
+
+    if (!continuationToken) break;
+  }
+
+  return visibleFiles.slice(offset, offset + limit);
+}
+
+export async function listObjectsPaginated(env, daCtx, maxKeys = 1000, offset = 0) {
+  if (offset + maxKeys > LIST_LIMIT) {
+    return { status: 400 };
+  }
+
+  try {
+    const files = await scanFiles({
+      daCtx, env, limit: maxKeys, offset,
+    });
+    return {
+      body: JSON.stringify({
+        offset,
+        limit: maxKeys,
+        data: files,
+      }),
+      status: 200,
+    };
+  } catch (e) {
+    return { body: '', status: 404 };
+  }
 }
 
 export default async function listObjects(env, daCtx, maxKeys) {
@@ -35,7 +94,6 @@ export default async function listObjects(env, daCtx, maxKeys) {
   const command = new ListObjectsV2Command(input);
   try {
     const resp = await client.send(command);
-    // console.log(resp);
     const body = formatList(resp, daCtx);
     return {
       body: JSON.stringify(body),

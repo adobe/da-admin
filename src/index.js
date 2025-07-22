@@ -36,7 +36,7 @@ export default {
         respObj = await headHandler({ env, daCtx });
         break;
       case 'GET':
-        respObj = await getHandler({ env, daCtx });
+        respObj = await getHandler({ req, env, daCtx });
         break;
       case 'PUT':
         respObj = await postHandler({ req, env, daCtx });
