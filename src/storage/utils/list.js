@@ -29,7 +29,8 @@ function mapPrefixes(CommonPrefixes, daCtx) {
 
 function mapContents(Contents, folders, daCtx) {
   return Contents?.map((content) => {
-    const itemName = content.Key.split('/').pop();
+    let key = content.Key;
+    const itemName = key.split('/').pop();
     const splitName = itemName.split('.');
     // file.jpg.props should not be a part of the list
     // hidden files (.props) should not be a part of this list
@@ -45,13 +46,12 @@ function mapContents(Contents, folders, daCtx) {
       if (folders.some((item) => item.name === name && !item.ext)) return null;
 
       // Remove props from the key so it can look like a folder
-      // eslint-disable-next-line no-param-reassign
-      content.Key = content.Key.replace('.props', '');
+      key = key.replace('.props', '');
     }
 
     // Do not show any hidden files.
     if (!name) return null;
-    const item = { path: `/${daCtx.org}/${content.Key}`, name };
+    const item = { path: `/${daCtx.org}/${key}`, name };
     if (ext !== 'props') {
       item.ext = ext;
       item.lastModified = content.LastModified.getTime();
@@ -61,18 +61,28 @@ function mapContents(Contents, folders, daCtx) {
   }).filter((x) => !!x) ?? [];
 }
 
-// Performs the same as formatList, but doesn't sort
+// Performs the same as formatList, but doesn't sort (returns exactly how it was
+// sorted in the S3 client response)
 // This prevents bugs when sorting across pages of the paginated api response
 // However, the order is slightly different to the formatList return value
-export function formatPaginatedList(resp, daCtx) {
-  const { Contents } = resp;
+// for strings with the same prefix but different length
+export function formatPaginatedList(items, prefixes, daCtx) {
+  function compare(a, b) {
+    const aN = a.name;
+    const bN = b.name;
+    if (aN.startsWith(bN) || bN.startsWith(aN)) return bN.length - aN.length;
+    if (aN < bN) return -1;
+    if (aN > bN) return 1;
+    return undefined;
+  }
+
+  const folders = mapPrefixes(prefixes, daCtx);
+  const files = mapContents(items, folders, daCtx);
 
   const combined = [];
+  combined.push(...files, ...folders);
 
-  const files = mapContents(Contents, [], daCtx);
-  combined.push(...files);
-
-  return combined;
+  return combined.sort(compare);
 }
 
 export default function formatList(resp, daCtx) {
@@ -84,13 +94,11 @@ export default function formatList(resp, daCtx) {
 
   const { CommonPrefixes, Contents } = resp;
 
-  const combined = [];
-
   const folders = mapPrefixes(CommonPrefixes, daCtx);
-  combined.push(...folders);
-
   const files = mapContents(Contents, folders, daCtx);
-  combined.push(...files);
+
+  const combined = [];
+  combined.push(...files, ...folders);
 
   return combined.sort(compare);
 }

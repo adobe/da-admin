@@ -21,8 +21,8 @@ export default async function getListPaginated({ req, env, daCtx }) {
   getChildRules(daCtx);
 
   const { searchParams } = new URL(req.url);
-  const limit = Number.parseInt(searchParams.get('limit'), 10) ?? null;
-  const offset = Number.parseInt(searchParams.get('offset'), 10) ?? null;
+  const limit = Number.parseInt(searchParams.get('limit'), 10);
+  const offset = Number.parseInt(searchParams.get('offset'), 10);
 
   function numOrUndef(num) {
     return Number.isNaN(num) ? undefined : num;

@@ -59,7 +59,8 @@ const req = new Request('https://example.com/source/adobecom');
 const daCtx = getDaCtx(req, {});
 
 describe('Format object list', () => {
-  const list = formatList(getMock(), daCtx);
+  const mockInput = getMock();
+  const list = formatList(mockInput, daCtx);
 
   it('should return a true folder / common prefix', () => {
     assert.strictEqual(list[0].name, 'blog');
@@ -194,6 +195,10 @@ describe('Format object list', () => {
     assert.strictEqual(result[1].name, 'beta');
     assert.strictEqual(result[2].name, 'zebra');
   });
+
+  it('formatting should not have side effects', () => {
+    assert.deepStrictEqual(mockInput, getMock());
+  });
 });
 
 describe('listCommand', () => {
@@ -303,7 +308,8 @@ describe('listCommand', () => {
 });
 
 describe('format paginated object list', () => {
-  const list = formatPaginatedList(getMock(), daCtx);
+  const mockInput = getMock();
+  const list = formatPaginatedList(mockInput.Contents, mockInput.CommonPrefixes, daCtx);
 
   it('should return a true folder / common prefix', () => {
     assert.strictEqual(list[0].name, 'blog');
@@ -326,5 +332,120 @@ describe('format paginated object list', () => {
   it('should not have a filename props file in the list', () => {
     const propsSidecar = list.find((item) => { return item.name === 'dark-alley.jpg.props' });
     assert.strictEqual(propsSidecar, undefined);
+  });
+
+  it('should handle empty folders with sibling file names of same name', () => {
+    const filtered = list.filter((item) => { return item.name === 'empty-folder-with-sibling-file' });
+    assert.strictEqual(filtered.length, 2);
+  });
+
+  it('should handle empty CommonPrefixes', () => {
+    const emptyMock = { Contents: getMock().Contents };
+    const result = formatList(emptyMock, daCtx);
+    assert(Array.isArray(result));
+    assert(result.length > 0);
+  });
+
+  it('should handle empty Contents', () => {
+    const emptyMock = { CommonPrefixes: getMock().CommonPrefixes };
+    const result = formatList(emptyMock, daCtx);
+    assert(Array.isArray(result));
+    assert(result.length > 0);
+  });
+
+  it('should handle both empty CommonPrefixes and Contents', () => {
+    const emptyMock = {};
+    const result = formatList(emptyMock, daCtx);
+    assert(Array.isArray(result));
+    assert.strictEqual(result.length, 0);
+  });
+
+  it('should filter out extension folders from CommonPrefixes', () => {
+    const mockWithExtensionFolder = {
+      CommonPrefixes: [
+        { Prefix: 'file.jpg/' },
+        { Prefix: 'normal-folder/' }
+      ]
+    };
+    const result = formatList(mockWithExtensionFolder, daCtx);
+    const extensionFolder = result.find(item => item.name === 'file.jpg');
+    assert.strictEqual(extensionFolder, undefined);
+    const normalFolder = result.find(item => item.name === 'normal-folder');
+    assert(normalFolder);
+  });
+
+  it('should handle files with more than 2 dot separators', () => {
+    const mockWithComplexFile = {
+      Contents: [
+        {
+          Key: 'file.name.with.multiple.dots',
+          LastModified: new Date('2025-01-01'),
+        }
+      ]
+    };
+    const result = formatList(mockWithComplexFile, daCtx);
+    assert.strictEqual(result.length, 0);
+  });
+
+  it('should handle hidden files (starting with dot)', () => {
+    const mockWithHiddenFile = {
+      Contents: [
+        {
+          Key: '.hidden-file',
+          LastModified: new Date('2025-01-01'),
+        }
+      ]
+    };
+    const result = formatList(mockWithHiddenFile, daCtx);
+    assert.strictEqual(result.length, 0);
+  });
+
+  it('should handle files with props extension correctly', () => {
+    const mockWithProps = {
+      Contents: [
+        {
+          Key: 'test.props',
+          LastModified: new Date('2025-01-01'),
+        }
+      ]
+    };
+    const result = formatList(mockWithProps, daCtx);
+    const propsItem = result.find(item => item.name === 'test');
+    assert(propsItem);
+    assert.strictEqual(propsItem.ext, undefined);
+    assert.strictEqual(propsItem.lastModified, undefined);
+  });
+
+  it('should not add props file if folder already exists', () => {
+    const mockWithBoth = {
+      CommonPrefixes: [{ Prefix: 'test/' }],
+      Contents: [
+        {
+          Key: 'test.props',
+          LastModified: new Date('2025-01-01'),
+        }
+      ]
+    };
+    const result = formatList(mockWithBoth, daCtx);
+    const testItems = result.filter(item => item.name === 'test');
+    assert.strictEqual(testItems.length, 1);
+  });
+
+  it('should sort results alphabetically', () => {
+    const mockForSorting = {
+      Contents: [
+        { Key: 'zebra.html', LastModified: new Date('2025-01-01') },
+        { Key: 'alpha.html', LastModified: new Date('2025-01-01') },
+        { Key: 'beta.html', LastModified: new Date('2025-01-01') }
+      ]
+    };
+    const result = formatList(mockForSorting, daCtx);
+    assert.strictEqual(result[0].name, 'alpha');
+    assert.strictEqual(result[1].name, 'beta');
+    assert.strictEqual(result[2].name, 'zebra');
+  });
+
+  it('formatting should not have side effects', () => {
+    assert.deepStrictEqual(mockInput, getMock());
   });
 });

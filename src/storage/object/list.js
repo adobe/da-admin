@@ -39,11 +39,13 @@ async function scanFiles({
   const client = new S3Client(config);
 
   let continuationToken = null;
-  const visibleFiles = [];
+  let visibleFiles = [];
+  const fetchedItems = [];
+  const fetchedPrefixes = [];
 
   while (visibleFiles.length < offset + limit) {
     const remainingKeys = offset + limit - visibleFiles.length;
-    // fetch 25 extra to account for some hidden files
+    // fetch 25 extra to account for some hidden files (reduce likelihood of continuation token)
     const numKeysToFetch = Math.min(1000, remainingKeys + 25);
 
     const input = buildInput({ ...daCtx, maxKeys: numKeysToFetch, continuationToken });
@@ -51,7 +53,10 @@ async function scanFiles({
 
     const resp = await client.send(command);
     continuationToken = resp.NextContinuationToken;
-    visibleFiles.push(...formatPaginatedList(resp, daCtx));
+
+    fetchedItems.push(...(resp.Contents ?? []));
+    fetchedPrefixes.push(...(resp.CommonPrefixes ?? []));
+    visibleFiles = formatPaginatedList(fetchedItems, fetchedPrefixes, daCtx);
 
     if (!continuationToken) break;
   }

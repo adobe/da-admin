@@ -60,7 +60,7 @@ describe('List Objects', () => {
     assert.strictEqual(data.length, 2, 'Should only return 2 items');
   });
 
-  it('sorts the results', async () => {
+  it('sorts the results with shorter prefixes first', async () => {
     s3Mock.on(ListObjectsV2Command, {
       Bucket: 'adobe-content',
       Prefix: 'wknd/',
@@ -155,7 +155,7 @@ describe('list paginated objects', async () => {
     assert.strictEqual(data.length, 4, 'Should return 4 items');
   });
 
-  it('doesn\'t sort the results', async () => {
+  it('sorts the results with longer prefixes first', async () => {
     s3Mock.on(ListObjectsV2Command, {
       Bucket: 'adobe-content',
       Prefix: 'wknd/',
