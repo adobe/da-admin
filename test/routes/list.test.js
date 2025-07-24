@@ -51,4 +51,11 @@ describe('List Route', () => {
     assert.strictEqual(1, childRules.length);
     assert(childRules[0].startsWith('/q/q/**='), 'Should have defined some child rule');
   });
+
+  it('returns 404 when no org is present', async () => {
+    const getList = await import('../../src/routes/list.js');
+
+    const res = await getList.default({ env: {}, daCtx: {}, aclCtx: {}  });
+    assert.strictEqual(404, res.status);
+  })
 });
