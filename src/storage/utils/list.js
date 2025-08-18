@@ -13,6 +13,78 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 
+function mapPrefixes(CommonPrefixes, daCtx) {
+  return CommonPrefixes?.map((prefix) => {
+    const name = prefix.Prefix.slice(0, -1).split('/').pop();
+    const splitName = name.split('.');
+
+    // Do not add any extension folders
+    if (splitName.length > 1) return null;
+
+    const path = `/${daCtx.org}/${prefix.Prefix.slice(0, -1)}`;
+
+    return { path, name };
+  }).filter((x) => !!x) ?? [];
+}
+
+function mapContents(Contents, folders, daCtx) {
+  return Contents?.map((content) => {
+    let key = content.Key;
+    const itemName = key.split('/').pop();
+    const splitName = itemName.split('.');
+    // file.jpg.props should not be a part of the list
+    // hidden files (.props) should not be a part of this list
+    if (splitName.length !== 2) return null;
+
+    const [name, ext, props] = splitName;
+
+    // Do not show any props sidecar files
+    if (props) return null;
+
+    // See if the folder is already in the list
+    if (ext === 'props') {
+      if (folders.some((item) => item.name === name && !item.ext)) return null;
+
+      // Remove props from the key so it can look like a folder
+      key = key.replace('.props', '');
+    }
+
+    // Do not show any hidden files.
+    if (!name) return null;
+    const item = { path: `/${daCtx.org}/${key}`, name };
+    if (ext !== 'props') {
+      item.ext = ext;
+      item.lastModified = content.LastModified.getTime();
+    }
+
+    return item;
+  }).filter((x) => !!x) ?? [];
+}
+
+// Performs the same as formatList, but doesn't sort (returns exactly how it was
+// sorted in the S3 client response)
+// This prevents bugs when sorting across pages of the paginated api response
+// However, the order is slightly different to the formatList return value
+// for strings with the same prefix but different length
+export function formatPaginatedList(items, prefixes, daCtx) {
+  function compare(a, b) {
+    const aN = a.name;
+    const bN = b.name;
+    if (aN.startsWith(bN) || bN.startsWith(aN)) return bN.length - aN.length;
+    if (aN < bN) return -1;
+    if (aN > bN) return 1;
+    return undefined;
+  }
+
+  const folders = mapPrefixes(prefixes, daCtx);
+  const files = mapContents(items, folders, daCtx);
+
+  const combined = [];
+  combined.push(...files, ...folders);
+
+  return combined.sort(compare);
+}
+
 export default function formatList(resp, daCtx) {
   function compare(a, b) {
     if (a.name < b.name) return -1;
@@ -22,54 +94,11 @@ export default function formatList(resp, daCtx) {
 
   const { CommonPrefixes, Contents } = resp;
 
+  const folders = mapPrefixes(CommonPrefixes, daCtx);
+  const files = mapContents(Contents, folders, daCtx);
+
   const combined = [];
-
-  if (CommonPrefixes) {
-    CommonPrefixes.forEach((prefix) => {
-      const name = prefix.Prefix.slice(0, -1).split('/').pop();
-      const splitName = name.split('.');
-
-      // Do not add any extension folders
-      if (splitName.length > 1) return;
-
-      const path = `/${daCtx.org}/${prefix.Prefix.slice(0, -1)}`;
-      combined.push({ path, name });
-    });
-  }
-
-  if (Contents) {
-    Contents.forEach((content) => {
-      const itemName = content.Key.split('/').pop();
-      const splitName = itemName.split('.');
-      // file.jpg.props should not be a part of the list
-      // hidden files (.props) should not be a part of this list
-      if (splitName.length !== 2) return;
-
-      const [name, ext, props] = splitName;
-
-      // Do not show any props sidecar files
-      if (props) return;
-
-      if (ext === 'props') {
-        // Do not add if it already exists as a folder (does not have an extension)
-        if (combined.some((item) => item.name === name && !item.ext)) return;
-
-        // Remove props from the key so it can look like a folder
-        // eslint-disable-next-line no-param-reassign
-        content.Key = content.Key.replace('.props', '');
-      }
-
-      // Do not show any hidden files.
-      if (!name) return;
-      const item = { path: `/${daCtx.org}/${content.Key}`, name };
-      if (ext !== 'props') {
-        item.ext = ext;
-        item.lastModified = content.LastModified.getTime();
-      }
-
-      combined.push(item);
-    });
-  }
+  combined.push(...files, ...folders);
 
   return combined.sort(compare);
 }
