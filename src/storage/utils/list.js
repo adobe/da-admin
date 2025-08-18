@@ -50,9 +50,9 @@ export default function formatList(resp) {
       // Do not show any props sidecar files
       if (props) return;
 
-      // See if the folder is already in the list
       if (ext === 'props') {
-        if (combined.some((item) => item.name === name)) return;
+        // Do not add if it already exists as a folder (does not have an extension)
+        if (combined.some((item) => item.name === name && !item.ext)) return;
 
         // Remove props from the key so it can look like a folder
         // eslint-disable-next-line no-param-reassign
