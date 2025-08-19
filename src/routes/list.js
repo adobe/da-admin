@@ -9,12 +9,11 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import listBuckets from '../storage/bucket/list.js';
 import listObjects from '../storage/object/list.js';
 import { getChildRules, hasPermission } from '../utils/auth.js';
 
 export default async function getList({ env, daCtx }) {
-  if (!daCtx.org) return listBuckets(env, daCtx);
+  if (!daCtx.org) return { status: 404 };
   if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
 
   // Get the child rules of the current folder and store this in daCtx.aclCtx
