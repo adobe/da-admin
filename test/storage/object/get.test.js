@@ -37,6 +37,7 @@ describe('Get Object', () => {
     const Body = Buffer.from('<p>hello world</p>');
     const ContentType = 'text/html';
     const ContentLength = Body.length;
+    const LastModified = new Date().toISOString
     const Metadata = { foo: 'bar' };
     const ETag = 'etag123';
     s3Mock
@@ -49,6 +50,7 @@ describe('Get Object', () => {
         ContentType,
         ContentLength,
         Metadata,
+        LastModified,
         ETag,
         $metadata: { httpStatusCode: 200 },
       });
@@ -56,7 +58,7 @@ describe('Get Object', () => {
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(resp.contentType, ContentType);
     assert.strictEqual(resp.contentLength, ContentLength);
-    assert.deepStrictEqual(resp.metadata, Metadata);
+    assert.deepStrictEqual(resp.metadata, { ...Metadata, LastModified });
     assert.strictEqual(resp.etag, ETag);
     assert.deepStrictEqual(resp.body, Body);
   });
@@ -75,6 +77,7 @@ describe('Get Object', () => {
     );
 
     const savedFetch = globalThis.fetch;
+    const lastModified = new Date().toISOString();
     try {
       globalThis.fetch = async (url, opts) => {
         called = true;
@@ -87,6 +90,7 @@ describe('Get Object', () => {
               if (name === 'content-type') return 'text/html';
               if (name === 'content-length') return '123';
               if (name === 'etag') return 'etag456';
+              if (name === 'last-modified') return lastModified;
               return null;
             },
             forEach: (cb) => {
@@ -100,7 +104,7 @@ describe('Get Object', () => {
       assert.strictEqual(resp.status, 200);
       assert.strictEqual(resp.contentType, 'text/html');
       assert.strictEqual(resp.contentLength, '123');
-      assert.deepStrictEqual(resp.metadata, { foo: 'bar' });
+      assert.deepStrictEqual(resp.metadata, { foo: 'bar', LastModified: lastModified });
       assert.strictEqual(resp.etag, 'etag456');
       assert.strictEqual(resp.body, '');
       assert(called, 'fetch should be called');

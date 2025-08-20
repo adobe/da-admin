@@ -60,7 +60,7 @@ export default async function getObject(env, { bucket, org, key }, head = false)
     contentType: resp.headers.get('content-type'),
     contentLength: resp.headers.get('content-length'),
     metadata: {
-      ...resp.Metadata,
+      ...Metadata,
       LastModified: resp.headers.get('last-modified'),
     },
     etag: resp.headers.get('etag'),
