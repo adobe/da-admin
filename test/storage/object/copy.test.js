@@ -95,7 +95,7 @@ describe('Object copy', () => {
     ]);
 
     const aclCtx = { pathLookup, actionSet: new Set(['read'])};
-    const ctx = { aclCtx, key: 'source/mysrc', org: 'org', users: [{email: 'aaa@bbb.ccc'}] };
+    const ctx = { aclCtx, bucket: 'root-bucket', key: 'source/mysrc', org: 'org', users: [{email: 'aaa@bbb.ccc'}] };
 
     const details = {
       source: 'mysrc',
@@ -125,9 +125,9 @@ describe('Object copy', () => {
     const resp = await copyFile({}, {}, ctx, 'source/mysrc', details, true);
     assert.strictEqual(resp.$metadata.httpStatusCode, 200);
     const input = resp.command.input;
-    assert.strictEqual(input.Bucket, 'org-content');
-    assert.strictEqual(input.CopySource, 'org-content/source/mysrc');
-    assert.strictEqual(input.Key, 'source/mydst');
+    assert.strictEqual(input.Bucket, 'root-bucket');
+    assert.strictEqual(input.CopySource, 'root-bucket/org/source/mysrc');
+    assert.strictEqual(input.Key, 'org/source/mydst');
     assert(input.MetadataDirective === undefined);
   });
 
@@ -148,6 +148,7 @@ describe('Object copy', () => {
       }
       const env = { dacollab };
       const ctx = {
+        bucket: 'root-bucket',
         env,
         org: 'foo',
         key: 'mydir',
@@ -167,9 +168,9 @@ describe('Object copy', () => {
       s3Sent.sort((a, b) => a.Key.localeCompare(b.Key));
 
       const input = s3Sent[2];
-      assert.strictEqual(input.Bucket, 'foo-content');
-      assert.strictEqual(input.CopySource, 'foo-content/mydir/xyz.html');
-      assert.strictEqual(input.Key, 'mydir/newdir/xyz.html');
+      assert.strictEqual(input.Bucket, 'root-bucket');
+      assert.strictEqual(input.CopySource, 'root-bucket/foo/mydir/xyz.html');
+      assert.strictEqual(input.Key, 'foo/mydir/newdir/xyz.html');
 
       const md = input.Metadata;
       assert(md.ID, "ID should be set");
@@ -184,7 +185,7 @@ describe('Object copy', () => {
     });
 
     it('Copies a file for rename', async () => {
-      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'mydir/dir1/myfile.html' }] });
+      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'testorg/mydir/dir1/myfile.html' }] });
 
       const s3Sent = [];
       s3Mock.on(CopyObjectCommand).callsFake((input => {
@@ -198,7 +199,7 @@ describe('Object copy', () => {
         }
       }
       const env = { dacollab };
-      const ctx = { org: 'testorg', key: 'mydir/dir1', origin: 'http://localhost:3000' };
+      const ctx = { bucket: 'root-bucket', org: 'testorg', key: 'mydir/dir1', origin: 'http://localhost:3000' };
       ctx.aclCtx = await getAclCtx(env, ctx.org, ctx.users, '/');
       const details = {
         source: 'mydir/dir1',
@@ -212,9 +213,9 @@ describe('Object copy', () => {
       s3Sent.sort((a, b) => a.Key.localeCompare(b.Key));
 
       const input = s3Sent[2];
-      assert.strictEqual(input.Bucket, 'testorg-content');
-      assert.strictEqual(input.CopySource, 'testorg-content/mydir/dir1/myfile.html');
-      assert.strictEqual(input.Key, 'mydir/dir2/myfile.html');
+      assert.strictEqual(input.Bucket, 'root-bucket');
+      assert.strictEqual(input.CopySource, 'root-bucket/testorg/mydir/dir1/myfile.html');
+      assert.strictEqual(input.Key, 'testorg/mydir/dir2/myfile.html');
       assert.ifError(input.Metadata);
 
       assert.deepStrictEqual(collabcalls,
@@ -250,6 +251,7 @@ describe('Object copy', () => {
         },
       };
       const daCtx = {
+        bucket: 'root-bucket',
         org: 'myorg',
         origin: 'https://blahblah:7890',
         users: [{email: 'joe@bloggs.org', otherstuff: 'blah'}],
@@ -262,9 +264,9 @@ describe('Object copy', () => {
       const resp = await copyFile({}, env, daCtx, 'mysrc/abc/def.html', details, false);
 
       assert.strictEqual(resp.constructor.name, 'CopyObjectCommand');
-      assert.strictEqual(resp.input.Bucket, 'myorg-content');
-      assert.strictEqual(resp.input.Key, 'mydst/abc/def.html');
-      assert.strictEqual(resp.input.CopySource, 'myorg-content/mysrc/abc/def.html');
+      assert.strictEqual(resp.input.Bucket, 'root-bucket');
+      assert.strictEqual(resp.input.Key, 'myorg/mydst/abc/def.html');
+      assert.strictEqual(resp.input.CopySource, 'root-bucket/myorg/mysrc/abc/def.html');
       assert.strictEqual(resp.input.MetadataDirective, 'REPLACE');
       assert.strictEqual(resp.input.Metadata.Path, 'mydst/abc/def.html');
       assert.strictEqual(resp.input.Metadata.Users, '[{"email":"joe@bloggs.org"}]');
@@ -310,10 +312,14 @@ describe('Object copy', () => {
         middlewareStack = { add: () => {} };
       };
       const mockGetObject = async (e, u, h) => {
-        return {
-          body: 'original body',
-          contentLength: 42,
-          contentType: 'text/html',
+        if (u.bucket === 'mybucket'
+          && u.org === 'xorg'
+          && u.key === 'xsrc/abc/def.html') {
+          return {
+            body: 'original body',
+            contentLength: 42,
+            contentType: 'text/html',
+          }
         }
       };
       const puwv = []
@@ -342,7 +348,7 @@ describe('Object copy', () => {
           fetch: (x) => { collabCalled.push(x); },
         },
       };
-      const daCtx = { org: 'xorg' };
+      const daCtx = { bucket: 'mybucket', org: 'xorg' };
       daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
       const details = {
         source: 'xsrc',

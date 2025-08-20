@@ -29,40 +29,21 @@ function getObjectBody(data) {
 }
 
 function buildInput({
-  org, key, body, type,
+  bucket, org, key, body, type,
 }) {
-  const Bucket = `${org}-content`;
+  const Bucket = bucket;
   return {
-    Bucket, Key: key, Body: body, ContentType: type,
+    Bucket, Key: `${org}/${key}`, Body: body, ContentType: type,
   };
-}
-
-function createBucketIfMissing(client) {
-  client.middlewareStack.add(
-    (next) => async (args) => {
-      // eslint-disable-next-line no-param-reassign
-      args.request.headers['cf-create-bucket-if-missing'] = 'true';
-      return next(args);
-    },
-    {
-      step: 'build',
-      name: 'createIfMissingMiddleware',
-      tags: ['METADATA', 'CREATE-BUCKET-IF-MISSING'],
-    },
-  );
 }
 
 export default async function putObject(env, daCtx, obj) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const { org, key, propsKey } = daCtx;
-
-  // Only allow creating a new bucket for orgs and repos
-  if (key.split('/').length <= 1) {
-    // R2 ONLY FEATURE
-    createBucketIfMissing(client);
-  }
+  const {
+    bucket, org, key, propsKey,
+  } = daCtx;
 
   const inputs = [];
 
@@ -73,7 +54,7 @@ export default async function putObject(env, daCtx, obj) {
       const isFile = obj.data instanceof File;
       const { body, type } = isFile ? await getFileBody(obj.data) : getObjectBody(obj.data);
       const res = await putObjectWithVersion(env, daCtx, {
-        org, key, body, type,
+        bucket, org, key, body, type,
       }, false, obj.guid);
       status = res.status;
       metadata = res.metadata;
@@ -81,7 +62,7 @@ export default async function putObject(env, daCtx, obj) {
   } else {
     const { body, type } = getObjectBody({});
     const inputConfig = {
-      org, key: propsKey, body, type,
+      bucket, org, key: propsKey, body, type,
     };
     inputs.push(buildInput(inputConfig));
   }
