@@ -10,6 +10,11 @@
  * governing permissions and limitations under the License.
  */
 export async function invalidateCollab(api, url, env) {
+  if (!url.endsWith('.html')) {
+    // collab only deals with .html files, no need to invalidate anything else
+    return;
+  }
+
   const invPath = `/api/v1/${api}?doc=${url}`;
 
   // Use dacollab service binding, hostname is not relevant
