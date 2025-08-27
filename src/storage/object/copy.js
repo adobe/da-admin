@@ -36,9 +36,9 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
   }
 
   const input = {
-    Bucket: `${daCtx.org}-content`,
-    Key,
-    CopySource: `${daCtx.org}-content/${sourceKey}`,
+    Bucket: daCtx.bucket,
+    Key: `${daCtx.org}/${Key}`,
+    CopySource: `${daCtx.bucket}/${daCtx.org}/${sourceKey}`,
   };
 
   // We only want to keep the history if this was a rename. In case of an actual
@@ -78,7 +78,10 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
       if (!isRename) {
         // This is a copy so just put the source into the target to keep the history.
 
-        const original = await getObject(env, { org: daCtx.org, key: sourceKey });
+        const original = await getObject(
+          env,
+          { bucket: daCtx.bucket, org: daCtx.org, key: sourceKey },
+        );
         return /* await */ putObjectWithVersion(env, daCtx, {
           org: daCtx.org,
           key: Key,
@@ -126,7 +129,7 @@ export default async function copyObject(env, daCtx, details, isRename) {
       let resp = await listCommand(daCtx, details, client);
       sourceKeys = resp.sourceKeys;
       if (resp.continuationToken) {
-        continuationToken = `copy-${details.source}-${details.destination}-${crypto.randomUUID()}`;
+        continuationToken = `copy-${daCtx.org}-${details.source}-${details.destination}-${crypto.randomUUID()}`;
         while (resp.continuationToken) {
           resp = await listCommand(daCtx, { continuationToken: resp.continuationToken }, client);
           remainingKeys.push(...resp.sourceKeys);

@@ -13,7 +13,7 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 
-export default function formatList(resp, daCtx) {
+export default function formatList(resp) {
   function compare(a, b) {
     if (a.name < b.name) return -1;
     if (a.name > b.name) return 1;
@@ -32,7 +32,7 @@ export default function formatList(resp, daCtx) {
       // Do not add any extension folders
       if (splitName.length > 1) return;
 
-      const path = `/${daCtx.org}/${prefix.Prefix.slice(0, -1)}`;
+      const path = `/${prefix.Prefix.slice(0, -1)}`;
       combined.push({ path, name });
     });
   }
@@ -61,7 +61,7 @@ export default function formatList(resp, daCtx) {
 
       // Do not show any hidden files.
       if (!name) return;
-      const item = { path: `/${daCtx.org}/${content.Key}`, name };
+      const item = { path: `/${content.Key}`, name };
       if (ext !== 'props') {
         item.ext = ext;
         item.lastModified = content.LastModified.getTime();
@@ -74,10 +74,10 @@ export default function formatList(resp, daCtx) {
   return combined.sort(compare);
 }
 
-function buildInput(org, key) {
+function buildInput(bucket, org, key) {
   return {
-    Bucket: `${org}-content`,
-    Prefix: `${key}/`,
+    Bucket: bucket,
+    Prefix: `${org}/${key}/`,
     MaxKeys: 300,
   };
 }
@@ -93,7 +93,7 @@ export async function listCommand(daCtx, details, s3client) {
   // There's no need to use the list command if the item has an extension
   if (daCtx.ext) return { sourceKeys: [daCtx.key] };
 
-  const input = buildInput(daCtx.org, daCtx.key);
+  const input = buildInput(daCtx.bucket, daCtx.org, daCtx.key);
   const { continuationToken } = details;
 
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
@@ -106,6 +106,9 @@ export async function listCommand(daCtx, details, s3client) {
   const resp = await s3client.send(command);
 
   const { Contents = [], NextContinuationToken } = resp;
+
+  console.log(Contents);
+
   sourceKeys.push(...Contents.map(({ Key }) => Key));
 
   return { sourceKeys, continuationToken: NextContinuationToken };

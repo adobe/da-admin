@@ -14,7 +14,6 @@ import assert from 'node:assert';
 import {
   S3Client,
   GetObjectCommand,
-  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { mockClient } from 'aws-sdk-client-mock';
 import esmock from 'esmock';
@@ -25,6 +24,9 @@ import getObject from '../../../src/storage/object/get.js';
 
 const ORG = 'adobe';
 const KEY = 'wknd/index.html';
+const BUCKET = `root-bucket`;
+
+const S3_KEY = `${ORG}/${KEY}`;
 
 describe('Get Object', () => {
   beforeEach(() => {
@@ -39,8 +41,8 @@ describe('Get Object', () => {
     const ETag = 'etag123';
     s3Mock
       .on(GetObjectCommand, {
-        Bucket: `${ORG}-content`,
-        Key: KEY,
+        Bucket: BUCKET,
+        Key: S3_KEY,
       })
       .resolves({
         Body,
@@ -50,7 +52,7 @@ describe('Get Object', () => {
         ETag,
         $metadata: { httpStatusCode: 200 },
       });
-    const resp = await getObject({}, { org: ORG, key: KEY }, false);
+    const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false);
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(resp.contentType, ContentType);
     assert.strictEqual(resp.contentLength, ContentLength);
@@ -94,7 +96,7 @@ describe('Get Object', () => {
         };
       };
 
-      const resp = await getObjectWithMocks({}, { org: ORG, key: KEY }, true);
+      const resp = await getObjectWithMocks({}, { bucket: BUCKET, org: ORG, key: KEY }, true);
       assert.strictEqual(resp.status, 200);
       assert.strictEqual(resp.contentType, 'text/html');
       assert.strictEqual(resp.contentLength, '123');
@@ -111,12 +113,12 @@ describe('Get Object', () => {
     const error = new Error('Not found');
     error.$metadata = { httpStatusCode: 404 };
     s3Mock.on(GetObjectCommand, {
-      Bucket: `${ORG}-content`,
-      Key: KEY,
+      Bucket: BUCKET,
+      Key: S3_KEY,
     }).rejects(error);
     // Import getObject directly for head=false (no esmock needed)
     const getObject = (await import('../../../src/storage/object/get.js')).default;
-    const resp = await getObject({}, { org: ORG, key: KEY }, false);
+    const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false);
     assert.strictEqual(resp.status, 404);
     assert.strictEqual(resp.body, '');
     assert.strictEqual(resp.contentLength, 0);
