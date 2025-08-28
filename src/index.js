@@ -51,6 +51,8 @@ export default {
         respObj = unknownHandler();
     }
 
+    if (!respObj) return daResp({ status: 404 });
+
     return daResp(respObj, daCtx);
   },
 };
