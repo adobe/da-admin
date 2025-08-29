@@ -14,6 +14,16 @@ import assert from 'assert';
 import getHandler from '../../src/handlers/get.js';
 
 describe('Get Route', () => {
+  it('Test root', async () => {
+    const env = { };
+    const daCtx = {
+      path: '/',
+    };
+
+    const resp = await getHandler({ env, daCtx });
+    assert.strictEqual(resp, undefined);
+  });
+
   it('Test logout', async () => {
     const deleteCalled = [];
     const DA_AUTH = {

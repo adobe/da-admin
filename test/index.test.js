@@ -42,4 +42,9 @@ describe('fetch', () => {
     const resp = await hnd.fetch({ method: 'GET' }, {});
     assert.strictEqual(resp.status, 403);
   });
+
+  it('return 404 for unknown get route', async () => {
+    const resp = await handler.fetch({ method: 'GET', url: 'http://www.example.com/' }, {});
+    assert.strictEqual(resp.status, 404);
+  });
 });
