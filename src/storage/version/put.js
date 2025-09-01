@@ -156,7 +156,7 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     }
 
     // eslint-disable-next-line no-console
-    if (status >= 500) console.log(e);
+   if (status >= 500) console.error('Failed to version (in object with version)', e);
     return { status, metadata: { id: ID } };
   }
 }
