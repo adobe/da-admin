@@ -50,7 +50,7 @@ export async function putVersion(config, {
   } catch (e) {
     const status = e.$metadata?.httpStatusCode || 500;
     // eslint-disable-next-line no-console
-    if (status >= 500) console.log(e);
+    if (status >= 500) console.error('Fail to put version', e);
     return { status };
   }
 }
