@@ -107,9 +107,7 @@ export async function listCommand(daCtx, details, s3client) {
 
   const { Contents = [], NextContinuationToken } = resp;
 
-  console.log(Contents);
-
-  sourceKeys.push(...Contents.map(({ Key }) => Key));
+  sourceKeys.push(...Contents.map(({ Key }) => Key.replace(`${daCtx.org}/`, '')));
 
   return { sourceKeys, continuationToken: NextContinuationToken };
 }
