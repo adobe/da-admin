@@ -48,7 +48,10 @@ export async function putVersion(config, {
     const resp = await client.send(command);
     return { status: resp.$metadata.httpStatusCode };
   } catch (e) {
-    return { status: e.$metadata.httpStatusCode };
+    const status = e.$metadata?.httpStatusCode || 500;
+    // eslint-disable-next-line no-console
+    if (status >= 500) console.error('Fail to put version', e);
+    return { status };
   }
 }
 
@@ -97,10 +100,14 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
         ? { status: 201, metadata: { id: ID } }
         : { status: resp.$metadata.httpStatusCode, metadata: { id: ID } };
     } catch (e) {
-      if (e.$metadata.httpStatusCode === 412) {
+      const status = e.$metadata?.httpStatusCode || 500;
+      if (status === 412) {
         return putObjectWithVersion(env, daCtx, update, body);
       }
-      return { status: e.$metadata.httpStatusCode, metadata: { id: ID } };
+
+      // eslint-disable-next-line no-console
+      if (status >= 500) console.error('Failed to put object (in object with version)', e);
+      return { status, metadata: { id: ID } };
     }
   }
 
@@ -143,10 +150,14 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
 
     return { status: resp.$metadata.httpStatusCode, metadata: { id: ID } };
   } catch (e) {
-    if (e.$metadata.httpStatusCode === 412) {
+    const status = e.$metadata?.httpStatusCode || 500;
+    if (status === 412) {
       return putObjectWithVersion(env, daCtx, update, body);
     }
-    return { status: e.$metadata.httpStatusCode, metadata: { id: ID } };
+
+    // eslint-disable-next-line no-console
+    if (status >= 500) console.error('Failed to version (in object with version)', e);
+    return { status, metadata: { id: ID } };
   }
 }
 

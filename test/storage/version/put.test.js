@@ -71,6 +71,44 @@ describe('Version Put', () => {
     assert.strictEqual(sendCalls[1].input.Metadata.Users, JSON.stringify(mockCtx.users));
   });
 
+  it('Test putObjectWithVersion error', async () => {
+    const getObjectCalls = []
+    const mockGetObject = async (e, u, nb) => {
+      getObjectCalls.push({e, u, nb});
+      return {
+        status: 404,
+        metadata: {}
+      };
+    };
+
+    const sendCalls = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sendCalls.push(cmd);
+        const resp = {
+          $metadata: {
+            httpStatusCode: 510
+          }
+        };
+        throw resp;
+      }
+    };
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client
+      },
+    });
+
+    const mockEnv = { foo: 'bar' };
+    const mockCtx = { users: [{ email: 'foo@acme.com' }] };
+    const resp = await putObjectWithVersion(mockEnv, mockCtx, 'haha', false);
+    assert.equal(510, resp.status);
+  });
+
   it('Test putObjectWithVersion retry on existing document', async () => {
     const getObjectCalls = []
     const mockGetObject = async (e, u, nb) => {
@@ -136,6 +174,50 @@ describe('Version Put', () => {
     assert.equal(2, sendCalls.length);
     assert.strictEqual(sendCalls[0].input.Metadata.Users, JSON.stringify(mockCtx.users));
     assert.strictEqual(sendCalls[1].input.Metadata.Users, JSON.stringify(mockCtx.users));
+  });
+
+  it('Test putObjectWithVersion retry fails on existing document', async () => {
+    const getObjectCalls = []
+    const mockGetObject = async (e, u, nb) => {
+      getObjectCalls.push({e, u, nb});
+      return {
+        status: 200,
+        metadata: {}
+      };
+    };
+
+    const sendCalls = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sendCalls.push(cmd);
+        throw new Error('testing 123');
+      }
+    };
+    const mockS3PutClient = {
+      async send(cmd) {
+        return {
+          $metadata: {
+            httpStatusCode: 200
+          }
+        };
+      }
+    };
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: () => mockS3Client,
+        ifNoneMatch: () => mockS3PutClient
+      },
+    });
+
+    const mockEnv = { hi: 'ha' };
+    const mockUpdate = 'hoho';
+    const mockCtx = { users: [{ email: 'blah@acme.com' }] };
+    const resp = await putObjectWithVersion(mockEnv, mockCtx, mockUpdate, true);
+    assert.equal(500, resp.status);
   });
 
   it('Put Object With Version store content', async () => {
@@ -573,5 +655,45 @@ describe('Version Put', () => {
     assert.equal('mypath', input2.Metadata.Path);
     assert.equal('[{"email":"hi@acme.com"}]', input2.Metadata.Users);
     assert(input2.Metadata.Version && input2.Metadata.Version !== 101);
+  });
+
+  it('exception without metadata', async () => {
+    const s3client1 = {
+      send: async (c) => {
+        const e = new Error('Test error1');
+        e.$metadata = { httpStatusCode: 418 };
+        throw e;
+      }
+    };
+    const s3client2 = {
+      send: async (c) => {
+        throw new Error('Test error2');
+      }
+    };
+    const s3client3 = {
+      send: async (c) => {
+        const e = new Error('Test error3');
+        e.$metadata = {};
+        throw e;
+      }
+    };
+    let s3Client = null;
+    const mockS3Client = () => s3Client;
+
+    const { putVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: mockS3Client,
+      },
+    });
+
+    s3Client = s3client1;
+    const resp = await putVersion({}, { Body: 'hello'});
+    assert.equal(418, resp.status);
+    s3Client = s3client2;
+    const resp2 = await putVersion({}, { Body: 'hello'});
+    assert.equal(500, resp2.status);
+    s3Client = s3client3;
+    const resp3 = await putVersion({}, { Body: 'hello'});
+    assert.equal(500, resp3.status);
   });
 });
