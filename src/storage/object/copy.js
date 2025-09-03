@@ -73,7 +73,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
     const resp = await client.send(new CopyObjectCommand(input));
     return resp;
   } catch (e) {
-    if (e.$metadata?.httpStatusCode === 412) {
+    if (e.$metadata.httpStatusCode === 412) {
       // Not the happy path - something is at the destination already.
       if (!isRename) {
         // This is a copy so just put the source into the target to keep the history.
@@ -98,7 +98,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
       const client = new S3Client(config);
       // This is a move so copy to the new location
       return /* await */ client.send(new CopyObjectCommand(input));
-    } else if (e.$metadata?.httpStatusCode === 404) {
+    } else if (e.$metadata.httpStatusCode === 404) {
       return { $metadata: e.$metadata };
     }
     throw e;

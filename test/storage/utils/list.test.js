@@ -237,7 +237,7 @@ describe('listCommand', () => {
     
     assert.strictEqual(mockS3Client.send.callCount, 1);
     assert.deepStrictEqual(result, {
-      sourceKeys: [testDaCtx.key, `${testDaCtx.key}.props`, 'adobecom/test/file1.html', 'adobecom/test/file2.html'],
+      sourceKeys: [testDaCtx.key, `${testDaCtx.key}.props`, 'test/file1.html', 'test/file2.html'],
       continuationToken: 'next-token'
     });
   });
@@ -260,7 +260,7 @@ describe('listCommand', () => {
     // The command should have the continuation token
     assert.strictEqual(callArgs.input.ContinuationToken, 'prev-token');
     assert.deepStrictEqual(result, {
-      sourceKeys: ['adobecom/test/file3.html'],
+      sourceKeys: ['test/file3.html'],
       continuationToken: undefined
     });
   });
@@ -292,7 +292,7 @@ describe('listCommand', () => {
     const result = await listCommand(testDaCtx, {}, mockS3Client);
     
     assert.deepStrictEqual(result, {
-      sourceKeys: [testDaCtx.key, `${testDaCtx.key}.props`, 'adobecom/test/file1.html'],
+      sourceKeys: [testDaCtx.key, `${testDaCtx.key}.props`, 'test/file1.html'],
       continuationToken: undefined
     });
   });
