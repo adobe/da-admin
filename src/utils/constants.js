@@ -20,3 +20,7 @@ export const SUPPORTED_TYPES = [
   'image/svg+xml',
   'video/mp4',
 ];
+
+// this is the size of the empty document
+// <body><header></header><main><div></div></main><footer></footer></body>
+export const EMPTY_DOC_SIZE = 83;

@@ -14,6 +14,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 
+import { EMPTY_DOC_SIZE } from '../../utils/constants.js';
 import getS3Config from '../utils/config.js';
 import {
   getUsersForMetadata, ifMatch, ifNoneMatch,
@@ -118,7 +119,7 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   const Preparsingstore = storeBody ? Timestamp : pps;
   let Label = storeBody ? 'Collab Parse' : update.label;
 
-  if (daCtx.method === 'PUT' && current.contentLength > 83 && (!update.body || update.body.size <= 83)) {
+  if (daCtx.method === 'PUT' && current.contentLength > EMPTY_DOC_SIZE && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
     // we are about to empty the document body
     // this should never happen but in some cases it does
     // we want then to store a version of the full document as a restore point
