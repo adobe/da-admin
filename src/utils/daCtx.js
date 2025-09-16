@@ -44,6 +44,7 @@ export default async function getDaCtx(req, env) {
     users,
     fullKey,
     origin: new URL(req.url).origin,
+    method: req.method,
   };
 
   // Sanitize the remaining path parts
