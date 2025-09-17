@@ -714,6 +714,7 @@ describe('Version Put', () => {
       org: 'o1',
       users: [{ email: 'hi@acme.com' }],
       method: 'PUT',
+      ext: 'html',
     }
 
     const resp = await putObjectWithVersion({}, ctx, update, true);
