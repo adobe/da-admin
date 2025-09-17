@@ -124,23 +124,12 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     && current.contentLength > EMPTY_DOC_SIZE
     && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
     // we are about to empty the document body
-    // this should never happen but in some cases it does
-    // we want then to store a version of the full document as a restore point
+    // this should almost never happen but it does in some unexpectedcases
+    // we want then to store a version of the full document as a Restore Point
     // eslint-disable-next-line no-console
-    console.warn('Empty body, creating a restore point');
+    console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
     storeBody = true;
     Label = 'Restore Point';
-
-    // TODO remove this after testing
-    try {
-      // eslint-disable-next-line
-      console.log('Current version of the document', current.contentLength, await current.body.transformToString('utf-8'));
-      // eslint-disable-next-line
-      console.log('New version of the document', update.body?.size, await update.body?.text());
-    } catch (e) {
-      // eslint-disable-next-line
-      console.error('Error prodiving output', e);
-    }
   }
 
   const versionResp = await putVersion(config, {
