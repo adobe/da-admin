@@ -119,12 +119,15 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   const Preparsingstore = storeBody ? Timestamp : pps;
   let Label = storeBody ? 'Collab Parse' : update.label;
 
-  if (daCtx.method === 'PUT' && current.contentLength > EMPTY_DOC_SIZE && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
+  if (daCtx.method === 'PUT'
+    && daCtx.ext === 'html'
+    && current.contentLength > EMPTY_DOC_SIZE
+    && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
     // we are about to empty the document body
-    // this should never happen but in some cases it does
-    // we want then to store a version of the full document as a restore point
+    // this should almost never happen but it does in some unexpectedcases
+    // we want then to store a version of the full document as a Restore Point
     // eslint-disable-next-line no-console
-    console.warn('Empty body, creating a restore point');
+    console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
     storeBody = true;
     Label = 'Restore Point';
   }
