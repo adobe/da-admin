@@ -15,13 +15,9 @@ import esmock from 'esmock';
 import { getAclCtx } from '../../src/utils/auth.js';
 
 describe('Source Route', () => {
-  it('Test invalidate using service binding', async () => {
-    const sb_callbacks = [];
-    const dacollab = {
-      fetch: async (url) => sb_callbacks.push(url)
-    };
+  it('Test invalidate using direct fetch', async () => {
+    const fetch_callbacks = [];
     const env = {
-      dacollab,
       DA_COLLAB: 'http://localhost:4444'
     };
 
@@ -39,17 +35,26 @@ describe('Source Route', () => {
       }
     });
 
-    const headers = new Map();
-    headers.set('x-da-initiator', 'blah');
+    const savedFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (url) => {
+        fetch_callbacks.push(url);
+      };
 
-    const req = {
-      headers,
-      url: 'http://localhost:9876/source/somedoc.html'
-    };
+      const headers = new Map();
+      headers.set('x-da-initiator', 'blah');
 
-    const resp = await postSource({ req, env, daCtx });
-    assert.equal(200, resp.status);
-    assert.deepStrictEqual(['https://localhost/api/v1/syncadmin?doc=http://localhost:9876/source/somedoc.html'], sb_callbacks);
+      const req = {
+        headers,
+        url: 'http://localhost:9876/source/somedoc.html'
+      };
+
+      const resp = await postSource({ req, env, daCtx });
+      assert.equal(200, resp.status);
+      assert.deepStrictEqual(['http://localhost:4444/api/v1/syncadmin?doc=http://localhost:9876/source/somedoc.html'], fetch_callbacks);
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
   });
 
   it('Test postSource from collab does not trigger invalidate callback', async () => {

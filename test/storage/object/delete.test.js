@@ -25,10 +25,8 @@ describe('Object delete', () => {
   describe('single context', () => {
     it('Delete a file', async () => {
       const collabCalled = []
-      const dacollab = { fetch: (u) => collabCalled.push(u) };
-
       const client = {};
-      const env = { dacollab };
+      const env = { DA_COLLAB: 'https://localhost' };
       const daCtx = {
         origin: 'https://admin.da.live',
         org: 'testorg',
@@ -64,18 +62,23 @@ describe('Object delete', () => {
       const savedFetch = globalThis.fetch;
       try {
         globalThis.fetch = async (url, opts) => {
-          assert.equal(deleteURL, url);
-          assert.equal('DELETE', opts.method);
-          return { status: 204 };
+          if (url === deleteURL) {
+            assert.equal('DELETE', opts.method);
+            return { status: 204 };
+          } else {
+            // This is the collab invalidation call
+            collabCalled.push(url);
+            return { status: 200 };
+          }
         };
 
         const resp = await deleteObject(client, daCtx, 'foo/bar.html', env);
         assert.equal(204, resp.status);
         // assert.deepStrictEqual(['postObjectVersionWithLabel'], postObjVerCalled);
-        // assert.deepStrictEqual(
-        //   ['https://localhost/api/v1/deleteadmin?doc=https://admin.da.live/source/testorg/foo/bar.html'],
-        //   collabCalled
-        // );
+        assert.deepStrictEqual(
+          ['https://localhost/api/v1/deleteadmin?doc=https://admin.da.live/source/testorg/foo/bar.html'],
+          collabCalled
+        );
       } finally {
         globalThis.fetch = savedFetch;
       }
@@ -234,10 +237,7 @@ describe('Object delete', () => {
         aclCtx: { pathLookup: new Map() },
       };
       const env = {
-        dacollab: {
-          fetch: () => {
-          }
-        },
+        DA_COLLAB: 'https://localhost',
       };
       const mockPostObjectVersion = async () => ({ status: 201 });
       const mockSignedUrl = async () => 'http://localhost:8080/test/';
@@ -264,10 +264,7 @@ describe('Object delete', () => {
         aclCtx: { pathLookup: new Map() },
       };
       const env = {
-        dacollab: {
-          fetch: () => {
-          }
-        },
+        DA_COLLAB: 'https://localhost',
       };
       const mockPostObjectVersion = async () => ({ status: 201 });
       const mockSignedUrl = async () => 'http://localhost:8080/test/';
