@@ -16,7 +16,7 @@ r2_buckets = [
 ]
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "aem-content-stage" }
+vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://stage-collab.da.page/", AEM_BUCKET_NAME = "aem-content-stage" }
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
