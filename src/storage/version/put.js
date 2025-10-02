@@ -36,13 +36,13 @@ export function getContentLength(body) {
 }
 
 export async function putVersion(config, {
-  Bucket, Org, Body, ID, Version, Ext, Metadata, ContentLength,
+  Bucket, Org, Body, ID, Version, Ext, Metadata, ContentLength, ContentType,
 }, noneMatch = true) {
   const length = ContentLength ?? getContentLength(Body);
 
   const client = noneMatch ? ifNoneMatch(config) : new S3Client(config);
   const input = {
-    Bucket, Key: `${Org}/.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length,
+    Bucket, Key: `${Org}/.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length, ContentType,
   };
   const command = new PutObjectCommand(input);
   try {
@@ -137,6 +137,7 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     Org: daCtx.org,
     Body: (body || storeBody ? current.body : ''),
     ContentLength: (body || storeBody ? current.contentLength : undefined),
+    ContentType: current.contentType,
     ID,
     Version,
     Ext: daCtx.ext,

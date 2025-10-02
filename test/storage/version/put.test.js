@@ -779,4 +779,91 @@ describe('Version Put', () => {
     const resp3 = await putVersion({}, { Body: 'hello'});
     assert.equal(500, resp3.status);
   });
+
+  it('Test putVersion preserves ContentType', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const { putVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    const testParams = {
+      Bucket: 'test-bucket',
+      Org: 'test-org',
+      Body: 'test content',
+      ID: 'test-id',
+      Version: 'test-version',
+      Ext: 'html',
+      Metadata: { test: 'metadata' },
+      ContentLength: 12,
+      ContentType: 'text/html'
+    };
+
+    await putVersion({}, testParams);
+
+    assert.strictEqual(sentCommands.length, 1);
+    const putCommand = sentCommands[0];
+    assert.strictEqual(putCommand.input.Bucket, 'test-bucket');
+    assert.strictEqual(putCommand.input.Key, 'test-org/.da-versions/test-id/test-version.html');
+    assert.strictEqual(putCommand.input.Body, 'test content');
+    assert.strictEqual(putCommand.input.ContentLength, 12);
+    assert.strictEqual(putCommand.input.ContentType, 'text/html');
+    assert.deepStrictEqual(putCommand.input.Metadata, { test: 'metadata' });
+  });
+
+  it('Test putObjectWithVersion passes ContentType to putVersion', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const mockGetObject = async () => ({
+      status: 200,
+      body: 'test body',
+      contentLength: 9,
+      contentType: 'text/plain',
+      metadata: { existing: 'metadata' }
+    });
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client,
+        generateId: () => 'generated-id',
+        generateVersion: () => 'generated-version'
+      },
+    });
+
+    const env = {};
+    const daCtx = {
+      org: 'test-org',
+      ext: 'txt',
+      users: [{ email: 'test@example.com' }]
+    };
+
+    await putObjectWithVersion(env, daCtx, { key: 'test-file.txt' }, 'test body', 'test-guid');
+
+    assert.strictEqual(sentCommands.length, 1);
+    const putCommand = sentCommands[0];
+    assert.strictEqual(putCommand.input.ContentType, 'text/plain');
+    assert.strictEqual(putCommand.input.Body, 'test body');
+    assert.strictEqual(putCommand.input.ContentLength, 9);
+  });
 });
