@@ -302,7 +302,20 @@ describe('DA auth', () => {
       const users = [{email: "blah@foo.org"}];
       const aclCtx = await getAclCtx(env2, 'test', users, '/', 'config');
       assert(aclCtx.actionSet.has('read'));
-    })
+    });
+
+    it('test versionsource api always has read permission', async () => {
+      const users = [{email: "blah@foo.org"}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/', 'versionsource');
+      assert(aclCtx.actionSet.has('read'));
+    });
+
+    it('test versionsource api grants read permission even without explicit permissions', async () => {
+      const users = [{email: "unauthorized@example.com"}];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/restricted', 'versionsource');
+      assert(aclCtx.actionSet.has('read'));
+      assert(!aclCtx.actionSet.has('write'));
+    });
   });
 
   describe('persmissions single sheet', () => {
