@@ -10,6 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'assert';
+import esmock from 'esmock';
 
 import postHandler from '../../src/handlers/post.js';
 
@@ -30,5 +31,47 @@ describe('Post Route', () => {
     assert.strictEqual(deleteCalled.length, 2);
     assert(deleteCalled.includes('foo@bar.org'));
     assert(deleteCalled.includes('blah@blah.org'));
+  });
+
+  it('Test media route', async () => {
+    const mediaCalled = [];
+    const mockPostMedia = async ({ req, env, daCtx }) => {
+      mediaCalled.push({ req, env, daCtx });
+      return { status: 200, body: JSON.stringify({ id: 'media-123' }) };
+    };
+
+    const postHandlerWithMock = await esmock('../../src/handlers/post.js', {
+      '../../src/routes/media.js': {
+        default: mockPostMedia,
+      },
+    });
+
+    const req = { method: 'POST' };
+    const env = { AEM_ADMIN_MEDIA_API: 'https://api.example.com' };
+    const daCtx = {
+      path: '/media/image.jpg',
+      key: 'test/image.jpg',
+    };
+
+    const resp = await postHandlerWithMock.default({ req, env, daCtx });
+    
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(mediaCalled.length, 1);
+    assert.strictEqual(mediaCalled[0].req, req);
+    assert.strictEqual(mediaCalled[0].env, env);
+    assert.strictEqual(mediaCalled[0].daCtx, daCtx);
+  });
+
+  it('Test unknown route returns undefined', async () => {
+    const req = { method: 'POST' };
+    const env = {};
+    const daCtx = {
+      path: '/unknown/route',
+      key: 'test/unknown',
+    };
+
+    const resp = await postHandler({ req, env, daCtx });
+    
+    assert.strictEqual(resp, undefined);
   });
 });

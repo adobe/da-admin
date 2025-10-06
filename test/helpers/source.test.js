@@ -1,5 +1,5 @@
 import assert from 'assert';
-import putHelper from '../../src/helpers/source.js';
+import { putHelper } from '../../src/helpers/source.js';
 
 import env from '../utils/mocks/env.js';
 const daCtx = { org: 'cq', key: 'geometrixx/hello.html', propsKey: 'geometrixx/hello.html.props' };
