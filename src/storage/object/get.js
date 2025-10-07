@@ -30,7 +30,20 @@ export default async function getObject(env, { bucket, org, key }, head = false)
   const input = buildInput({ bucket, org, key });
   if (!head) {
     try {
+      client.middlewareStack.add(
+        (next) => (args) => {
+          // eslint-disable-next-line no-param-reassign
+          args.request.headers['Accept-Encoding'] = 'deflate';
+          return next(args);
+        },
+        {
+          step: 'build',
+          name: 'addAcceptEncodingMetadataMiddleware',
+        },
+      );
+
       const resp = await client.send(new GetObjectCommand(input));
+
       return {
         body: resp.Body,
         status: resp.$metadata.httpStatusCode,
