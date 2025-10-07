@@ -31,6 +31,13 @@ export default async function getObject(env, { bucket, org, key }, head = false)
   if (!head) {
     try {
       const resp = await client.send(new GetObjectCommand(input));
+
+      if (resp.ContentEncoding === 'gzip') {
+        // eslint-disable-next-line no-console
+        console.warn('Content is gzip encoded - request might fail');
+        throw new Error('Corrupted content');
+      }
+
       return {
         body: resp.Body,
         status: resp.$metadata.httpStatusCode,
