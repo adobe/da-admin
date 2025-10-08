@@ -112,6 +112,17 @@ describe('Object copy', () => {
       middlewareStack = {
         add: (a, b) => {},
       };
+  
+    };
+
+    const mockGetObject = async (env, { bucket, org, key }, head) => {
+      if (bucket === 'root-bucket'
+        && org === 'org'
+        && key === 'source/mysrc') {
+        return {
+          contentType: 'text/html',
+        };
+      }
     };
 
     const { copyFile } = await esmock(
@@ -119,6 +130,9 @@ describe('Object copy', () => {
         '@aws-sdk/client-s3': {
           S3Client: mockS3Client
         },
+        '../../../src/storage/object/get.js': {
+            default: mockGetObject,
+          },
       }
     )
 
@@ -128,6 +142,7 @@ describe('Object copy', () => {
     assert.strictEqual(input.Bucket, 'root-bucket');
     assert.strictEqual(input.CopySource, 'root-bucket/org/source/mysrc');
     assert.strictEqual(input.Key, 'org/source/mydst');
+    assert.strictEqual(input.ContentType, 'text/html');
     assert(input.MetadataDirective === undefined);
   });
 
@@ -139,6 +154,26 @@ describe('Object copy', () => {
       s3Mock.on(CopyObjectCommand).callsFake((input => {
         s3Sent.push(input);
       }));
+
+      // Mock getObject to return content type for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'foo') {
+          if (key === 'mydir/xyz.html') {
+            return {
+              contentType: 'text/html',
+              status: 200,
+              contentLength: 100,
+            };
+          } else if (key === 'mydir' || key === 'mydir.props') {
+            return {
+              contentType: 'text/html',
+              status: 200,
+              contentLength: 100,
+            };
+          }
+        }
+        return null;
+      };
 
       const collabcalls = [];
       const dacollab = {
@@ -160,7 +195,16 @@ describe('Object copy', () => {
         source: 'mydir',
         destination: 'mydir/newdir',
       };
-      await copyObject(env, ctx, details, false);
+
+      const copyObjectWithMock = await esmock(
+        '../../../src/storage/object/copy.js', {
+          '../../../src/storage/object/get.js': {
+            default: mockGetObject,
+          },
+        }
+      );
+
+      await copyObjectWithMock.default(env, ctx, details, false);
 
       assert.strictEqual(s3Sent.length, 3);
 
@@ -171,6 +215,7 @@ describe('Object copy', () => {
       assert.strictEqual(input.Bucket, 'root-bucket');
       assert.strictEqual(input.CopySource, 'root-bucket/foo/mydir/xyz.html');
       assert.strictEqual(input.Key, 'foo/mydir/newdir/xyz.html');
+      assert.strictEqual(input.ContentType, 'text/html');
 
       const md = input.Metadata;
       assert(md.ID, "ID should be set");
@@ -192,6 +237,26 @@ describe('Object copy', () => {
         s3Sent.push(input);
       }));
 
+      // Mock getObject to return content type for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'testorg') {
+          if (key === 'mydir/dir1/myfile.html') {
+            return {
+              contentType: 'text/html',
+              status: 200,
+              contentLength: 100,
+            };
+          } else if (key === 'mydir/dir1' || key === 'mydir/dir1.props') {
+            return {
+              contentType: 'text/html',
+              status: 200,
+              contentLength: 100,
+            };
+          }
+        }
+        return null;
+      };
+
       const collabcalls = [];
       const dacollab = {
         fetch: (url) => {
@@ -205,7 +270,16 @@ describe('Object copy', () => {
         source: 'mydir/dir1',
         destination: 'mydir/dir2',
       };
-      await copyObject(env, ctx, details, true);
+
+      const copyObjectWithMock = await esmock(
+        '../../../src/storage/object/copy.js', {
+          '../../../src/storage/object/get.js': {
+            default: mockGetObject,
+          },
+        }
+      );
+
+      await copyObjectWithMock.default(env, ctx, details, true);
 
       assert.strictEqual(s3Sent.length, 3);
 
@@ -216,6 +290,7 @@ describe('Object copy', () => {
       assert.strictEqual(input.Bucket, 'root-bucket');
       assert.strictEqual(input.CopySource, 'root-bucket/testorg/mydir/dir1/myfile.html');
       assert.strictEqual(input.Key, 'testorg/mydir/dir2/myfile.html');
+      assert.strictEqual(input.ContentType, 'text/html');
       assert.ifError(input.Metadata);
 
       assert.deepStrictEqual(collabcalls,
@@ -236,10 +311,24 @@ describe('Object copy', () => {
         };
       };
 
+      // Mock getObject to return content type for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'myorg' && key === 'mysrc/abc/def.html') {
+          return {
+            contentType: 'text/html',
+            status: 200,
+          };
+        }
+        return null;
+      };
+
       const { copyFile } = await esmock(
         '../../../src/storage/object/copy.js', {
           '@aws-sdk/client-s3': {
             S3Client: mockS3Client
+          },
+          '../../../src/storage/object/get.js': {
+            default: mockGetObject,
           },
         }
       )
@@ -267,6 +356,7 @@ describe('Object copy', () => {
       assert.strictEqual(resp.input.Bucket, 'root-bucket');
       assert.strictEqual(resp.input.Key, 'myorg/mydst/abc/def.html');
       assert.strictEqual(resp.input.CopySource, 'root-bucket/myorg/mysrc/abc/def.html');
+      assert.strictEqual(resp.input.ContentType, 'text/html');
       assert.strictEqual(resp.input.MetadataDirective, 'REPLACE');
       assert.strictEqual(resp.input.Metadata.Path, 'mydst/abc/def.html');
       assert.strictEqual(resp.input.Metadata.Users, '[{"email":"joe@bloggs.org"}]');
@@ -379,10 +469,25 @@ describe('Object copy', () => {
         middlewareStack = { add: () => {} };
       };
 
+      // Mock getObject to return null (not found) for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'test-bucket' && org === 'qqqorg') {
+          if (key === 'qqqsrc/abc/def.html') {
+            return null; // Not found
+          } else if (key === 'qqqsrc' || key === 'qqqsrc.props') {
+            return null; // Not found
+          }
+        }
+        return null;
+      };
+
       const { copyFile } = await esmock(
         '../../../src/storage/object/copy.js', {
           '@aws-sdk/client-s3': {
             S3Client: mockS3Client,
+          },
+          '../../../src/storage/object/get.js': {
+            default: mockGetObject,
           },
         },
       );
@@ -393,14 +498,14 @@ describe('Object copy', () => {
           fetch: (x) => { collabCalled.push(x); },
         },
       };
-      const daCtx = { org: 'qqqorg', origin: 'http://qqq' };
+      const daCtx = { bucket: 'test-bucket', org: 'qqqorg', origin: 'http://qqq' };
       daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
       const details = {
         source: 'qqqsrc',
         destination: 'qqqdst',
       };
       const resp = await copyFile({}, env, daCtx, 'qqqsrc/abc/def.html', details, false);
-      assert.strictEqual(resp.$metadata, error.$metadata);
+      assert.strictEqual(resp.$metadata.httpStatusCode, 404);
       assert.deepStrictEqual(collabCalled,
         ['https://localhost/api/v1/syncAdmin?doc=http://qqq/source/qqqorg/qqqdst/abc/def.html']);
     });
@@ -417,8 +522,29 @@ describe('Object copy', () => {
         s3Sent.push(input);
       }));
 
+    // Mock getObject to return content type for HEAD requests
+    const mockGetObject = async (env, { bucket, org, key }, head) => {
+      if (head && bucket === 'root-bucket' && org === 'foo') {
+        if (key === 'mydir/xyz.html') {
+          return {
+            contentType: 'text/html',
+            status: 200,
+            contentLength: 100,
+          };
+        } else if (key === 'mydir' || key === 'mydir.props') {
+          return {
+            contentType: 'text/html',
+            status: 200,
+            contentLength: 100,
+          };
+        }
+      }
+      return null;
+    };
+
       const env = { dacollab: { fetch: () => {} } };
       const ctx = {
+        bucket: 'root-bucket',
         org: 'foo',
         key: 'mydir',
         users: [{ email: 'haha@foo.com' }],
@@ -428,7 +554,16 @@ describe('Object copy', () => {
         source: 'mydir',
         destination: 'mydir/newdir',
       };
-      const resp = await copyObject(env, ctx, details, false);
+
+      const copyObjectWithMock = await esmock(
+        '../../../src/storage/object/copy.js', {
+          '../../../src/storage/object/get.js': {
+            default: mockGetObject,
+          },
+        }
+      );
+
+      const resp = await copyObjectWithMock.default(env, ctx, details, false);
       assert.strictEqual(resp.status, 204);
       assert.strictEqual(resp.body, undefined);
       assert.strictEqual(s3Sent.length, 3);
@@ -455,6 +590,25 @@ describe('Object copy', () => {
           Contents: [{ Key: 'mydir/abc.html' }],
         });
 
+      // Mock getObject to return content type for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'foo') {
+          if (key === 'mydir/xyz.html' || key === 'mydir/abc.html') {
+            return {
+              contentType: 'text/html',
+              status: 200,
+              contentLength: 100,
+            };
+          } else if (key === 'mydir' || key === 'mydir.props') {
+            return {
+              contentType: 'text/html',
+              status: 200,
+              contentLength: 100,
+            };
+          }
+        }
+        return null;
+      };
 
       const s3Sent = [];
       s3Mock.on(CopyObjectCommand).callsFake((input => {
@@ -462,6 +616,7 @@ describe('Object copy', () => {
       }));
 
       const ctx = {
+        bucket: 'root-bucket',
         org: 'foo',
         key: 'mydir',
         users: [{ email: 'haha@foo.com' }],
@@ -471,7 +626,16 @@ describe('Object copy', () => {
         source: 'mydir',
         destination: 'mydir/newdir',
       };
-      const resp = await copyObject(env, ctx, details, false);
+
+      const copyObjectWithMock = await esmock(
+        '../../../src/storage/object/copy.js', {
+          '../../../src/storage/object/get.js': {
+            default: mockGetObject,
+          },
+        }
+      );
+
+      const resp = await copyObjectWithMock.default(env, ctx, details, false);
       assert.strictEqual(resp.status, 206);
       const { continuationToken } = JSON.parse(resp.body);
 
@@ -501,7 +665,20 @@ describe('Object copy', () => {
         dacollab: { fetch: () => {} }
       }
 
+      // Mock getObject to return content type for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'foo' && key.startsWith('mydir/')) {
+          return {
+            contentType: 'text/html',
+            status: 200,
+            contentLength: 100,
+          };
+        }
+        return null;
+      };
+
       const ctx = {
+        bucket: 'root-bucket',
         org: 'foo',
         key: 'mydir',
         users: [{ email: 'haha@foo.com' }],
@@ -517,8 +694,15 @@ describe('Object copy', () => {
         s3Sent.push(input);
       }));
 
+      const copyObjectWithMock = await esmock(
+        '../../../src/storage/object/copy.js', {
+          '../../../src/storage/object/get.js': {
+            default: mockGetObject,
+          },
+        }
+      );
 
-      const resp = await copyObject(env, ctx, details, false);
+      const resp = await copyObjectWithMock.default(env, ctx, details, false);
       assert.strictEqual(resp.status, 206);
       assert.deepStrictEqual(JSON.parse(resp.body), { continuationToken });
       assert.strictEqual(s3Sent.length, 900);
@@ -543,7 +727,20 @@ describe('Object copy', () => {
         dacollab: { fetch: () => {} }
       }
 
+      // Mock getObject to return content type for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'foo' && key === 'mydir/abc.html') {
+          return {
+            contentType: 'text/html',
+            status: 200,
+            contentLength: 100,
+          };
+        }
+        return null;
+      };
+
       const ctx = {
+        bucket: 'root-bucket',
         org: 'foo',
         key: 'mydir',
         users: [{ email: 'haha@foo.com' }],
@@ -559,7 +756,15 @@ describe('Object copy', () => {
         s3Sent.push(input);
       }));
 
-      const resp = await copyObject(env, ctx, details, false);
+      const copyObjectWithMock = await esmock(
+        '../../../src/storage/object/copy.js', {
+          '../../../src/storage/object/get.js': {
+            default: mockGetObject,
+          },
+        }
+      );
+
+      const resp = await copyObjectWithMock.default(env, ctx, details, false);
       assert.strictEqual(resp.status, 204);
       assert.ifError(resp.body);
       assert.strictEqual(s3Sent.length, 1);

@@ -35,10 +35,17 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
     };
   }
 
+  const source = await getObject(env, {
+    bucket: daCtx.bucket,
+    org: daCtx.org,
+    key: sourceKey,
+  }, true);
+
   const input = {
     Bucket: daCtx.bucket,
     Key: `${daCtx.org}/${Key}`,
     CopySource: `${daCtx.bucket}/${daCtx.org}/${sourceKey}`,
+    ContentType: source?.contentType || 'application/octet-stream',
   };
 
   // We only want to keep the history if this was a rename. In case of an actual
