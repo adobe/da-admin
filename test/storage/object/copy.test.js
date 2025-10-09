@@ -176,12 +176,7 @@ describe('Object copy', () => {
       };
 
       const collabcalls = [];
-      const dacollab = {
-        fetch: (url) => {
-          collabcalls.push(url);
-        }
-      }
-      const env = { dacollab };
+      const env = { DA_COLLAB: 'https://localhost' };
       const ctx = {
         bucket: 'root-bucket',
         env,
@@ -196,37 +191,44 @@ describe('Object copy', () => {
         destination: 'mydir/newdir',
       };
 
-      const copyObjectWithMock = await esmock(
-        '../../../src/storage/object/copy.js', {
-          '../../../src/storage/object/get.js': {
-            default: mockGetObject,
-          },
-        }
-      );
+      const savedFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url) => {
+          collabcalls.push(url);
+        };
 
-      await copyObjectWithMock.default(env, ctx, details, false);
+        const copyObjectWithMock = await esmock(
+          '../../../src/storage/object/copy.js', {
+            '../../../src/storage/object/get.js': {
+              default: mockGetObject,
+            },
+          }
+        );
 
-      assert.strictEqual(s3Sent.length, 3);
+        await copyObjectWithMock.default(env, ctx, details, false);
 
-      // Make the order in s3Sent predictable
-      s3Sent.sort((a, b) => a.Key.localeCompare(b.Key));
+        assert.strictEqual(s3Sent.length, 3);
+        // Make the order in s3Sent predictable
+        s3Sent.sort((a, b) => a.Key.localeCompare(b.Key));
 
-      const input = s3Sent[2];
-      assert.strictEqual(input.Bucket, 'root-bucket');
-      assert.strictEqual(input.CopySource, 'root-bucket/foo/mydir/xyz.html');
-      assert.strictEqual(input.Key, 'foo/mydir/newdir/xyz.html');
-      assert.strictEqual(input.ContentType, 'text/html');
+        const input = s3Sent[2];
+        assert.strictEqual(input.Bucket, 'root-bucket');
+        assert.strictEqual(input.CopySource, 'root-bucket/foo/mydir/xyz.html');
+        assert.strictEqual(input.Key, 'foo/mydir/newdir/xyz.html');
 
-      const md = input.Metadata;
-      assert(md.ID, "ID should be set");
-      assert(md.Version, "Version should be set");
-      assert.strictEqual(typeof (md.Timestamp), 'string', 'Timestamp should be set as a string');
-      assert.strictEqual(md.Users, '[{"email":"haha@foo.com"}]');
-      assert.strictEqual(md.Path, 'mydir/newdir/xyz.html');
+        const md = input.Metadata;
+        assert(md.ID, "ID should be set");
+        assert(md.Version, "Version should be set");
+        assert.strictEqual(typeof (md.Timestamp), 'string', 'Timestamp should be set as a string');
+        assert.strictEqual(md.Users, '[{"email":"haha@foo.com"}]');
+        assert.strictEqual(md.Path, 'mydir/newdir/xyz.html');
 
-      assert.strictEqual(1, collabcalls.length);
-      assert.deepStrictEqual(collabcalls,
-        ['https://localhost/api/v1/syncAdmin?doc=somehost.sometld/source/foo/mydir/newdir/xyz.html']);
+        assert.strictEqual(1, collabcalls.length);
+        assert.deepStrictEqual(collabcalls,
+          ['https://localhost/api/v1/syncAdmin?doc=somehost.sometld/source/foo/mydir/newdir/xyz.html']);
+      } finally {
+        globalThis.fetch = savedFetch;
+      }
     });
 
     it('Copies a file for rename', async () => {
@@ -258,12 +260,7 @@ describe('Object copy', () => {
       };
 
       const collabcalls = [];
-      const dacollab = {
-        fetch: (url) => {
-          collabcalls.push(url);
-        }
-      }
-      const env = { dacollab };
+      const env = { DA_COLLAB: 'https://localhost' };
       const ctx = { bucket: 'root-bucket', org: 'testorg', key: 'mydir/dir1', origin: 'http://localhost:3000' };
       ctx.aclCtx = await getAclCtx(env, ctx.org, ctx.users, '/');
       const details = {
@@ -271,30 +268,37 @@ describe('Object copy', () => {
         destination: 'mydir/dir2',
       };
 
-      const copyObjectWithMock = await esmock(
-        '../../../src/storage/object/copy.js', {
-          '../../../src/storage/object/get.js': {
-            default: mockGetObject,
-          },
-        }
-      );
+      const savedFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url) => {
+          collabcalls.push(url);
+        };
 
-      await copyObjectWithMock.default(env, ctx, details, true);
+        const copyObjectWithMock = await esmock(
+          '../../../src/storage/object/copy.js', {
+            '../../../src/storage/object/get.js': {
+              default: mockGetObject,
+            },
+          }
+        );
 
-      assert.strictEqual(s3Sent.length, 3);
+        await copyObjectWithMock.default(env, ctx, details, true);
 
-      // Make the order in s3Sent predictable
-      s3Sent.sort((a, b) => a.Key.localeCompare(b.Key));
+        assert.strictEqual(s3Sent.length, 3);
+        // Make the order in s3Sent predictable
+        s3Sent.sort((a, b) => a.Key.localeCompare(b.Key));
 
-      const input = s3Sent[2];
-      assert.strictEqual(input.Bucket, 'root-bucket');
-      assert.strictEqual(input.CopySource, 'root-bucket/testorg/mydir/dir1/myfile.html');
-      assert.strictEqual(input.Key, 'testorg/mydir/dir2/myfile.html');
-      assert.strictEqual(input.ContentType, 'text/html');
-      assert.ifError(input.Metadata);
+        const input = s3Sent[2];
+        assert.strictEqual(input.Bucket, 'root-bucket');
+        assert.strictEqual(input.CopySource, 'root-bucket/testorg/mydir/dir1/myfile.html');
+        assert.strictEqual(input.Key, 'testorg/mydir/dir2/myfile.html');
+        assert.ifError(input.Metadata);
 
-      assert.deepStrictEqual(collabcalls,
-        ['https://localhost/api/v1/syncAdmin?doc=http://localhost:3000/source/testorg/mydir/dir2/myfile.html']);
+        assert.deepStrictEqual(collabcalls,
+          ['https://localhost/api/v1/syncAdmin?doc=http://localhost:3000/source/testorg/mydir/dir2/myfile.html']);
+      } finally {
+        globalThis.fetch = savedFetch;
+      }
     });
 
     it('Adds copy condition', async () => {
@@ -335,9 +339,7 @@ describe('Object copy', () => {
 
       const collabCalled = [];
       const env = {
-        dacollab: {
-          fetch: (x) => { collabCalled.push(x); },
-        },
+        DA_COLLAB: 'https://localhost',
       };
       const daCtx = {
         bucket: 'root-bucket',
@@ -350,7 +352,11 @@ describe('Object copy', () => {
         source: 'mysrc',
         destination: 'mydst',
       };
-      const resp = await copyFile({}, env, daCtx, 'mysrc/abc/def.html', details, false);
+
+      const savedFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (x) => { collabCalled.push(x); };
+        const resp = await copyFile({}, env, daCtx, 'mysrc/abc/def.html', details, false);
 
       assert.strictEqual(resp.constructor.name, 'CopyObjectCommand');
       assert.strictEqual(resp.input.Bucket, 'root-bucket');
@@ -388,6 +394,9 @@ describe('Object copy', () => {
 
       assert.deepStrictEqual(collabCalled,
         ['https://localhost/api/v1/syncAdmin?doc=https://blahblah:7890/source/myorg/mydst/abc/def.html']);
+      } finally {
+        globalThis.fetch = savedFetch;
+      }
     });
 
     it('Copy content when destination already exists', async () => {
@@ -434,9 +443,7 @@ describe('Object copy', () => {
 
       const collabCalled = [];
       const env = {
-        dacollab: {
-          fetch: (x) => { collabCalled.push(x); },
-        },
+        DA_COLLAB: 'https://localhost',
       };
       const daCtx = { bucket: 'mybucket', org: 'xorg' };
       daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
@@ -444,17 +451,24 @@ describe('Object copy', () => {
         source: 'xsrc',
         destination: 'xdst',
       };
-      const resp = await copyFile({}, env, daCtx, 'xsrc/abc/def.html', details, false);
-      assert.strictEqual(resp, 'beuaaark!');
 
-      assert.strictEqual(puwv.length, 1);
-      assert.strictEqual(puwv[0].c, daCtx);
-      assert.strictEqual(puwv[0].e, env);
-      assert.strictEqual(puwv[0].u.body, 'original body');
-      assert.strictEqual(puwv[0].u.contentLength, 42);
-      assert.strictEqual(puwv[0].u.key, 'xdst/abc/def.html');
-      assert.strictEqual(puwv[0].u.org, 'xorg');
-      assert.strictEqual(puwv[0].u.type, 'text/html');
+      const savedFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (x) => { collabCalled.push(x); };
+        const resp = await copyFile({}, env, daCtx, 'xsrc/abc/def.html', details, false);
+        assert.strictEqual(resp, 'beuaaark!');
+
+        assert.strictEqual(puwv.length, 1);
+        assert.strictEqual(puwv[0].c, daCtx);
+        assert.strictEqual(puwv[0].e, env);
+        assert.strictEqual(puwv[0].u.body, 'original body');
+        assert.strictEqual(puwv[0].u.contentLength, 42);
+        assert.strictEqual(puwv[0].u.key, 'xdst/abc/def.html');
+        assert.strictEqual(puwv[0].u.org, 'xorg');
+        assert.strictEqual(puwv[0].u.type, 'text/html');
+      } finally {
+        globalThis.fetch = savedFetch;
+      }
     });
 
     it('Copy content when origin does not exists', async () => {
@@ -494,9 +508,7 @@ describe('Object copy', () => {
 
       const collabCalled = [];
       const env = {
-        dacollab: {
-          fetch: (x) => { collabCalled.push(x); },
-        },
+        DA_COLLAB: 'https://localhost',
       };
       const daCtx = { bucket: 'test-bucket', org: 'qqqorg', origin: 'http://qqq' };
       daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
@@ -504,10 +516,17 @@ describe('Object copy', () => {
         source: 'qqqsrc',
         destination: 'qqqdst',
       };
-      const resp = await copyFile({}, env, daCtx, 'qqqsrc/abc/def.html', details, false);
-      assert.strictEqual(resp.$metadata.httpStatusCode, 404);
-      assert.deepStrictEqual(collabCalled,
-        ['https://localhost/api/v1/syncAdmin?doc=http://qqq/source/qqqorg/qqqdst/abc/def.html']);
+
+      const savedFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (x) => { collabCalled.push(x); };
+        const resp = await copyFile({}, env, daCtx, 'qqqsrc/abc/def.html', details, false);
+        assert.strictEqual(resp.$metadata.httpStatusCode, 404);
+        assert.deepStrictEqual(collabCalled,
+          ['https://localhost/api/v1/syncAdmin?doc=http://qqq/source/qqqorg/qqqdst/abc/def.html']);
+      } finally {
+        globalThis.fetch = savedFetch;
+      }
     });
   });
 
@@ -522,27 +541,27 @@ describe('Object copy', () => {
         s3Sent.push(input);
       }));
 
-    // Mock getObject to return content type for HEAD requests
-    const mockGetObject = async (env, { bucket, org, key }, head) => {
-      if (head && bucket === 'root-bucket' && org === 'foo') {
-        if (key === 'mydir/xyz.html') {
-          return {
-            contentType: 'text/html',
-            status: 200,
-            contentLength: 100,
-          };
-        } else if (key === 'mydir' || key === 'mydir.props') {
-          return {
-            contentType: 'text/html',
-            status: 200,
-            contentLength: 100,
-          };
+      // Mock getObject to return content type for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'foo') {
+          if (key === 'mydir/xyz.html') {
+            return {
+              contentType: 'text/html',
+              status: 200,
+              contentLength: 100,
+            };
+          } else if (key === 'mydir' || key === 'mydir.props') {
+            return {
+              contentType: 'text/html',
+              status: 200,
+              contentLength: 100,
+            };
+          }
         }
-      }
-      return null;
-    };
+        return null;
+      };
 
-      const env = { dacollab: { fetch: () => {} } };
+      const env = { DA_COLLAB: 'https://localhost' };
       const ctx = {
         bucket: 'root-bucket',
         org: 'foo',
@@ -577,7 +596,7 @@ describe('Object copy', () => {
             DA_JOBS[key] = value;
           }
         },
-        dacollab: { fetch: () => {} }
+        DA_COLLAB: 'https://localhost'
       }
       s3Mock.on(ListObjectsV2Command)
         .resolves({
@@ -662,7 +681,7 @@ describe('Object copy', () => {
             return DA_JOBS[key];
           }
         },
-        dacollab: { fetch: () => {} }
+        DA_COLLAB: 'https://localhost'
       }
 
       // Mock getObject to return content type for HEAD requests
@@ -724,7 +743,7 @@ describe('Object copy', () => {
             delete DA_JOBS[key];
           }
         },
-        dacollab: { fetch: () => {} }
+        DA_COLLAB: 'https://localhost'
       }
 
       // Mock getObject to return content type for HEAD requests

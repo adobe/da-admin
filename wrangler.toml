@@ -3,11 +3,7 @@ main = "src/index.js"
 compatibility_date = "2024-11-11"
 keep_vars = true
 
-vars = { DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "aem-content" }
-
-services = [
-  { binding = "dacollab", service = "da-collab" }
-]
+vars = { DA_COLLAB = "https://da-collab.adobeaem.workers.dev", AEM_BUCKET_NAME = "aem-content" }
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "f8978fd2270f4c4fbcc8c9f04248a034" },
@@ -20,11 +16,7 @@ r2_buckets = [
 ]
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "aem-content-stage" }
-
-services = [
-  { binding = "dacollab", service = "da-collab-stage" }
-]
+vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://da-collab-stage.adobeaem.workers.dev", AEM_BUCKET_NAME = "aem-content-stage" }
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
@@ -38,10 +30,6 @@ r2_buckets = [
 
 [env.dev]
 vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", AEM_BUCKET_NAME = "aem-content-dev" }
-
-services = [
-  { binding = "dacollab", service = "da-collab-local" }
-]
 
 kv_namespaces = [
   { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
