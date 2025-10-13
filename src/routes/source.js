@@ -14,7 +14,7 @@ import putObject from '../storage/object/put.js';
 import deleteObjects from '../storage/object/delete.js';
 import { invalidateCollab } from '../storage/utils/object.js';
 
-import putHelper from '../helpers/source.js';
+import { putHelper } from '../helpers/source.js';
 import deleteHelper from '../helpers/delete.js';
 import { hasPermission } from '../utils/auth.js';
 
