@@ -53,7 +53,11 @@ export default async function getObject(env, { bucket, org, key }, head = false)
         etag: resp.ETag,
       };
     } catch (e) {
-      return { body: '', status: e.$metadata?.httpStatusCode || 404, contentLength: 0 };
+      if (!e.$metadata?.httpStatusCode) {
+        // eslint-disable-next-line no-console
+        console.error('Error getting object without httpStatusCode', e);
+      }
+      return { body: '', status: e.$metadata?.httpStatusCode || 500, contentLength: 0 };
     }
   }
   const url = await getSignedUrl(client, new HeadObjectCommand(input), { expiresIn: 3600 });
