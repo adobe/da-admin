@@ -17,31 +17,44 @@ import { invalidateCollab } from '../../../src/storage/utils/object.js';
 describe('Storage Object Utils tests', () => {
   function setupEnv() {
     const called = [];
-    const dacollab = {
-      fetch: async (url) => {
-        console.log(`invalidate called with ${url}`);
-        called.push(url);
-      },
-    };
-    const env = { dacollab };
+    const env = { DA_COLLAB: 'https://localhost' };
     return { called, env };
   }
 
   it('Should invalidate', async () => {
     const { called, env } = setupEnv();
 
-    assert.strictEqual(called.length, 0, 'precondition');
-    await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c.html', env);
-    assert.strictEqual(called.length, 1);
-    assert.strictEqual(called[0], 'https://localhost/api/v1/syncAdmin?doc=https://admin.da.live/source/a/b/c.html');
+    const savedFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (url) => {
+        console.log(`invalidate called with ${url}`);
+        called.push(url);
+      };
+
+      assert.strictEqual(called.length, 0, 'precondition');
+      await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c.html', env);
+      assert.strictEqual(called.length, 1);
+      assert.strictEqual(called[0], 'https://localhost/api/v1/syncAdmin?doc=https://admin.da.live/source/a/b/c.html');
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
   });
 
   it('Should not invalidate non-html documents', async () => {
     const { called, env } = setupEnv();
 
-    assert.strictEqual(called.length, 0, 'precondition');
-    await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c.jpg', env);
-    await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c/d', env);
-    assert.strictEqual(called.length, 0, 'should not have invalidated anything');
+    const savedFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (url) => {
+        called.push(url);
+      };
+
+      assert.strictEqual(called.length, 0, 'precondition');
+      await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c.jpg', env);
+      await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c/d', env);
+      assert.strictEqual(called.length, 0, 'should not have invalidated anything');
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
   });
 });

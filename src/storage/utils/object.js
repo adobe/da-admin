@@ -15,9 +15,9 @@ export async function invalidateCollab(api, url, env) {
     return;
   }
 
-  const invPath = `/api/v1/${api}?doc=${url}`;
+  const { DA_COLLAB } = env;
 
-  // Use dacollab service binding, hostname is not relevant
-  const invURL = `https://localhost${invPath}`;
-  await env.dacollab.fetch(invURL);
+  const invURL = `${DA_COLLAB}/api/v1/${api}?doc=${url}`;
+
+  await fetch(invURL);
 }
