@@ -90,6 +90,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
           { bucket: daCtx.bucket, org: daCtx.org, key: sourceKey },
         );
         return /* await */ putObjectWithVersion(env, daCtx, {
+          bucket: daCtx.bucket,
           org: daCtx.org,
           key: Key,
           body: original.body,

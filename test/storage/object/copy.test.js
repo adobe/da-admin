@@ -450,6 +450,7 @@ describe('Object copy', () => {
       assert.strictEqual(puwv.length, 1);
       assert.strictEqual(puwv[0].c, daCtx);
       assert.strictEqual(puwv[0].e, env);
+      assert.strictEqual(puwv[0].u.bucket, 'mybucket');
       assert.strictEqual(puwv[0].u.body, 'original body');
       assert.strictEqual(puwv[0].u.contentLength, 42);
       assert.strictEqual(puwv[0].u.key, 'xdst/abc/def.html');
