@@ -11,6 +11,6 @@
  */
 import getObject from '../object/get.js';
 
-export async function getObjectVersion(env, { bucket, org, key }, head) {
-  return getObject(env, { bucket, org, key: `.da-versions/${key}` }, head);
+export async function getObjectVersion(env, { bucket, org, key }, head, conditionalHeaders) {
+  return getObject(env, { bucket, org, key: `.da-versions/${key}` }, head, conditionalHeaders);
 }
