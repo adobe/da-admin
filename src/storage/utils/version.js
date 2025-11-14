@@ -13,12 +13,12 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 
-export function ifNoneMatch(config) {
+export function ifNoneMatch(config, value = '*') {
   const client = new S3Client(config);
   client.middlewareStack.add(
     (next) => async (args) => {
       // eslint-disable-next-line no-param-reassign
-      args.request.headers['If-None-Match'] = '*';
+      args.request.headers['If-None-Match'] = value;
       return next(args);
     },
     {

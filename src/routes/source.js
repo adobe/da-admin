@@ -40,5 +40,5 @@ export async function postSource({ req, env, daCtx }) {
 
 export async function getSource({ env, daCtx, head }) {
   if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
-  return getObject(env, daCtx, head);
+  return getObject(env, daCtx, head, daCtx.conditionalHeaders);
 }

@@ -15,12 +15,13 @@ export default function daResp({
   contentType = 'application/json',
   contentLength,
   metadata,
+  etag,
 }, ctx) {
   const headers = new Headers();
   headers.append('Access-Control-Allow-Origin', '*');
   headers.append('Access-Control-Allow-Methods', 'HEAD, GET, PUT, POST, DELETE');
   headers.append('Access-Control-Allow-Headers', '*');
-  headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id');
+  headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, ETag');
   headers.append('Content-Type', contentType);
   if (contentLength) {
     headers.append('Content-Length', contentLength);
@@ -31,6 +32,10 @@ export default function daResp({
 
   if (metadata?.LastModified) {
     headers.append('Last-Modified', new Date(metadata.LastModified).toUTCString());
+  }
+
+  if (etag) {
+    headers.append('ETag', etag);
   }
 
   if (ctx?.aclCtx && status < 500) {
@@ -44,5 +49,8 @@ export default function daResp({
     }
   }
 
-  return new Response(body, { status, headers });
+  // 304 Not Modified responses must not have a body per RFC 7232
+  const responseBody = status === 304 ? null : body;
+
+  return new Response(responseBody, { status, headers });
 }

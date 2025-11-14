@@ -42,22 +42,24 @@ export default async function putObject(env, daCtx, obj) {
   const client = new S3Client(config);
 
   const {
-    bucket, org, key, propsKey,
+    bucket, org, key, propsKey, conditionalHeaders,
   } = daCtx;
 
   const inputs = [];
 
   let metadata = {};
   let status = 201;
+  let etag;
   if (obj) {
     if (obj.data) {
       const isFile = obj.data instanceof File;
       const { body, type } = isFile ? await getFileBody(obj.data) : getObjectBody(obj.data);
       const res = await putObjectWithVersion(env, daCtx, {
         bucket, org, key, body, type,
-      }, false, obj.guid);
+      }, false, obj.guid, conditionalHeaders);
       status = res.status;
       metadata = res.metadata;
+      etag = res.etag;
     }
   } else {
     const { body, type } = getObjectBody({});
@@ -74,6 +76,6 @@ export default async function putObject(env, daCtx, obj) {
 
   const body = sourceRespObject(daCtx);
   return {
-    body: JSON.stringify(body), status, contentType: 'application/json', metadata,
+    body: JSON.stringify(body), status, contentType: 'application/json', metadata, etag,
   };
 }
