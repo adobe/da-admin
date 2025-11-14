@@ -56,6 +56,13 @@ export async function putVersion(config, {
   }
 }
 
+function shouldCreateVersion(contentType) {
+  // Only create versions for HTML and JSON files
+  if (!contentType) return false;
+  const type = contentType.toLowerCase();
+  return type.includes('text/html') || type.includes('application/json');
+}
+
 function buildInput({
   bucket, org, key, body, type, contentLength,
 }) {
@@ -112,45 +119,50 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     }
   }
 
-  const pps = current.metadata?.preparsingstore || '0';
+  // Only create versions for HTML and JSON files
+  const contentType = update.type || current.contentType;
+  const createVersion = shouldCreateVersion(contentType);
 
-  // Store the body if preparsingstore is not defined, so a once-off store
+  const pps = current.metadata?.preparsingstore || '0';
   let storeBody = !body && pps === '0';
-  const Preparsingstore = storeBody ? Timestamp : pps;
+  let Preparsingstore = storeBody ? Timestamp : pps;
   let Label = storeBody ? 'Collab Parse' : update.label;
 
-  if (daCtx.method === 'PUT'
-    && daCtx.ext === 'html'
-    && current.contentLength > EMPTY_DOC_SIZE
-    && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
-    // we are about to empty the document body
-    // this should almost never happen but it does in some unexpectedcases
-    // we want then to store a version of the full document as a Restore Point
-    // eslint-disable-next-line no-console
-    console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
-    storeBody = true;
-    Label = 'Restore Point';
-  }
+  if (createVersion) {
+    if (daCtx.method === 'PUT'
+      && daCtx.ext === 'html'
+      && current.contentLength > EMPTY_DOC_SIZE
+      && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
+      // we are about to empty the document body
+      // this should almost never happen but it does in some unexpectedcases
+      // we want then to store a version of the full document as a Restore Point
+      // eslint-disable-next-line no-console
+      console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
+      storeBody = true;
+      Label = 'Restore Point';
+      Preparsingstore = Timestamp;
+    }
 
-  const versionResp = await putVersion(config, {
-    Bucket: input.Bucket,
-    Org: daCtx.org,
-    Body: (body || storeBody ? current.body : ''),
-    ContentLength: (body || storeBody ? current.contentLength : undefined),
-    ContentType: current.contentType,
-    ID,
-    Version,
-    Ext: daCtx.ext,
-    Metadata: {
-      Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
-      Timestamp: current.metadata?.timestamp || Timestamp,
-      Path: current.metadata?.path || Path,
-      Label,
-    },
-  });
+    const versionResp = await putVersion(config, {
+      Bucket: input.Bucket,
+      Org: daCtx.org,
+      Body: (body || storeBody ? current.body : ''),
+      ContentLength: (body || storeBody ? current.contentLength : undefined),
+      ContentType: current.contentType,
+      ID,
+      Version,
+      Ext: daCtx.ext,
+      Metadata: {
+        Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
+        Timestamp: current.metadata?.timestamp || Timestamp,
+        Path: current.metadata?.path || Path,
+        Label,
+      },
+    });
 
-  if (versionResp.status !== 200 && versionResp.status !== 412) {
-    return { status: versionResp.status, metadata: { id: ID } };
+    if (versionResp.status !== 200 && versionResp.status !== 412) {
+      return { status: versionResp.status, metadata: { id: ID } };
+    }
   }
 
   const client = ifMatch(config, `${current.etag}`);

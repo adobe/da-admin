@@ -264,7 +264,7 @@ describe('Version Put', () => {
 
     const env = {};
     const daCtx= { bucket: 'bkt', org: 'myorg', ext: 'html' };
-    const update = { bucket: 'bkt', body: 'new-body', org: 'myorg', key: 'a/x.html' };
+    const update = { bucket: 'bkt', body: 'new-body', org: 'myorg', key: 'a/x.html', type: 'text/html' };
     const resp = await putObjectWithVersion(env, daCtx, update, true);
     assert.equal(200, resp.status);
     assert.equal('x123', resp.metadata.id);
@@ -331,7 +331,7 @@ describe('Version Put', () => {
 
     const env = {};
     const daCtx= { bucket: 'bbb', org: 'myorg', ext: 'html', users: [{"email": "foo@acme.org"}, {"email": "bar@acme.org"}] };
-    const update = { bucket: 'bbb', body: 'new-body', org: 'myorg', key: 'a/x.html' };
+    const update = { bucket: 'bbb', body: 'new-body', org: 'myorg', key: 'a/x.html', type: 'text/html' };
     const resp = await putObjectWithVersion(env, daCtx, update, false);
     assert.equal(202, resp.status);
     assert.equal('q123-456', resp.metadata.id);
@@ -570,7 +570,7 @@ describe('Version Put', () => {
       },
     });
 
-    const resp = await putObjectWithVersion({}, { method: 'HEAD' }, {});
+    const resp = await putObjectWithVersion({}, { method: 'HEAD' }, { type: 'text/html' });
     assert.equal(1, sentToS3.length);
     const input = sentToS3[0].input;
     assert.equal('', input.Body, 'Empty body for HEAD');
@@ -631,7 +631,7 @@ describe('Version Put', () => {
       org: 'o1',
       body: 'foobar',
       key: 'mypath',
-      type: 'test/plain',
+      type: 'text/html',
     }
     const ctx = {
       org: 'o1',
@@ -650,7 +650,7 @@ describe('Version Put', () => {
     const input2 = sentToS3_2[0].input;
     assert.equal('foobar', input2.Body);
     assert.equal(6, input2.ContentLength);
-    assert.equal('test/plain', input2.ContentType);
+    assert.equal('text/html', input2.ContentType);
     assert.equal('o1/mypath', input2.Key);
     assert.equal('mypath', input2.Metadata.Path);
     assert.equal('[{"email":"hi@acme.com"}]', input2.Metadata.Users);
@@ -708,7 +708,7 @@ describe('Version Put', () => {
       org: 'o1',
       body: '',
       key: 'mypath',
-      type: 'test/plain',
+      type: 'text/html',
     }
     const ctx = {
       org: 'o1',
@@ -733,7 +733,7 @@ describe('Version Put', () => {
     const input2 = sentToS3_2[0].input;
     assert.equal('', input2.Body);
     assert.equal(0, input2.ContentLength);
-    assert.equal('test/plain', input2.ContentType);
+    assert.equal('text/html', input2.ContentType);
     assert.equal('o1/mypath', input2.Key);
     assert.equal('mypath', input2.Metadata.Path);
     assert.equal('[{"email":"hi@acme.com"}]', input2.Metadata.Users);
@@ -836,7 +836,7 @@ describe('Version Put', () => {
       status: 200,
       body: 'test body',
       contentLength: 9,
-      contentType: 'text/plain',
+      contentType: 'text/html',
       metadata: { existing: 'metadata' }
     });
 
@@ -846,6 +846,7 @@ describe('Version Put', () => {
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: () => mockS3Client,
+        ifMatch: () => mockS3Client,
         generateId: () => 'generated-id',
         generateVersion: () => 'generated-version'
       },
@@ -854,15 +855,15 @@ describe('Version Put', () => {
     const env = {};
     const daCtx = {
       org: 'test-org',
-      ext: 'txt',
+      ext: 'html',
       users: [{ email: 'test@example.com' }]
     };
 
-    await putObjectWithVersion(env, daCtx, { key: 'test-file.txt' }, 'test body', 'test-guid');
+    await putObjectWithVersion(env, daCtx, { key: 'test-file.html', type: 'text/html' }, 'test body', 'test-guid');
 
-    assert.strictEqual(sentCommands.length, 1);
-    const putCommand = sentCommands[0];
-    assert.strictEqual(putCommand.input.ContentType, 'text/plain');
+    assert.strictEqual(sentCommands.length, 2); // Version + main file
+    const putCommand = sentCommands[0]; // First command is the version
+    assert.strictEqual(putCommand.input.ContentType, 'text/html');
     assert.strictEqual(putCommand.input.Body, 'test body');
     assert.strictEqual(putCommand.input.ContentLength, 9);
   });
@@ -1103,20 +1104,11 @@ describe('Version Put', () => {
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.metadata.id, 'jpeg-id-existing');
 
-    // Should have 2 commands: one for version, one for main object
-    assert.strictEqual(sentCommands.length, 2);
+    // Binary files (like JPEG) do NOT create versions, only 1 command for main object
+    assert.strictEqual(sentCommands.length, 1);
 
-    // First command should store the old version
-    const versionCommand = sentCommands[0];
-    assert.strictEqual(versionCommand.input.Bucket, 'media-bucket');
-    assert(versionCommand.input.Key.includes('.da-versions/jpeg-id-existing/'));
-    assert(versionCommand.input.Key.endsWith('.jpg'));
-    assert.strictEqual(versionCommand.input.Body, existingJpegData);
-    assert.strictEqual(versionCommand.input.ContentType, 'image/jpeg');
-    assert.strictEqual(versionCommand.input.ContentLength, existingJpegData.length);
-
-    // Second command should store the new content
-    const mainCommand = sentCommands[1];
+    // Only command should store the new main object (no version for binaries)
+    const mainCommand = sentCommands[0];
     assert.strictEqual(mainCommand.input.Bucket, 'media-bucket');
     assert.strictEqual(mainCommand.input.Key, 'testorg/images/photo.jpg');
     assert.strictEqual(mainCommand.input.Body, newJpegFile);
@@ -1472,7 +1464,7 @@ describe('Version Put', () => {
   });
 
   describe('Versioning behavior: CREATE vs UPDATE', () => {
-    it('JPEG: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+    it('JPEG: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
       
@@ -1545,17 +1537,16 @@ describe('Version Put', () => {
       assert.strictEqual(sentCommands.length, 1);
       assert.strictEqual(sentCommands[0].input.Key, 'testorg/images/photo.jpg');
 
-      // SECOND CALL - file exists (200)
+      // SECOND CALL - file exists (200) - STILL NO VERSION for binaries
       sentCommands.length = 0;
       const result2 = await putObjectWithVersion(env, daCtx, update1);
       assert(result2.status === 200 || result2.status === 201);
-      // 2 commands: PutObject for version + PutObject for main file
-      assert.strictEqual(sentCommands.length, 2);
-      assert(sentCommands[0].input.Key.includes('/.da-versions/'));  // Version
-      assert.strictEqual(sentCommands[1].input.Key, 'testorg/images/photo.jpg');  // Main
+      // Only 1 command: PutObject for main file, NO version for binaries
+      assert.strictEqual(sentCommands.length, 1);
+      assert.strictEqual(sentCommands[0].input.Key, 'testorg/images/photo.jpg');
     });
 
-    it('PNG: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+    it('PNG: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
       
@@ -1609,6 +1600,9 @@ describe('Version Put', () => {
       };
 
       const update = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        key: 'images/graphic.png',
         body: pngFile,
         contentLength: pngData.length,
         type: 'image/png'
@@ -1619,10 +1613,10 @@ describe('Version Put', () => {
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version
+      // SECOND CALL - still no version for binaries
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
-      assert.strictEqual(sentCommands.length, 2);
+      assert.strictEqual(sentCommands.length, 1);
     });
 
     it('HTML: New file (404) creates object WITHOUT version, existing file creates version', async () => {
@@ -1679,6 +1673,9 @@ describe('Version Put', () => {
       };
 
       const update = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        key: 'pages/index.html',
         body: htmlFile,
         contentLength: htmlContent.length,
         type: 'text/html'
@@ -1689,7 +1686,7 @@ describe('Version Put', () => {
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version
+      // SECOND CALL - creates version for HTML
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 2);
@@ -1749,6 +1746,9 @@ describe('Version Put', () => {
       };
 
       const update = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        key: 'config/settings.json',
         body: jsonFile,
         contentLength: jsonContent.length,
         type: 'application/json'
@@ -1759,13 +1759,13 @@ describe('Version Put', () => {
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version
+      // SECOND CALL - creates version for JSON
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 2);
     });
 
-    it('PDF: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+    it('PDF: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
       
@@ -1819,6 +1819,9 @@ describe('Version Put', () => {
       };
 
       const update = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        key: 'docs/report.pdf',
         body: pdfFile,
         contentLength: pdfData.length,
         type: 'application/pdf'
@@ -1829,13 +1832,13 @@ describe('Version Put', () => {
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version
+      // SECOND CALL - still no version for binaries
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
-      assert.strictEqual(sentCommands.length, 2);
+      assert.strictEqual(sentCommands.length, 1);
     });
 
-    it('MP4: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+    it('MP4: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
       
@@ -1889,6 +1892,9 @@ describe('Version Put', () => {
       };
 
       const update = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        key: 'videos/demo.mp4',
         body: mp4File,
         contentLength: mp4Data.length,
         type: 'video/mp4'
@@ -1899,13 +1905,13 @@ describe('Version Put', () => {
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version
+      // SECOND CALL - still no version for binaries
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
-      assert.strictEqual(sentCommands.length, 2);
+      assert.strictEqual(sentCommands.length, 1);
     });
 
-    it('SVG: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+    it('SVG: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
       
@@ -1959,6 +1965,9 @@ describe('Version Put', () => {
       };
 
       const update = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        key: 'images/icon.svg',
         body: svgFile,
         contentLength: svgContent.length,
         type: 'image/svg+xml'
@@ -1969,13 +1978,13 @@ describe('Version Put', () => {
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version
+      // SECOND CALL - still no version for binaries
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
-      assert.strictEqual(sentCommands.length, 2);
+      assert.strictEqual(sentCommands.length, 1);
     });
 
-    it('ZIP: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+    it('ZIP: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
       
@@ -2029,6 +2038,9 @@ describe('Version Put', () => {
       };
 
       const update = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        key: 'archives/data.zip',
         body: zipFile,
         contentLength: zipData.length,
         type: 'application/zip'
@@ -2039,10 +2051,10 @@ describe('Version Put', () => {
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version
+      // SECOND CALL - still no version for binaries
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
-      assert.strictEqual(sentCommands.length, 2);
+      assert.strictEqual(sentCommands.length, 1);
     });
   });
 });
