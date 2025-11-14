@@ -1470,4 +1470,579 @@ describe('Version Put', () => {
     assert.strictEqual(mainCommand.input.Body, newHtmlFile);
     assert.strictEqual(mainCommand.input.ContentType, 'text/html');
   });
+
+  describe('Versioning behavior: CREATE vs UPDATE', () => {
+    it('JPEG: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+      const sentCommands = [];
+      let callCount = 0;
+      
+      const mockGetObject = async () => {
+        callCount++;
+        // First call: file doesn't exist
+        if (callCount === 1) {
+          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+        }
+        // Second call: file exists
+        return {
+          status: 200,
+          body: new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]),
+          contentLength: 4,
+          contentType: 'image/jpeg',
+          etag: 'old-etag',
+          metadata: {
+            id: 'jpeg-id-123',
+            version: 'old-version',
+            timestamp: '1234567890',
+            users: '["user@example.com"]',
+            path: 'images/photo.jpg'
+          }
+        };
+      };
+
+      const mockS3Client = {
+        async send(cmd) {
+          sentCommands.push(cmd);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject
+        },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+      });
+
+      const jpegData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x10]);
+      const jpegFile = new File([jpegData], 'photo.jpg', { type: 'image/jpeg' });
+
+      const env = {};
+      const daCtx = {
+        org: 'testorg',
+        bucket: 'test-bucket',
+        key: 'images/photo.jpg',
+        users: [{ email: 'user@example.com' }]
+      };
+
+      // FIRST CALL - file doesn't exist (404)
+      const update1 = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        key: 'images/photo.jpg',
+        body: jpegFile,
+        contentLength: jpegData.length,
+        type: 'image/jpeg'
+      };
+
+      sentCommands.length = 0;
+      const result1 = await putObjectWithVersion(env, daCtx, update1);
+      // File created for first time - could be 200 or 201
+      assert(result1.status === 200 || result1.status === 201);
+      // Only 1 command: PutObject for main file, NO version created
+      assert.strictEqual(sentCommands.length, 1);
+      assert.strictEqual(sentCommands[0].input.Key, 'testorg/images/photo.jpg');
+
+      // SECOND CALL - file exists (200)
+      sentCommands.length = 0;
+      const result2 = await putObjectWithVersion(env, daCtx, update1);
+      assert(result2.status === 200 || result2.status === 201);
+      // 2 commands: PutObject for version + PutObject for main file
+      assert.strictEqual(sentCommands.length, 2);
+      assert(sentCommands[0].input.Key.includes('/.da-versions/'));  // Version
+      assert.strictEqual(sentCommands[1].input.Key, 'testorg/images/photo.jpg');  // Main
+    });
+
+    it('PNG: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+      const sentCommands = [];
+      let callCount = 0;
+      
+      const mockGetObject = async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+        }
+        return {
+          status: 200,
+          body: new Uint8Array([0x89, 0x50, 0x4E, 0x47]),
+          contentLength: 4,
+          contentType: 'image/png',
+          etag: 'old-etag',
+          metadata: {
+            id: 'png-id-456',
+            version: 'old-version',
+            timestamp: '1234567890',
+            users: '["user@example.com"]',
+            path: 'images/graphic.png'
+          }
+        };
+      };
+
+      const mockS3Client = {
+        async send(cmd) {
+          sentCommands.push(cmd);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject
+        },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+      });
+
+      const pngData = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+      const pngFile = new File([pngData], 'graphic.png', { type: 'image/png' });
+
+      const env = {};
+      const daCtx = {
+        org: 'testorg',
+        bucket: 'test-bucket',
+        key: 'images/graphic.png',
+        users: [{ email: 'user@example.com' }]
+      };
+
+      const update = {
+        body: pngFile,
+        contentLength: pngData.length,
+        type: 'image/png'
+      };
+
+      // FIRST CALL - no version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 1);
+
+      // SECOND CALL - creates version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 2);
+    });
+
+    it('HTML: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+      const sentCommands = [];
+      let callCount = 0;
+      
+      const mockGetObject = async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+        }
+        return {
+          status: 200,
+          body: '<html><body><h1>Old</h1></body></html>',
+          contentLength: 40,
+          contentType: 'text/html',
+          etag: 'old-etag',
+          metadata: {
+            id: 'html-id-789',
+            version: 'old-version',
+            timestamp: '1234567890',
+            users: '["user@example.com"]',
+            path: 'pages/index.html'
+          }
+        };
+      };
+
+      const mockS3Client = {
+        async send(cmd) {
+          sentCommands.push(cmd);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject
+        },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+      });
+
+      const htmlContent = '<!DOCTYPE html><html><body><h1>New</h1></body></html>';
+      const htmlFile = new File([htmlContent], 'index.html', { type: 'text/html' });
+
+      const env = {};
+      const daCtx = {
+        org: 'testorg',
+        bucket: 'test-bucket',
+        key: 'pages/index.html',
+        users: [{ email: 'user@example.com' }]
+      };
+
+      const update = {
+        body: htmlFile,
+        contentLength: htmlContent.length,
+        type: 'text/html'
+      };
+
+      // FIRST CALL - no version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 1);
+
+      // SECOND CALL - creates version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 2);
+    });
+
+    it('JSON: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+      const sentCommands = [];
+      let callCount = 0;
+      
+      const mockGetObject = async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+        }
+        return {
+          status: 200,
+          body: JSON.stringify({ version: '1.0' }),
+          contentLength: 20,
+          contentType: 'application/json',
+          etag: 'old-etag',
+          metadata: {
+            id: 'json-id-abc',
+            version: 'old-version',
+            timestamp: '1234567890',
+            users: '["user@example.com"]',
+            path: 'config/settings.json'
+          }
+        };
+      };
+
+      const mockS3Client = {
+        async send(cmd) {
+          sentCommands.push(cmd);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject
+        },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+      });
+
+      const jsonContent = JSON.stringify({ version: '2.0', features: ['new'] });
+      const jsonFile = new File([jsonContent], 'settings.json', { type: 'application/json' });
+
+      const env = {};
+      const daCtx = {
+        org: 'testorg',
+        bucket: 'test-bucket',
+        key: 'config/settings.json',
+        users: [{ email: 'user@example.com' }]
+      };
+
+      const update = {
+        body: jsonFile,
+        contentLength: jsonContent.length,
+        type: 'application/json'
+      };
+
+      // FIRST CALL - no version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 1);
+
+      // SECOND CALL - creates version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 2);
+    });
+
+    it('PDF: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+      const sentCommands = [];
+      let callCount = 0;
+      
+      const mockGetObject = async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+        }
+        return {
+          status: 200,
+          body: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+          contentLength: 4,
+          contentType: 'application/pdf',
+          etag: 'old-etag',
+          metadata: {
+            id: 'pdf-id-def',
+            version: 'old-version',
+            timestamp: '1234567890',
+            users: '["user@example.com"]',
+            path: 'docs/report.pdf'
+          }
+        };
+      };
+
+      const mockS3Client = {
+        async send(cmd) {
+          sentCommands.push(cmd);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject
+        },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+      });
+
+      const pdfData = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34]);
+      const pdfFile = new File([pdfData], 'report.pdf', { type: 'application/pdf' });
+
+      const env = {};
+      const daCtx = {
+        org: 'testorg',
+        bucket: 'test-bucket',
+        key: 'docs/report.pdf',
+        users: [{ email: 'user@example.com' }]
+      };
+
+      const update = {
+        body: pdfFile,
+        contentLength: pdfData.length,
+        type: 'application/pdf'
+      };
+
+      // FIRST CALL - no version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 1);
+
+      // SECOND CALL - creates version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 2);
+    });
+
+    it('MP4: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+      const sentCommands = [];
+      let callCount = 0;
+      
+      const mockGetObject = async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+        }
+        return {
+          status: 200,
+          body: new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]),
+          contentLength: 8,
+          contentType: 'video/mp4',
+          etag: 'old-etag',
+          metadata: {
+            id: 'mp4-id-ghi',
+            version: 'old-version',
+            timestamp: '1234567890',
+            users: '["user@example.com"]',
+            path: 'videos/demo.mp4'
+          }
+        };
+      };
+
+      const mockS3Client = {
+        async send(cmd) {
+          sentCommands.push(cmd);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject
+        },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+      });
+
+      const mp4Data = new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D]);
+      const mp4File = new File([mp4Data], 'demo.mp4', { type: 'video/mp4' });
+
+      const env = {};
+      const daCtx = {
+        org: 'testorg',
+        bucket: 'test-bucket',
+        key: 'videos/demo.mp4',
+        users: [{ email: 'user@example.com' }]
+      };
+
+      const update = {
+        body: mp4File,
+        contentLength: mp4Data.length,
+        type: 'video/mp4'
+      };
+
+      // FIRST CALL - no version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 1);
+
+      // SECOND CALL - creates version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 2);
+    });
+
+    it('SVG: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+      const sentCommands = [];
+      let callCount = 0;
+      
+      const mockGetObject = async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+        }
+        return {
+          status: 200,
+          body: '<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100"/></svg>',
+          contentLength: 80,
+          contentType: 'image/svg+xml',
+          etag: 'old-etag',
+          metadata: {
+            id: 'svg-id-jkl',
+            version: 'old-version',
+            timestamp: '1234567890',
+            users: '["user@example.com"]',
+            path: 'images/icon.svg'
+          }
+        };
+      };
+
+      const mockS3Client = {
+        async send(cmd) {
+          sentCommands.push(cmd);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject
+        },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+      });
+
+      const svgContent = '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40"/></svg>';
+      const svgFile = new File([svgContent], 'icon.svg', { type: 'image/svg+xml' });
+
+      const env = {};
+      const daCtx = {
+        org: 'testorg',
+        bucket: 'test-bucket',
+        key: 'images/icon.svg',
+        users: [{ email: 'user@example.com' }]
+      };
+
+      const update = {
+        body: svgFile,
+        contentLength: svgContent.length,
+        type: 'image/svg+xml'
+      };
+
+      // FIRST CALL - no version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 1);
+
+      // SECOND CALL - creates version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 2);
+    });
+
+    it('ZIP: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+      const sentCommands = [];
+      let callCount = 0;
+      
+      const mockGetObject = async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+        }
+        return {
+          status: 200,
+          body: new Uint8Array([0x50, 0x4B, 0x03, 0x04]),
+          contentLength: 4,
+          contentType: 'application/zip',
+          etag: 'old-etag',
+          metadata: {
+            id: 'zip-id-mno',
+            version: 'old-version',
+            timestamp: '1234567890',
+            users: '["user@example.com"]',
+            path: 'archives/data.zip'
+          }
+        };
+      };
+
+      const mockS3Client = {
+        async send(cmd) {
+          sentCommands.push(cmd);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject
+        },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+      });
+
+      const zipData = new Uint8Array([0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]);
+      const zipFile = new File([zipData], 'data.zip', { type: 'application/zip' });
+
+      const env = {};
+      const daCtx = {
+        org: 'testorg',
+        bucket: 'test-bucket',
+        key: 'archives/data.zip',
+        users: [{ email: 'user@example.com' }]
+      };
+
+      const update = {
+        body: zipFile,
+        contentLength: zipData.length,
+        type: 'application/zip'
+      };
+
+      // FIRST CALL - no version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 1);
+
+      // SECOND CALL - creates version
+      sentCommands.length = 0;
+      await putObjectWithVersion(env, daCtx, update);
+      assert.strictEqual(sentCommands.length, 2);
+    });
+  });
 });
