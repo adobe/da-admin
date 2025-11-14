@@ -866,4 +866,260 @@ describe('Version Put', () => {
     assert.strictEqual(putCommand.input.Body, 'test body');
     assert.strictEqual(putCommand.input.ContentLength, 9);
   });
+
+  it('Test putVersion with JPEG binary content', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const { putVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    // Simulate JPEG binary data
+    const jpegData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46]);
+    const jpegFile = new File([jpegData], 'image.jpg', { type: 'image/jpeg' });
+
+    const testParams = {
+      Bucket: 'media-bucket',
+      Org: 'testorg',
+      Body: jpegFile,
+      ID: 'jpeg-id-123',
+      Version: 'jpeg-version-1',
+      Ext: 'jpg',
+      Metadata: { Users: '["user@example.com"]', Path: 'images/photo.jpg' },
+      ContentType: 'image/jpeg'
+    };
+
+    const result = await putVersion({}, testParams);
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(sentCommands.length, 1);
+    const putCommand = sentCommands[0];
+    assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
+    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/jpeg-id-123/jpeg-version-1.jpg');
+    assert.strictEqual(putCommand.input.Body, jpegFile);
+    assert.strictEqual(putCommand.input.ContentType, 'image/jpeg');
+    assert.strictEqual(putCommand.input.Metadata.Users, '["user@example.com"]');
+    assert.strictEqual(putCommand.input.Metadata.Path, 'images/photo.jpg');
+  });
+
+  it('Test putVersion with PNG binary content', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const { putVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    // Simulate PNG binary data
+    const pngData = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    const pngFile = new File([pngData], 'image.png', { type: 'image/png' });
+
+    const testParams = {
+      Bucket: 'media-bucket',
+      Org: 'testorg',
+      Body: pngFile,
+      ID: 'png-id-456',
+      Version: 'png-version-1',
+      Ext: 'png',
+      Metadata: { Users: '["user@example.com"]', Path: 'images/graphic.png' },
+      ContentType: 'image/png'
+    };
+
+    const result = await putVersion({}, testParams);
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(sentCommands.length, 1);
+    const putCommand = sentCommands[0];
+    assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
+    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/png-id-456/png-version-1.png');
+    assert.strictEqual(putCommand.input.Body, pngFile);
+    assert.strictEqual(putCommand.input.ContentType, 'image/png');
+  });
+
+  it('Test putVersion with MP4 video content', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const { putVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    // Simulate MP4 binary data
+    const mp4Data = new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]);
+    const mp4File = new File([mp4Data], 'video.mp4', { type: 'video/mp4' });
+
+    const testParams = {
+      Bucket: 'media-bucket',
+      Org: 'testorg',
+      Body: mp4File,
+      ID: 'video-id-789',
+      Version: 'video-version-1',
+      Ext: 'mp4',
+      Metadata: { Users: '["user@example.com"]', Path: 'videos/demo.mp4' },
+      ContentType: 'video/mp4'
+    };
+
+    const result = await putVersion({}, testParams);
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(sentCommands.length, 1);
+    const putCommand = sentCommands[0];
+    assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
+    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/video-id-789/video-version-1.mp4');
+    assert.strictEqual(putCommand.input.Body, mp4File);
+    assert.strictEqual(putCommand.input.ContentType, 'video/mp4');
+  });
+
+  it('Test putVersion with SVG image content', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const { putVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    // SVG is text-based but still an image
+    const svgContent = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="red"/></svg>';
+    const svgFile = new File([svgContent], 'graphic.svg', { type: 'image/svg+xml' });
+
+    const testParams = {
+      Bucket: 'media-bucket',
+      Org: 'testorg',
+      Body: svgFile,
+      ID: 'svg-id-abc',
+      Version: 'svg-version-1',
+      Ext: 'svg',
+      Metadata: { Users: '["user@example.com"]', Path: 'images/icon.svg' },
+      ContentType: 'image/svg+xml'
+    };
+
+    const result = await putVersion({}, testParams);
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(sentCommands.length, 1);
+    const putCommand = sentCommands[0];
+    assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
+    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/svg-id-abc/svg-version-1.svg');
+    assert.strictEqual(putCommand.input.Body, svgFile);
+    assert.strictEqual(putCommand.input.ContentType, 'image/svg+xml');
+  });
+
+  it('Test putObjectWithVersion with JPEG preserves binary content on update', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    // Simulate existing JPEG file
+    const existingJpegData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46]);
+    const mockGetObject = async () => ({
+      status: 200,
+      body: existingJpegData,
+      contentLength: existingJpegData.length,
+      contentType: 'image/jpeg',
+      etag: 'test-etag',
+      metadata: {
+        id: 'jpeg-id-existing',
+        version: 'jpeg-version-old',
+        timestamp: '1234567890',
+        users: '["olduser@example.com"]',
+        path: 'images/photo.jpg'
+      }
+    });
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client,
+        ifMatch: () => mockS3Client,
+      },
+    });
+
+    const env = {};
+    const daCtx = {
+      org: 'testorg',
+      ext: 'jpg',
+      users: [{ email: 'newuser@example.com' }]
+    };
+
+    // New JPEG data to upload
+    const newJpegData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x10, 0x4A, 0x46]);
+    const newJpegFile = new File([newJpegData], 'photo.jpg', { type: 'image/jpeg' });
+
+    const update = {
+      bucket: 'media-bucket',
+      org: 'testorg',
+      key: 'images/photo.jpg',
+      body: newJpegFile,
+      type: 'image/jpeg'
+    };
+
+    const result = await putObjectWithVersion(env, daCtx, update, true);
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.metadata.id, 'jpeg-id-existing');
+
+    // Should have 2 commands: one for version, one for main object
+    assert.strictEqual(sentCommands.length, 2);
+
+    // First command should store the old version
+    const versionCommand = sentCommands[0];
+    assert.strictEqual(versionCommand.input.Bucket, 'media-bucket');
+    assert(versionCommand.input.Key.includes('.da-versions/jpeg-id-existing/'));
+    assert(versionCommand.input.Key.endsWith('.jpg'));
+    assert.strictEqual(versionCommand.input.Body, existingJpegData);
+    assert.strictEqual(versionCommand.input.ContentType, 'image/jpeg');
+    assert.strictEqual(versionCommand.input.ContentLength, existingJpegData.length);
+
+    // Second command should store the new content
+    const mainCommand = sentCommands[1];
+    assert.strictEqual(mainCommand.input.Bucket, 'media-bucket');
+    assert.strictEqual(mainCommand.input.Key, 'testorg/images/photo.jpg');
+    assert.strictEqual(mainCommand.input.Body, newJpegFile);
+    assert.strictEqual(mainCommand.input.ContentType, 'image/jpeg');
+  });
 });
