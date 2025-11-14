@@ -88,6 +88,10 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     return { status: 409, metadata: { id: ID } };
   }
 
+  // Only create versions for HTML and JSON files
+  const contentType = update.type || current.contentType;
+  const createVersion = shouldCreateVersion(contentType);
+
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
   const input = buildInput(update);
@@ -96,11 +100,14 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
 
   if (current.status === 404) {
     const client = ifNoneMatch(config);
+    const metadata = { ID, Users, Timestamp, Path };
+    // Only include Version metadata for files that support versioning
+    if (createVersion) {
+      metadata.Version = Version;
+    }
     const command = new PutObjectCommand({
       ...input,
-      Metadata: {
-        ID, Version, Users, Timestamp, Path,
-      },
+      Metadata: metadata,
     });
     try {
       const resp = await client.send(command);
@@ -118,10 +125,6 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
       return { status, metadata: { id: ID } };
     }
   }
-
-  // Only create versions for HTML and JSON files
-  const contentType = update.type || current.contentType;
-  const createVersion = shouldCreateVersion(contentType);
 
   const pps = current.metadata?.preparsingstore || '0';
   let storeBody = !body && pps === '0';
@@ -166,11 +169,14 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   }
 
   const client = ifMatch(config, `${current.etag}`);
+  const metadata = { ID, Users, Timestamp, Path, Preparsingstore };
+  // Only include Version metadata for files that support versioning
+  if (createVersion) {
+    metadata.Version = crypto.randomUUID();
+  }
   const command = new PutObjectCommand({
     ...input,
-    Metadata: {
-      ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Preparsingstore,
-    },
+    Metadata: metadata,
   });
   try {
     const resp = await client.send(command);

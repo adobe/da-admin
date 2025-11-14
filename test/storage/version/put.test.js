@@ -388,7 +388,7 @@ describe('Version Put', () => {
 
     const env = {};
     const daCtx= { bucket: 'b-b', org: 'myorg' };
-    const update = { bucket: 'b-b', org: 'myorg', key: 'a/b/c' };
+    const update = { bucket: 'b-b', org: 'myorg', key: 'a/b/c.html', type: 'text/html' };
     const resp = await putObjectWithVersion(env, daCtx, update, true);
     assert.equal(201, resp.status);
     assert(resp.metadata.id, 'The ID should be set');
@@ -396,7 +396,7 @@ describe('Version Put', () => {
     assert.equal(1, s3Sent.length);
     assert.equal('b-b', s3Sent[0].input.Bucket);
     assert(s3Sent[0].input.Metadata.ID);
-    assert.equal('a/b/c', s3Sent[0].input.Metadata.Path);
+    assert.equal('a/b/c.html', s3Sent[0].input.Metadata.Path);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
     assert(s3Sent[0].input.Metadata.Version);
   });
