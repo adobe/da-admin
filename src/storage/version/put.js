@@ -100,7 +100,9 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
 
   if (current.status === 404) {
     const client = ifNoneMatch(config);
-    const metadata = { ID, Users, Timestamp, Path };
+    const metadata = {
+      ID, Users, Timestamp, Path,
+    };
     // Only include Version metadata for files that support versioning
     if (createVersion) {
       metadata.Version = Version;
@@ -169,7 +171,9 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   }
 
   const client = ifMatch(config, `${current.etag}`);
-  const metadata = { ID, Users, Timestamp, Path, Preparsingstore };
+  const metadata = {
+    ID, Users, Timestamp, Path, Preparsingstore,
+  };
   // Only include Version metadata for files that support versioning
   if (createVersion) {
     metadata.Version = crypto.randomUUID();
