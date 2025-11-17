@@ -112,12 +112,9 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     }
   }
 
-  const pps = current.metadata?.preparsingstore || '0';
-
-  // Store the body if preparsingstore is not defined, so a once-off store
-  let storeBody = !body && pps === '0';
-  const Preparsingstore = storeBody ? Timestamp : pps;
-  let Label = storeBody ? 'Collab Parse' : update.label;
+  const Preparsingstore = current.metadata?.preparsingstore || '0';
+  let storeBody = false;
+  let Label = update.label;
 
   if (daCtx.method === 'PUT'
     && daCtx.ext === 'html'
