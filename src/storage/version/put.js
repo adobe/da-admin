@@ -129,25 +129,28 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     Label = 'Restore Point';
   }
 
-  const versionResp = await putVersion(config, {
-    Bucket: input.Bucket,
-    Org: daCtx.org,
-    Body: (body || storeBody ? current.body : ''),
-    ContentLength: (body || storeBody ? current.contentLength : undefined),
-    ContentType: current.contentType,
-    ID,
-    Version,
-    Ext: daCtx.ext,
-    Metadata: {
-      Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
-      Timestamp: current.metadata?.timestamp || Timestamp,
-      Path: current.metadata?.path || Path,
-      Label,
-    },
-  });
+  // Only create version if we have content to store
+  if (body || storeBody) {
+    const versionResp = await putVersion(config, {
+      Bucket: input.Bucket,
+      Org: daCtx.org,
+      Body: current.body,
+      ContentLength: current.contentLength,
+      ContentType: current.contentType,
+      ID,
+      Version,
+      Ext: daCtx.ext,
+      Metadata: {
+        Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
+        Timestamp: current.metadata?.timestamp || Timestamp,
+        Path: current.metadata?.path || Path,
+        Label,
+      },
+    });
 
-  if (versionResp.status !== 200 && versionResp.status !== 412) {
-    return { status: versionResp.status, metadata: { id: ID } };
+    if (versionResp.status !== 200 && versionResp.status !== 412) {
+      return { status: versionResp.status, metadata: { id: ID } };
+    }
   }
 
   const client = ifMatch(config, `${current.etag}`);
