@@ -129,4 +129,64 @@ describe('DA context', () => {
       assert.strictEqual(daCtx.aemPathname, '/nft/blockchain.png');
     });
   });
+
+  describe('Conditional headers', async () => {
+    it('should extract If-Match header', async () => {
+      const req = {
+        url: 'http://localhost:8787/source/org/site/file.html',
+        headers: {
+          get: (name) => {
+            if (name === 'if-match') return '"etag123"';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.conditionalHeaders.ifMatch, '"etag123"');
+      assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, null);
+    });
+
+    it('should extract If-None-Match header', async () => {
+      const req = {
+        url: 'http://localhost:8787/source/org/site/file.html',
+        headers: {
+          get: (name) => {
+            if (name === 'if-none-match') return '*';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, '*');
+      assert.strictEqual(daCtx.conditionalHeaders.ifMatch, null);
+    });
+
+    it('should handle both headers', async () => {
+      const req = {
+        url: 'http://localhost:8787/source/org/site/file.html',
+        headers: {
+          get: (name) => {
+            if (name === 'if-match') return '"abc"';
+            if (name === 'if-none-match') return '"xyz"';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.conditionalHeaders.ifMatch, '"abc"');
+      assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, '"xyz"');
+    });
+
+    it('should handle missing headers', async () => {
+      const req = {
+        url: 'http://localhost:8787/source/org/site/file.html',
+        headers: {
+          get: () => null,
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.conditionalHeaders.ifMatch, null);
+      assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, null);
+    });
+  });
 });
