@@ -35,6 +35,10 @@ export default async function getDaCtx(req, env) {
   const [org, ...parts] = split;
   const bucket = env.AEM_BUCKET_NAME;
 
+  // Extract conditional headers
+  const ifMatch = req.headers?.get('if-match') || null;
+  const ifNoneMatch = req.headers?.get('if-none-match') || null;
+
   // Set base details
   const daCtx = {
     path: pathname,
@@ -45,6 +49,10 @@ export default async function getDaCtx(req, env) {
     fullKey,
     origin: new URL(req.url).origin,
     method: req.method,
+    conditionalHeaders: {
+      ifMatch,
+      ifNoneMatch,
+    },
   };
 
   // Sanitize the remaining path parts
