@@ -8,6 +8,7 @@ env:
 permissions:
   issues: read # needed by semantic-release
   pull-requests: write # needed by semantic-release
+  contents: write  # semantic-release-dry verifies the write permissions
 
 jobs:
   test:
