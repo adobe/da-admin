@@ -4,7 +4,7 @@ info:
   title: DA Admin API
   license:
     name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
   x-logo:
     url: https://raw.githubusercontent.com/auniverseaway/da-admin/main/docs/openapi/img/da-logo.png
   description: |
