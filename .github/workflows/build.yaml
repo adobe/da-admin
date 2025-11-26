@@ -1,6 +1,14 @@
 name: Build
 on: [push]
 
+env:
+  CI_BUILD_NUM: ${{ github.run_id }}
+  CI_BRANCH: ${{ github.ref_name }}
+
+permissions:
+  issues: read # needed by semantic-release
+  pull-requests: write # needed by semantic-release
+
 jobs:
   test:
     name: Test
@@ -30,6 +38,10 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/lcov.info
+      - name: Semantic Release (Dry Run)
+        run: npm run semantic-release-dry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     name: Deploy
@@ -38,8 +50,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v5
-      - name: Deploy
-        uses: cloudflare/wrangler-action@v3
-        with:
+      - run: npm install
+      - name: Semantic Release
+        run: npm run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           apiToken: ${{secrets.CLOUDFLARE_API_TOKEN}}
           accountId: ${{secrets.CLOUDFLARE_ACCOUNT_ID}}

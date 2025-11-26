@@ -15,18 +15,24 @@
     "dev": "wrangler dev",
     "deploy:prod": "wrangler deploy",
     "deploy:stage": "wrangler deploy --env stage",
-    "start": "wrangler dev"
+    "start": "wrangler dev",
+    "semantic-release": "semantic-release",
+    "semantic-release-dry": "semantic-release --dry-run --no-ci --branches $CI_BRANCH"
   },
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
     "@adobe/eslint-config-helix": "2.0.9",
     "@redocly/cli": "^1.4.1",
+    "@semantic-release/changelog": "6.0.3",
+    "@semantic-release/exec": "7.1.0",
+    "@semantic-release/git": "10.0.1",
     "aws-sdk-client-mock": "^4.0.0",
     "c8": "^8.0.1",
     "eslint": "8.56.0",
     "esmock": "2.7.3",
     "mocha": "^10.2.0",
+    "semantic-release": "25.0.2",
     "wrangler": "^4.10.0"
   },
   "lint-staged": {
