@@ -1,4 +1,16 @@
-import assert from 'assert';
+/*
+ * Copyright 2025 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
+/* eslint-disable no-unused-vars */
+import assert from 'node:assert';
 
 import getKv from '../../../src/storage/kv/get.js';
 import putKv from '../../../src/storage/kv/put.js';
@@ -20,8 +32,8 @@ describe('KV storage', () => {
   it('Get success', async () => {
     const env = {
       DA_CONFIG: {
-        get: () => { return MOCK_CONFIG },
-      }
+        get: () => MOCK_CONFIG,
+      },
     };
     const daCtx = { fullKey: 'adobe/geometrixx' };
 
@@ -31,7 +43,7 @@ describe('KV storage', () => {
   });
 
   it('Get not found', async () => {
-    const env = { DA_CONFIG: { get: () => { return null } } };
+    const env = { DA_CONFIG: { get: () => null } };
     const daCtx = { fullKey: 'adobe/geometrixx' };
 
     const resp = await getKv(env, daCtx);
@@ -43,12 +55,12 @@ describe('KV storage', () => {
     const formData = new FormData();
     formData.append('config', MOCK_CONFIG);
 
-    const req = { formData: () => { return formData; } };
+    const req = { formData: () => formData };
     const env = {
       DA_CONFIG: {
-        put: () => { return undefined },
-        get: () => { return MOCK_CONFIG },
-      }
+        put: () => undefined,
+        get: () => MOCK_CONFIG,
+      },
     };
     const daCtx = { fullKey: 'adobe/geometrixx' };
     const resp = await putKv(req, env, daCtx);
@@ -57,7 +69,7 @@ describe('KV storage', () => {
   });
 
   it('Put without form data', async () => {
-    const req = { formData: () => { return null; } };
+    const req = { formData: () => null };
     const env = {};
     const daCtx = { fullKey: 'adobe/geometrixx' };
     const resp = await putKv(req, env, daCtx);
@@ -69,12 +81,12 @@ describe('KV storage', () => {
     const formData = new FormData();
     formData.append('config', 'abc');
 
-    const req = { formData: () => { return formData; } };
+    const req = { formData: () => formData };
     const env = {
       DA_CONFIG: {
-        put: () => { return undefined },
-        get: () => { return MOCK_CONFIG },
-      }
+        put: () => undefined,
+        get: () => MOCK_CONFIG,
+      },
     };
     const daCtx = { fullKey: 'adobe/geometrixx' };
     const resp = await putKv(req, env, daCtx);
@@ -92,18 +104,18 @@ describe('Validate permission sheet', () => {
         { path: '/+*', actions: 'read', groups: 'me@foo.org' },
         { path: 'CONFIG', actions: 'read', groups: 'hi@foo.org' },
         { path: 'CONFIG', actions: 'write', groups: 'me@foo.org' },
-      ]
+      ],
     };
     const formData = new FormData();
     formData.append('config', JSON.stringify(config));
 
-    const req = { formData: () => { return formData; } };
+    const req = { formData: () => formData };
     const stored = [];
     const env = {
       DA_CONFIG: {
         put: (key, value) => { stored.push(value); },
-        get: (key) => { return "dummy"; }
-      }
+        get: (key) => 'dummy',
+      },
     };
 
     const resp = await putKv(req, env, {});
@@ -119,20 +131,20 @@ describe('Validate permission sheet', () => {
           { path: '/+*', actions: 'read', groups: 'me@foo.org' },
           { path: 'CONFIG', actions: 'read', groups: 'hi@foo.org' },
           { path: 'CONFIG', actions: 'write', groups: 'me@foo.org' },
-        ]
+        ],
       },
-      blah: {}
+      blah: {},
     };
     const formData = new FormData();
     formData.append('config', JSON.stringify(config));
 
-    const req = { formData: () => { return formData; } };
+    const req = { formData: () => formData };
     const stored = [];
     const env = {
       DA_CONFIG: {
         put: (key, value) => { stored.push(value); },
-        get: (key) => { return "dummy"; }
-      }
+        get: (key) => 'dummy',
+      },
     };
 
     const resp = await putKv(req, env, {});
@@ -147,19 +159,19 @@ describe('Validate permission sheet', () => {
       ':type': 'sheet',
       data: [
         { path: '/+*', actions: 'write', groups: 'me@foo.org' },
-        { path: 'CONFIG', actions: 'read', groups: 'me@foo.org' }
-      ]
+        { path: 'CONFIG', actions: 'read', groups: 'me@foo.org' },
+      ],
     };
     const formData = new FormData();
     formData.append('config', JSON.stringify(config));
 
-    const req = { formData: () => { return formData; } };
+    const req = { formData: () => formData };
     const stored = [];
     const env = {
       DA_CONFIG: {
         put: (key, value) => { stored.push(value); },
-        get: (key) => { return "dummy"; }
-      }
+        get: (key) => 'dummy',
+      },
     };
 
     const resp = await putKv(req, env, {});
@@ -174,21 +186,21 @@ describe('Validate permission sheet', () => {
       permissions: {
         data: [
           { path: '/+*', actions: 'write', groups: 'me@foo.org' },
-          { path: 'CONFIG', actions: 'read', groups: 'me@foo.org' }
+          { path: 'CONFIG', actions: 'read', groups: 'me@foo.org' },
         ],
       },
-      foo: {}
+      foo: {},
     };
     const formData = new FormData();
     formData.append('config', JSON.stringify(config));
 
-    const req = { formData: () => { return formData; } };
+    const req = { formData: () => formData };
     const stored = [];
     const env = {
       DA_CONFIG: {
         put: (key, value) => { stored.push(value); },
-        get: (key) => { return "dummy"; }
-      }
+        get: (key) => 'dummy',
+      },
     };
 
     const resp = await putKv(req, env, {});
@@ -202,18 +214,18 @@ describe('Validate permission sheet', () => {
     const config = {
       ':sheetname': 'other',
       ':type': 'sheet',
-      data: []
+      data: [],
     };
     const formData = new FormData();
     formData.append('config', JSON.stringify(config));
 
-    const req = { formData: () => { return formData; } };
+    const req = { formData: () => formData };
     const stored = [];
     const env = {
       DA_CONFIG: {
         put: (key, value) => { stored.push(value); },
-        get: (key) => { return "dummy"; }
-      }
+        get: (key) => 'dummy',
+      },
     };
 
     const resp = await putKv(req, env, {});

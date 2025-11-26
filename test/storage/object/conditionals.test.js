@@ -18,15 +18,14 @@ import {
 } from '@aws-sdk/client-s3';
 import { mockClient } from 'aws-sdk-client-mock';
 
-const s3Mock = mockClient(S3Client);
-
 import getObject from '../../../src/storage/object/get.js';
 import { putObjectWithVersion } from '../../../src/storage/version/put.js';
+
+const s3Mock = mockClient(S3Client);
 
 const ORG = 'adobe';
 const KEY = 'wknd/index.html';
 const BUCKET = 'root-bucket';
-const S3_KEY = `${ORG}/${KEY}`;
 
 describe('Conditional Headers', () => {
   beforeEach(() => {
@@ -41,7 +40,12 @@ describe('Conditional Headers', () => {
         .rejects({ $metadata: { httpStatusCode: 304 } });
 
       const conditionalHeaders = { ifNoneMatch: etag };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       assert.strictEqual(resp.status, 304);
       assert.strictEqual(resp.body, '');
@@ -61,7 +65,12 @@ describe('Conditional Headers', () => {
         });
 
       const conditionalHeaders = { ifNoneMatch: '"abc123"' };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       assert.strictEqual(resp.status, 200);
       assert.deepStrictEqual(resp.body, Body);
@@ -74,7 +83,12 @@ describe('Conditional Headers', () => {
         .rejects({ $metadata: { httpStatusCode: 304 } });
 
       const conditionalHeaders = { ifNoneMatch: '*' };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       assert.strictEqual(resp.status, 304);
     });
@@ -87,7 +101,12 @@ describe('Conditional Headers', () => {
         .rejects({ $metadata: { httpStatusCode: 412 } });
 
       const conditionalHeaders = { ifMatch: '*' };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       assert.strictEqual(resp.status, 412);
     });
@@ -105,7 +124,12 @@ describe('Conditional Headers', () => {
         });
 
       const conditionalHeaders = { ifMatch: '*' };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       assert.strictEqual(resp.status, 200);
       assert.deepStrictEqual(resp.body, Body);
@@ -117,7 +141,12 @@ describe('Conditional Headers', () => {
         .rejects({ $metadata: { httpStatusCode: 412 } });
 
       const conditionalHeaders = { ifMatch: '"wrongetag"' };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       assert.strictEqual(resp.status, 412);
     });
@@ -189,7 +218,9 @@ describe('Conditional Headers', () => {
         .resolves({ $metadata: { httpStatusCode: 200 } });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifMatch: '*' };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -213,7 +244,9 @@ describe('Conditional Headers', () => {
         .rejects({ $metadata: { httpStatusCode: 412 } });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifMatch: '"wrongetag"' };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -234,7 +267,9 @@ describe('Conditional Headers', () => {
         .resolves({ $metadata: { httpStatusCode: 200 } });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifNoneMatch: '*' };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -255,7 +290,9 @@ describe('Conditional Headers', () => {
         });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifNoneMatch: '*' };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -272,7 +309,9 @@ describe('Conditional Headers', () => {
         .rejects({ $metadata: { httpStatusCode: 412 } });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifNoneMatch: matchingEtag };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -290,9 +329,10 @@ describe('Conditional Headers', () => {
         .resolves({ $metadata: { httpStatusCode: 404 } })
         .on(PutObjectCommand)
         .callsFake(() => {
-          callCount++;
+          callCount += 1;
           if (callCount === 1) {
             // First call fails with 412
+            // eslint-disable-next-line prefer-promise-reject-errors
             return Promise.reject({ $metadata: { httpStatusCode: 412 } });
           }
           // Second call succeeds
@@ -300,7 +340,9 @@ describe('Conditional Headers', () => {
         });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       // No clientConditionals - should use internal retry logic
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, null);
@@ -319,7 +361,12 @@ describe('Conditional Headers', () => {
         .rejects({ $metadata: { httpStatusCode: 304 } });
 
       const conditionalHeaders = { ifMatch: '"abc"', ifNoneMatch: '"abc"' };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       // If-None-Match takes precedence for GET
       assert.strictEqual(resp.status, 304);
@@ -340,7 +387,9 @@ describe('Conditional Headers', () => {
         .resolves({ $metadata: { httpStatusCode: 200 } });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifMatch: '*', ifNoneMatch: '*' };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -356,7 +405,12 @@ describe('Conditional Headers', () => {
         .rejects({ $metadata: { httpStatusCode: 304 }, ETag: etag });
 
       const conditionalHeaders = { ifNoneMatch: etag };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       assert.strictEqual(resp.status, 304);
       assert.strictEqual(resp.etag, etag);
@@ -373,7 +427,9 @@ describe('Conditional Headers', () => {
           ContentType: 'text/html',
           ContentLength: 15,
           ETag: actualEtag,
-          Metadata: { id: 'doc123', version: 'v1', timestamp: '123456', preparsingstore: '123456' },
+          Metadata: {
+            id: 'doc123', version: 'v1', timestamp: '123456', preparsingstore: '123456',
+          },
           $metadata: { httpStatusCode: 200 },
         })
         .on(PutObjectCommand)
@@ -384,7 +440,9 @@ describe('Conditional Headers', () => {
         });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifMatch: '*' };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -406,7 +464,12 @@ describe('Conditional Headers', () => {
         });
 
       const conditionalHeaders = { ifNoneMatch: '""' };
-      const resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false, conditionalHeaders);
+      const resp = await getObject(
+        {},
+        { bucket: BUCKET, org: ORG, key: KEY },
+        false,
+        conditionalHeaders,
+      );
 
       // Should handle empty ETag without crashing
       assert(resp.status === 200 || resp.status === 304);
@@ -481,7 +544,9 @@ describe('Conditional Headers', () => {
         });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifNoneMatch: '*' };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -497,7 +562,9 @@ describe('Conditional Headers', () => {
         .resolves({ $metadata: { httpStatusCode: 404 } });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
       const clientConditionals = { ifMatch: '*' };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
@@ -516,7 +583,9 @@ describe('Conditional Headers', () => {
         .resolves({ $metadata: { httpStatusCode: 200 }, ETag: newEtag });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, null);
 
@@ -534,14 +603,18 @@ describe('Conditional Headers', () => {
           ContentType: 'text/html',
           ContentLength: 10,
           ETag: oldEtag,
-          Metadata: { id: 'doc123', version: 'v1', timestamp: '123456', preparsingstore: '123456' },
+          Metadata: {
+            id: 'doc123', version: 'v1', timestamp: '123456', preparsingstore: '123456',
+          },
           $metadata: { httpStatusCode: 200 },
         })
         .on(PutObjectCommand)
         .resolves({ $metadata: { httpStatusCode: 200 }, ETag: newEtag });
 
       const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = { bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html' };
+      const update = {
+        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
+      };
 
       const resp = await putObjectWithVersion({}, daCtx, update, false, null, null);
 
