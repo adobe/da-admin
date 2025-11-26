@@ -163,12 +163,9 @@ export async function putObjectWithVersion(
     }
   }
 
-  const pps = current.metadata?.preparsingstore || '0';
-
-  // Store the body if preparsingstore is not defined, so a once-off store
-  let storeBody = !body && pps === '0';
-  const Preparsingstore = storeBody ? Timestamp : pps;
-  let Label = storeBody ? 'Collab Parse' : update.label;
+  const Preparsingstore = current.metadata?.preparsingstore || '0';
+  let storeBody = false;
+  let Label = update.label;
 
   if (daCtx.method === 'PUT'
     && daCtx.ext === 'html'
@@ -183,25 +180,28 @@ export async function putObjectWithVersion(
     Label = 'Restore Point';
   }
 
-  const versionResp = await putVersion(config, {
-    Bucket: input.Bucket,
-    Org: daCtx.org,
-    Body: (body || storeBody ? current.body : ''),
-    ContentLength: (body || storeBody ? current.contentLength : undefined),
-    ContentType: current.contentType,
-    ID,
-    Version,
-    Ext: daCtx.ext,
-    Metadata: {
-      Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
-      Timestamp: current.metadata?.timestamp || Timestamp,
-      Path: current.metadata?.path || Path,
-      Label,
-    },
-  });
+  // Only create version if we have content to store
+  if (body || storeBody) {
+    const versionResp = await putVersion(config, {
+      Bucket: input.Bucket,
+      Org: daCtx.org,
+      Body: current.body,
+      ContentLength: current.contentLength,
+      ContentType: current.contentType,
+      ID,
+      Version,
+      Ext: daCtx.ext,
+      Metadata: {
+        Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
+        Timestamp: current.metadata?.timestamp || Timestamp,
+        Path: current.metadata?.path || Path,
+        Label,
+      },
+    });
 
-  if (versionResp.status !== 200 && versionResp.status !== 412) {
-    return { status: versionResp.status, metadata: { id: ID } };
+    if (versionResp.status !== 200 && versionResp.status !== 412) {
+      return { status: versionResp.status, metadata: { id: ID } };
+    }
   }
 
   // Use client-provided If-Match if available, otherwise use current ETag

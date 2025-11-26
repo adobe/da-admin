@@ -286,7 +286,7 @@ describe('Version Put', () => {
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
   });
 
-  it('Put Object With Version don\'t store content', async () => {
+  it('Put Object With Version don\'t store content - no version created', async () => {
     const mockGetObject = async (e, u, h) => {
       if (!h) {
         return {
@@ -335,14 +335,10 @@ describe('Version Put', () => {
     const resp = await putObjectWithVersion(env, daCtx, update, false);
     assert.equal(202, resp.status);
     assert.equal('q123-456', resp.metadata.id);
-    assert.equal(1, s3VersionSent.length);
-    assert.equal('', s3VersionSent[0].input.Body);
-    assert.equal('bbb', s3VersionSent[0].input.Bucket);
-    assert.equal('myorg/.da-versions/q123-456/ver123.html', s3VersionSent[0].input.Key);
-    assert.equal('[{"email":"anonymous"}]', s3VersionSent[0].input.Metadata.Users);
-    assert.equal('a/x.html', s3VersionSent[0].input.Metadata.Path);
-    assert(s3VersionSent[0].input.Metadata.Timestamp > 0);
+    // No version created when body parameter is false
+    assert.equal(0, s3VersionSent.length);
 
+    // Only main file update
     assert.equal(1, s3Sent.length);
     assert.equal('new-body', s3Sent[0].input.Body);
     assert.equal('bbb', s3Sent[0].input.Bucket);
@@ -352,7 +348,6 @@ describe('Version Put', () => {
     assert.equal('[{\"email\":\"foo@acme.org\"},{\"email\":\"bar@acme.org\"}]', s3Sent[0].input.Metadata.Users);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
-    assert((s3Sent[0].input.Metadata.Preparsingstore - s3Sent[0].input.Metadata.Timestamp) < 100);
   });
 
   it('Put First Object With Version', async () => {
@@ -535,7 +530,7 @@ describe('Version Put', () => {
     assert(s3INMSent[0].input.Body !== s3Sent[0].input.Body )
   });
 
-  it('Test putObjectWithVersion HEAD', async () => {
+  it('Test putObjectWithVersion HEAD - no version created', async () => {
     const mockGetObject = async () => {
       const metadata = {
         id: 'idabc',
@@ -545,13 +540,24 @@ describe('Version Put', () => {
         users: '[{"email":"anonymous"}]',
         preparsingstore: 12345,
       }
-      return { body: '', metadata, contentLength: 616 };
+      return { body: '', metadata, contentLength: 616, status: 200, etag: 'test-etag' };
     };
 
-    const sentToS3 = [];
-    const s3Client = {
+    const versionSent = [];
+    const mainFileSent = [];
+    const versionClient = {
       send: async (c) => {
-        sentToS3.push(c);
+        versionSent.push(c);
+        return {
+          $metadata: {
+            httpStatusCode: 200
+          }
+        };
+      }
+    };
+    const mainFileClient = {
+      send: async (c) => {
+        mainFileSent.push(c);
         return {
           $metadata: {
             httpStatusCode: 201
@@ -559,25 +565,24 @@ describe('Version Put', () => {
         };
       }
     };
-    const mockS3Client = () => s3Client;
+    const mockIfNoneMatch = () => versionClient;
+    const mockIfMatch = () => mainFileClient;
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
         default: mockGetObject
       },
       '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockS3Client
+        ifNoneMatch: mockIfNoneMatch,
+        ifMatch: mockIfMatch,
       },
     });
 
     const resp = await putObjectWithVersion({}, { method: 'HEAD' }, {});
-    assert.equal(1, sentToS3.length);
-    const input = sentToS3[0].input;
-    assert.equal('', input.Body, 'Empty body for HEAD');
-    assert.equal(0, input.ContentLength, 'Should have used 0 as content length for HEAD');
-    assert.equal('/q', input.Metadata.Path);
-    assert.equal(123, input.Metadata.Timestamp);
-    assert.equal('[{"email":"anonymous"}]', input.Metadata.Users);
+    // No version created for HEAD without body parameter
+    assert.equal(0, versionSent.length, 'No version should be created');
+    // Main file update still happens
+    assert.equal(1, mainFileSent.length, 'Main file should be updated');
   });
 
   it('Test putObjectWithVersion BODY', async () => {
@@ -865,5 +870,262 @@ describe('Version Put', () => {
     assert.strictEqual(putCommand.input.ContentType, 'text/plain');
     assert.strictEqual(putCommand.input.Body, 'test body');
     assert.strictEqual(putCommand.input.ContentLength, 9);
+  });
+
+  it('Test NO version created when body parameter not provided', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const mockGetObject = async () => ({
+      status: 200,
+      body: '<html><body>Existing content</body></html>',
+      contentLength: 42,
+      contentType: 'text/html',
+      etag: 'existing-etag',
+      metadata: {
+        id: 'doc-123',
+        version: 'v1',
+        timestamp: '1234567890',
+        users: '[{"email":"user@example.com"}]',
+        path: 'docs/page.html',
+        preparsingstore: '0'
+      }
+    });
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: () => mockS3Client,
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    const env = {};
+    const daCtx = {
+      org: 'test-org',
+      bucket: 'test-bucket',
+      key: 'docs/page.html',
+      ext: 'html',
+      method: 'PUT',
+      users: [{ email: 'user@example.com' }]
+    };
+
+    // Call without body parameter - no version should be created
+    await putObjectWithVersion(env, daCtx, {
+      bucket: 'test-bucket',
+      org: 'test-org',
+      key: 'docs/page.html',
+      type: 'text/html'
+    });
+
+    // Should have only 1 command: putObject (no version created)
+    assert.strictEqual(sentCommands.length, 1);
+    
+    // Only command should be putObject updating the main file
+    const updateCommand = sentCommands[0];
+    assert.strictEqual(updateCommand.input.Key, 'test-org/docs/page.html');
+    // Preparsingstore should preserve the existing value
+    assert.strictEqual(updateCommand.input.Metadata.Preparsingstore, '0');
+  });
+
+  it('Test preparsingstore defaults to 0 when undefined - no version created', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const mockGetObject = async () => ({
+      status: 200,
+      body: '<html><body>Existing content</body></html>',
+      contentLength: 42,
+      contentType: 'text/html',
+      etag: 'existing-etag',
+      metadata: {
+        id: 'doc-456',
+        version: 'v2',
+        timestamp: '1234567890',
+        users: '[{"email":"user@example.com"}]',
+        path: 'docs/page2.html'
+        // preparsingstore is undefined - defaults to '0'
+      }
+    });
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: () => mockS3Client,
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    const env = {};
+    const daCtx = {
+      org: 'test-org',
+      bucket: 'test-bucket',
+      key: 'docs/page2.html',
+      ext: 'html',
+      method: 'PUT',
+      users: [{ email: 'user@example.com' }]
+    };
+
+    // Call without body parameter
+    await putObjectWithVersion(env, daCtx, {
+      bucket: 'test-bucket',
+      org: 'test-org',
+      key: 'docs/page2.html',
+      type: 'text/html'
+    });
+
+    // Should have only 1 command: putObject (no version created)
+    assert.strictEqual(sentCommands.length, 1);
+    
+    // Only command - preparsingstore should default to '0'
+    const updateCommand = sentCommands[0];
+    assert.strictEqual(updateCommand.input.Metadata.Preparsingstore, '0');
+  });
+
+  it('Test preparsingstore preserves existing value when set - no version created', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const mockGetObject = async () => ({
+      status: 200,
+      body: '<html><body>Existing content</body></html>',
+      contentLength: 42,
+      contentType: 'text/html',
+      etag: 'existing-etag',
+      metadata: {
+        id: 'doc-789',
+        version: 'v3',
+        timestamp: '1234567890',
+        users: '[{"email":"user@example.com"}]',
+        path: 'docs/page3.html',
+        preparsingstore: '1700000000000' // Already set - should be preserved
+      }
+    });
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: () => mockS3Client,
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    const env = {};
+    const daCtx = {
+      org: 'test-org',
+      bucket: 'test-bucket',
+      key: 'docs/page3.html',
+      ext: 'html',
+      method: 'PUT',
+      users: [{ email: 'user@example.com' }]
+    };
+
+    // Call without body parameter
+    await putObjectWithVersion(env, daCtx, {
+      bucket: 'test-bucket',
+      org: 'test-org',
+      key: 'docs/page3.html',
+      type: 'text/html'
+    });
+
+    // Should have only 1 command: putObject (no version created)
+    assert.strictEqual(sentCommands.length, 1);
+    
+    // Only command should preserve the existing preparsingstore value
+    const updateCommand = sentCommands[0];
+    assert.strictEqual(updateCommand.input.Metadata.Preparsingstore, '1700000000000');
+  });
+
+  it('Test version stores body when body parameter is provided', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 }
+        };
+      }
+    };
+
+    const mockGetObject = async () => ({
+      status: 200,
+      body: '<html><body>Old content</body></html>',
+      contentLength: 36,
+      contentType: 'text/html',
+      etag: 'existing-etag',
+      metadata: {
+        id: 'doc-abc',
+        version: 'v4',
+        timestamp: '1234567890',
+        users: '[{"email":"user@example.com"}]',
+        path: 'docs/page4.html',
+        preparsingstore: '0'
+      }
+    });
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject
+      },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: () => mockS3Client,
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    const env = {};
+    const daCtx = {
+      org: 'test-org',
+      bucket: 'test-bucket',
+      key: 'docs/page4.html',
+      ext: 'html',
+      method: 'PUT',
+      users: [{ email: 'user@example.com' }]
+    };
+
+    // Call WITH body parameter
+    await putObjectWithVersion(env, daCtx, {
+      bucket: 'test-bucket',
+      org: 'test-org',
+      key: 'docs/page4.html',
+      body: '<html><body>New content</body></html>',
+      type: 'text/html'
+    }, true); // body parameter is true
+
+    // Should have 2 commands: putVersion + putObject
+    assert.strictEqual(sentCommands.length, 2);
+
+    // First command should be putVersion with the OLD body content
+    const versionCommand = sentCommands[0];
+    assert.strictEqual(versionCommand.input.Key, 'test-org/.da-versions/doc-abc/v4.html');
+    assert.strictEqual(versionCommand.input.Body, '<html><body>Old content</body></html>');
+    assert.strictEqual(versionCommand.input.ContentLength, 36);
   });
 });
