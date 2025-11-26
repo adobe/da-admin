@@ -1,21 +1,21 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
- * This file is licensed to you under the Apache License, Version 2.0 (the 'License');
+ * Copyright 2025 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under
- * the License is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+/* eslint-disable consistent-return */
 import assert from 'node:assert';
 import esmock from 'esmock';
 import { mockClient } from 'aws-sdk-client-mock';
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 
 const s3Mock = mockClient(S3Client);
-
 
 describe('Object delete', () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe('Object delete', () => {
 
   describe('single context', () => {
     it('Delete a file', async () => {
-      const collabCalled = []
+      const collabCalled = [];
       const dacollab = { fetch: (u) => collabCalled.push(u) };
 
       const client = {};
@@ -50,16 +50,14 @@ describe('Object delete', () => {
         }
       };
 
-      const { deleteObject } = await esmock(
-        '../../../src/storage/object/delete.js', {
-          '../../../src/storage/version/put.js': {
-            postObjectVersionWithLabel: mockPostObjectVersion,
-          },
-          '@aws-sdk/s3-request-presigner': {
-            getSignedUrl: mockSignedUrl,
-          }
-        }
-      );
+      const { deleteObject } = await esmock('../../../src/storage/object/delete.js', {
+        '../../../src/storage/version/put.js': {
+          postObjectVersionWithLabel: mockPostObjectVersion,
+        },
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: mockSignedUrl,
+        },
+      });
 
       const savedFetch = globalThis.fetch;
       try {
@@ -102,16 +100,14 @@ describe('Object delete', () => {
         }
       };
 
-      const { deleteObject } = await esmock(
-        '../../../src/storage/object/delete.js', {
-          '../../../src/storage/version/put.js': {
-            postObjectVersionWithLabel: mockPostObjectVersion,
-          },
-          '@aws-sdk/s3-request-presigner': {
-            getSignedUrl: mockSignedUrl,
-          }
-        }
-      );
+      const { deleteObject } = await esmock('../../../src/storage/object/delete.js', {
+        '../../../src/storage/version/put.js': {
+          postObjectVersionWithLabel: mockPostObjectVersion,
+        },
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: mockSignedUrl,
+        },
+      });
 
       const savedFetch = globalThis.fetch;
       try {
@@ -150,16 +146,14 @@ describe('Object delete', () => {
         }
       };
 
-      const { deleteObject } = await esmock(
-        '../../../src/storage/object/delete.js', {
-          '../../../src/storage/version/put.js': {
-            postObjectVersionWithLabel: mockPostObjectVersion,
-          },
-          '@aws-sdk/s3-request-presigner': {
-            getSignedUrl: mockSignedUrl,
-          }
-        }
-      );
+      const { deleteObject } = await esmock('../../../src/storage/object/delete.js', {
+        '../../../src/storage/version/put.js': {
+          postObjectVersionWithLabel: mockPostObjectVersion,
+        },
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: mockSignedUrl,
+        },
+      });
 
       const savedFetch = globalThis.fetch;
       try {
@@ -198,16 +192,14 @@ describe('Object delete', () => {
         }
       };
 
-      const { deleteObject } = await esmock(
-        '../../../src/storage/object/delete.js', {
-          '../../../src/storage/version/put.js': {
-            postObjectVersionWithLabel: mockPostObjectVersion,
-          },
-          '@aws-sdk/s3-request-presigner': {
-            getSignedUrl: mockSignedUrl,
-          }
-        }
-      );
+      const { deleteObject } = await esmock('../../../src/storage/object/delete.js', {
+        '../../../src/storage/version/put.js': {
+          postObjectVersionWithLabel: mockPostObjectVersion,
+        },
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl: mockSignedUrl,
+        },
+      });
 
       const savedFetch = globalThis.fetch;
       try {
@@ -236,7 +228,7 @@ describe('Object delete', () => {
       const env = {
         dacollab: {
           fetch: () => {
-          }
+          },
         },
       };
       const mockPostObjectVersion = async () => ({ status: 201 });
@@ -249,7 +241,7 @@ describe('Object delete', () => {
           },
           '@aws-sdk/s3-request-presigner': {
             getSignedUrl: mockSignedUrl,
-          }
+          },
         },
       );
       s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }] });
@@ -266,7 +258,7 @@ describe('Object delete', () => {
       const env = {
         dacollab: {
           fetch: () => {
-          }
+          },
         },
       };
       const mockPostObjectVersion = async () => ({ status: 201 });
@@ -279,7 +271,7 @@ describe('Object delete', () => {
           },
           '@aws-sdk/s3-request-presigner': {
             getSignedUrl: mockSignedUrl,
-          }
+          },
         },
       );
       s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }], NextContinuationToken: 'token' });
@@ -288,30 +280,26 @@ describe('Object delete', () => {
     });
 
     it('Delete permissions', async () => {
-      const listCommand = () => {
-        return {
-          sourceKeys: [ 'a', 'b', 'c']
-        }
-      };
+      const listCommand = () => ({
+        sourceKeys: ['a', 'b', 'c'],
+      });
       const getSignedUrl = (c, dc) => {
         assert.strictEqual(dc.input.Bucket, 'testbucket');
         return dc.input.Key;
-      }
+      };
       const mockS3Client = class {};
 
-      const deleteObjects = await esmock(
-        '../../../src/storage/object/delete.js', {
-          '../../../src/storage/utils/list.js': {
-            listCommand
-          },
-          '@aws-sdk/client-s3': {
-            S3Client: mockS3Client
-          },
-          '@aws-sdk/s3-request-presigner': {
-            getSignedUrl
-          }
-        }
-      );
+      const deleteObjects = await esmock('../../../src/storage/object/delete.js', {
+        '../../../src/storage/utils/list.js': {
+          listCommand,
+        },
+        '@aws-sdk/client-s3': {
+          S3Client: mockS3Client,
+        },
+        '@aws-sdk/s3-request-presigner': {
+          getSignedUrl,
+        },
+      });
 
       const pathLookup = new Map();
       pathLookup.set('harry@foo.org', [
@@ -321,7 +309,9 @@ describe('Object delete', () => {
       ]);
       const aclCtx = { pathLookup };
       const users = [{ email: 'harry@foo.org' }];
-      const ctx = { bucket: 'testbucket', org: 'myorg', aclCtx, users, key: 'notused' };
+      const ctx = {
+        bucket: 'testbucket', org: 'myorg', aclCtx, users, key: 'notused',
+      };
 
       const fetchURLs = [];
       const savedFetch = globalThis.fetch;

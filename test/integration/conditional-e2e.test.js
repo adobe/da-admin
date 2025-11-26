@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import assert from 'assert';
+import assert from 'node:assert';
 import esmock from 'esmock';
 import {
   S3Client,

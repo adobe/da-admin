@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -139,6 +139,7 @@ export default async function copyObject(env, daCtx, details, isRename) {
       if (resp.continuationToken) {
         continuationToken = `copy-${daCtx.org}-${details.source}-${details.destination}-${crypto.randomUUID()}`;
         while (resp.continuationToken) {
+          // eslint-disable-next-line no-await-in-loop
           resp = await listCommand(daCtx, { continuationToken: resp.continuationToken }, client);
           remainingKeys.push(...resp.sourceKeys);
         }
