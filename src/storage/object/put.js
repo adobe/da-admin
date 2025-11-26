@@ -15,18 +15,9 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
-import { sourceRespObject } from '../../helpers/source.js';
+import { sourceRespObject, getFileBody, getObjectBody } from '../../helpers/source.js';
+
 import { putObjectWithVersion } from '../version/put.js';
-
-async function getFileBody(data) {
-  await data.text();
-  return { body: data, type: data.type };
-}
-
-function getObjectBody(data) {
-  // TODO: This will not correctly handle HTML as data
-  return { body: JSON.stringify(data), type: 'application/json' };
-}
 
 function buildInput({
   bucket, org, key, body, type,

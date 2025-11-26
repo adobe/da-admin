@@ -59,7 +59,7 @@ async function formPutHandler(req) {
   return formData ? getFormEntries(formData) : null;
 }
 
-export default async function putHelper(req, env, daCtx) {
+export async function putHelper(req, env, daCtx) {
   const contentType = req.headers.get('content-type')?.split(';')[0];
 
   if (!contentType) return null;
@@ -67,4 +67,14 @@ export default async function putHelper(req, env, daCtx) {
   if (FORM_TYPES.some((type) => type === contentType)) return formPutHandler(req, env, daCtx);
 
   return undefined;
+}
+
+export async function getFileBody(data) {
+  await data.text();
+  return { body: data, type: data.type };
+}
+
+export function getObjectBody(data) {
+  // TODO: This will not correctly handle HTML as data
+  return { body: JSON.stringify(data), type: 'application/json' };
 }
