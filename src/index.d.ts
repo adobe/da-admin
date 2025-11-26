@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import {KVNamespace, R2Bucket, Service} from "@cloudflare/workers-types";
+import { KVNamespace, R2Bucket, Fetcher } from "@cloudflare/workers-types";
 
 export interface Env {
   S3_DEF_URL: string;
@@ -23,5 +23,5 @@ export interface Env {
   DA_JOBS: KVNamespace,
   AEM_CONTENT: R2Bucket;
 
-  dacollab: Service;
+  dacollab: Fetcher;
 }
