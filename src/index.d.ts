@@ -17,6 +17,8 @@ export interface Env {
   S3_SECRET_ACCESS_KEY: string;
   IMS_ORIGIN: string;
   AEM_BUCKET_NAME: string;
+  // shared secret used as authorization when invoking the collab service (eg for syncadmin)
+  COLLAB_SHARED_SECRET: string;
 
   DA_AUTH: KVNamespace,
   DA_CONFIG: KVNamespace,
