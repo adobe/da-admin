@@ -20,7 +20,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@adobe/eslint-config-helix": "2.0.6",
+    "@adobe/eslint-config-helix": "2.0.9",
     "@redocly/cli": "^1.4.1",
     "aws-sdk-client-mock": "^4.0.0",
     "c8": "^8.0.1",
