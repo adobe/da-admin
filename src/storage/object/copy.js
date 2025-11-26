@@ -113,7 +113,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
   } finally {
     if (Key.endsWith('.html')) {
       // Reset the collab cached state for the copied object
-      await invalidateCollab('syncAdmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+      await invalidateCollab('syncadmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
     }
   }
 };
