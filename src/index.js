@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -19,8 +19,15 @@ import deleteHandler from './handlers/delete.js';
 import unknownHandler from './handlers/unknown.js';
 
 export default {
+  /**
+   * @param {Request} req
+   * @param {Env} env
+   * @returns {Promise<Response>}
+   */
   async fetch(req, env) {
-    if (req.method === 'OPTIONS') return daResp({ status: 204 });
+    if (req.method === 'OPTIONS') {
+      return daResp({ status: 204 });
+    }
 
     const daCtx = await getDaCtx(req, env);
     const { authorized, key } = daCtx;
@@ -28,7 +35,9 @@ export default {
       const status = daCtx.users[0].email === 'anonymous' ? 401 : 403;
       return daResp({ status });
     }
-    if (key?.startsWith('.da-versions')) return daResp({ status: 404 });
+    if (key?.startsWith('.da-versions')) {
+      return daResp({ status: 404 });
+    }
 
     let respObj;
     switch (req.method) {

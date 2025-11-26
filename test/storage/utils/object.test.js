@@ -11,7 +11,7 @@
  */
 
 /* eslint-env mocha */
-import assert from 'assert';
+import assert from 'node:assert';
 import { invalidateCollab } from '../../../src/storage/utils/object.js';
 
 describe('Storage Object Utils tests', () => {
