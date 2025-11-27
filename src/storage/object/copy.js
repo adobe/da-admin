@@ -16,7 +16,7 @@ import {
 
 import getObject from './get.js';
 import getS3Config from '../utils/config.js';
-import { invalidateCollab } from '../utils/object.js';
+import { notifyCollab } from '../utils/object.js';
 import { putObjectWithVersion } from '../version/put.js';
 import { getUsersForMetadata } from '../utils/version.js';
 import { listCommand } from '../utils/list.js';
@@ -113,7 +113,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
   } finally {
     if (Key.endsWith('.html')) {
       // Reset the collab cached state for the copied object
-      await invalidateCollab('syncAdmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+      await notifyCollab('syncAdmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
     }
   }
 };
