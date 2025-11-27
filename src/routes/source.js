@@ -12,7 +12,7 @@
 import getObject from '../storage/object/get.js';
 import putObject from '../storage/object/put.js';
 import deleteObjects from '../storage/object/delete.js';
-import { invalidateCollab } from '../storage/utils/object.js';
+import { notifyCollab } from '../storage/utils/object.js';
 
 import putHelper from '../helpers/source.js';
 import deleteHelper from '../helpers/delete.js';
@@ -32,7 +32,7 @@ export async function postSource({ req, env, daCtx }) {
   if (resp.status === 201 || resp.status === 200) {
     const initiator = req.headers.get('x-da-initiator');
     if (initiator !== 'collab') {
-      await invalidateCollab('syncadmin', req.url, env);
+      await notifyCollab('syncadmin', req.url, env);
     }
   }
   return resp;
