@@ -11,6 +11,6 @@
  */
 
 export default function unknownHandler() {
-  const body = JSON.stringify({ message: 'Unknown method. Please see: https://docs.da.live for more information.' });
-  return { body, status: 501 };
+  const body = JSON.stringify({ message: 'Bad request. Please see: https://docs.da.live for more information.' });
+  return { body, status: 400 };
 }

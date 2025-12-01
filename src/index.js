@@ -29,7 +29,13 @@ export default {
       return daResp({ status: 204 });
     }
 
-    const daCtx = await getDaCtx(req, env);
+    let daCtx;
+    try {
+      daCtx = await getDaCtx(req, env);
+    } catch (e) {
+      return daResp(unknownHandler());
+    }
+
     const { authorized, key } = daCtx;
     if (!authorized) {
       const status = daCtx.users[0].email === 'anonymous' ? 401 : 403;
@@ -60,7 +66,7 @@ export default {
         respObj = unknownHandler();
     }
 
-    if (!respObj) return daResp({ status: 404 });
+    if (!respObj) return daResp(unknownHandler());
 
     return daResp(respObj, daCtx);
   },
