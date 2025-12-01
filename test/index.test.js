@@ -54,26 +54,33 @@ describe('fetch', () => {
 describe('invalid routes', () => {
   const fetchStatus = async (path, method) => {
     const resp = await handler.fetch({ method, url: `http://www.sample.com${path}` }, {});
-    console.log('resp', `http://www.sample.com${path}`, resp.status);
     return resp.status;
   };
 
-  const test = async (path) => {
-    const methods = ['OPTIOMS', 'GET', 'POST', 'PUT', 'DELETE'];
+  const test = async (path, status) => {
+    const methods = ['GET', 'POST', 'PUT', 'DELETE'];
     for (const method of methods) {
       // eslint-disable-next-line no-await-in-loop
-      const status = await fetchStatus(path, method);
-      assert.strictEqual(status, 400);
+      const s = await fetchStatus(path, method);
+      assert.strictEqual(s, status);
     }
   };
 
   it('return 400 for invalid paths', async () => {
-    await test('/');
-    await test('/source/owner');
-    await test('/source//owner/repo/path/file.html');
-    await test('/source/owner//repo/path/file.html');
-    await test('/source/owner/repo//path/file.html');
-    await test('/source/owner/repo/path//file.html');
-    await test('/unknown/owner/repo/path/file.html');
+    await test('/', 400);
+    await test('/source/owner', 400);
+    await test('/source//owner/repo/path/file.html', 400);
+    await test('/source/owner//repo/path/file.html', 400);
+    await test('/source/owner/repo//path/file.html', 400);
+    await test('/source/owner/repo/path//file.html', 400);
+  });
+
+  it('return 404 for unknown paths', async () => {
+    await test('/unknown/owner/repo/path/file.html', 404);
+  });
+
+  it('return 405 for unknown methods', async () => {
+    const status = await fetchStatus('/source/owner/repo/path/file.html', 'BLAH');
+    assert.strictEqual(status, 405);
   });
 });

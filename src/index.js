@@ -16,7 +16,6 @@ import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
-import unknownHandler from './handlers/unknown.js';
 
 export default {
   /**
@@ -33,7 +32,11 @@ export default {
     try {
       daCtx = await getDaCtx(req, env);
     } catch (e) {
-      return daResp(unknownHandler());
+      if (e.message === 'Invalid path') {
+        return daResp({ status: 400 });
+      }
+      console.error('Error coumputing context', e);
+      return daResp({ status: 500 });
     }
 
     const { authorized, key } = daCtx;
@@ -63,10 +66,10 @@ export default {
         respObj = await deleteHandler({ req, env, daCtx });
         break;
       default:
-        respObj = unknownHandler();
+        respObj = { status: 405 };
     }
 
-    if (!respObj) return daResp(unknownHandler());
+    if (!respObj) return daResp({ status: 404 });
 
     return daResp(respObj, daCtx);
   },
