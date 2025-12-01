@@ -49,7 +49,6 @@ describe('fetch', () => {
     const resp = await hnd.fetch({ method: 'GET' }, {});
     assert.strictEqual(resp.status, 403);
   });
-
 });
 
 describe('invalid routes', () => {
@@ -62,11 +61,12 @@ describe('invalid routes', () => {
   const test = async (path) => {
     const methods = ['OPTIOMS', 'GET', 'POST', 'PUT', 'DELETE'];
     for (const method of methods) {
+      // eslint-disable-next-line no-await-in-loop
       const status = await fetchStatus(path, method);
       assert.strictEqual(status, 400);
     }
   };
- 
+
   it('return 400 for invalid paths', async () => {
     await test('/');
     await test('/source/owner');
