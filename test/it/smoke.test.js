@@ -9,6 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+/* eslint-disable prefer-arrow-callback, func-names */
 import assert from 'node:assert';
 import S3rver from 's3rver';
 import { spawn } from 'child_process';
@@ -19,14 +20,13 @@ const SERVER_PORT = 8788;
 const SERVER_URL = `http://localhost:${SERVER_PORT}`;
 const S3_DIR = './test/it/bucket';
 
-describe('Integration Tests: smoke tests', () => {
-  // Increase timeout for server startup
-  this.timeout(30000);
-
+describe('Integration Tests: smoke tests', function () {
   let s3rver;
   let devServer;
 
-  before(async () => {
+  before(async function () {
+    // Increase timeout for server startup
+    this.timeout(30000);
     s3rver = new S3rver({
       port: S3_PORT,
       address: '127.0.0.1',
