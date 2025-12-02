@@ -24,6 +24,8 @@ describe('Integration Tests: smoke tests', function () {
   let s3rver;
   let devServer;
 
+  this.timeout(10000);
+
   before(async function () {
     s3rver = new S3rver({
       port: S3_PORT,
@@ -45,6 +47,7 @@ describe('Integration Tests: smoke tests', function () {
       '--var', 'AEM_ADMIN_MEDIA_API_KEY:test-key',
     ], {
       stdio: 'pipe', // Capture output for debugging
+      detached: false, // Keep in same process group for easier cleanup
     });
 
     // Wait for server to be ready
@@ -67,9 +70,30 @@ describe('Integration Tests: smoke tests', function () {
   });
 
   after(async () => {
-    // Cleanup
-    if (devServer) {
-      devServer.kill();
+    // Cleanup - forcefully kill processes
+    if (devServer && !devServer.killed) {
+      // Remove all listeners to prevent hanging
+      devServer.stdout?.removeAllListeners();
+      devServer.stderr?.removeAllListeners();
+      devServer.removeAllListeners();
+
+      // Send SIGTERM first for graceful shutdown
+      devServer.kill('SIGTERM');
+
+      // Force kill if still running after 2 seconds
+      await new Promise((resolve) => {
+        const forceKillTimer = setTimeout(() => {
+          if (devServer && !devServer.killed) {
+            devServer.kill('SIGKILL');
+          }
+          resolve();
+        }, 2000);
+
+        devServer.once('exit', () => {
+          clearTimeout(forceKillTimer);
+          resolve();
+        });
+      });
     }
     if (s3rver) {
       await s3rver.close();
