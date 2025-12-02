@@ -70,6 +70,7 @@ export default async function putObject(env, daCtx, obj) {
   }
 
   for (const input of inputs) {
+    // throw new Error('test');
     const command = new PutObjectCommand(input);
     // eslint-disable-next-line no-await-in-loop
     await client.send(command);

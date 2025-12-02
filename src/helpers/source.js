@@ -29,8 +29,8 @@ export function sourceRespObject(daCtx) {
 
   if (site) {
     obj.aem = {
-      previewUrl: `https://main--${site}--${org}.hlx.page${aemPathname}`,
-      liveUrl: `https://main--${site}--${org}.hlx.live${aemPathname}`,
+      previewUrl: `https://main--${site}--${org}.aem.page${aemPathname}`,
+      liveUrl: `https://main--${site}--${org}.aem.live${aemPathname}`,
     };
   }
 

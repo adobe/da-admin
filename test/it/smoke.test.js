@@ -129,4 +129,39 @@ describe('Integration Tests: smoke tests', function () {
     assert.ok(fileNames.includes('page1'), 'Should list page1');
     assert.ok(fileNames.includes('page2'), 'Should list page2');
   });
+
+  it('should post an object via HTTP request', async () => {
+    const org = 'test-org';
+    const repo = 'test-repo';
+    const key = 'test-folder/page3';
+    const ext = '.html';
+
+    // Create FormData with the HTML file
+    const formData = new FormData();
+    const htmlBlob = new Blob(['<html><body><h1>Page 3</h1></body></html>'], { type: 'text/html' });
+    const htmlFile = new File([htmlBlob], 'page3.html', { type: 'text/html' });
+    formData.append('data', htmlFile);
+
+    const url = `${SERVER_URL}/source/${org}/${repo}/${key}${ext}`;
+    let resp = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+
+    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
+
+    let body = await resp.json();
+    assert.strictEqual(body.source.editUrl, `https://da.live/edit#/${org}/${repo}/${key}`);
+    assert.strictEqual(body.source.contentUrl, `https://content.da.live/${org}/${repo}/${key}`);
+    assert.strictEqual(body.aem.previewUrl, `https://main--test-repo--test-org.aem.page/${key}`);
+    assert.strictEqual(body.aem.liveUrl, `https://main--test-repo--test-org.aem.live/${key}`);
+
+    // validate page is here (include extension in GET request)
+    resp = await fetch(`${SERVER_URL}/source/${org}/${repo}/${key}${ext}`);
+
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+
+    body = await resp.text();
+    assert.strictEqual(body, '<html><body><h1>Page 3</h1></body></html>');
+  });
 });
