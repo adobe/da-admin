@@ -101,9 +101,10 @@ describe('Integration Tests: smoke tests', function () {
 
   it('should get a object via HTTP request', async () => {
     const org = 'test-org';
-    const key = 'test-folder/page1.html';
+    const repo = 'test-repo';
+    const pathname = 'test-folder/page1.html';
 
-    const url = `${SERVER_URL}/source/${org}/${key}`;
+    const url = `${SERVER_URL}/source/${org}/${repo}/${pathname}`;
     const resp = await fetch(url);
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
@@ -114,9 +115,10 @@ describe('Integration Tests: smoke tests', function () {
 
   it('should list objects via HTTP request', async () => {
     const org = 'test-org';
+    const repo = 'test-repo';
     const key = 'test-folder';
 
-    const url = `${SERVER_URL}/list/${org}/${key}`;
+    const url = `${SERVER_URL}/list/${org}/${repo}/${key}`;
     const resp = await fetch(url);
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
