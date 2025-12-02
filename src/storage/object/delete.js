@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -15,7 +15,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import getS3Config from '../utils/config.js';
-import { invalidateCollab } from '../utils/object.js';
+import { notifyCollab } from '../utils/object.js';
 // import { postObjectVersionWithLabel } from '../version/put.js';
 import { listCommand } from '../utils/list.js';
 import { hasPermission } from '../../utils/auth.js';
@@ -41,7 +41,7 @@ export async function deleteObject(client, daCtx, Key, env /* , isMove = false *
   }
 
   if (Key.endsWith('.html')) {
-    await invalidateCollab('deleteadmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+    await notifyCollab('deleteadmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
   }
 
   return resp;

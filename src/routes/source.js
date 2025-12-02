@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -12,7 +12,7 @@
 import getObject from '../storage/object/get.js';
 import putObject from '../storage/object/put.js';
 import deleteObjects from '../storage/object/delete.js';
-import { invalidateCollab } from '../storage/utils/object.js';
+import { notifyCollab } from '../storage/utils/object.js';
 
 import putHelper from '../helpers/source.js';
 import deleteHelper from '../helpers/delete.js';
@@ -32,7 +32,7 @@ export async function postSource({ req, env, daCtx }) {
   if (resp.status === 201 || resp.status === 200) {
     const initiator = req.headers.get('x-da-initiator');
     if (initiator !== 'collab') {
-      await invalidateCollab('syncadmin', req.url, env);
+      await notifyCollab('syncadmin', req.url, env);
     }
   }
   return resp;
@@ -40,5 +40,5 @@ export async function postSource({ req, env, daCtx }) {
 
 export async function getSource({ env, daCtx, head }) {
   if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
-  return getObject(env, daCtx, head);
+  return getObject(env, daCtx, head, daCtx.conditionalHeaders);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 export default function getS3Config(env) {
-  return {
+  const config = {
     region: 'auto',
     endpoint: env.S3_DEF_URL,
     credentials: {
@@ -18,4 +18,10 @@ export default function getS3Config(env) {
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     },
   };
+
+  if (env.S3_FORCE_PATH_STYLE === 'true') {
+    config.forcePathStyle = true;
+  }
+
+  return config;
 }

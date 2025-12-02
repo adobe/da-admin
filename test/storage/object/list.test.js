@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -14,16 +14,15 @@ import assert from 'node:assert';
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { mockClient } from 'aws-sdk-client-mock';
 
-const s3Mock = mockClient(S3Client);
-
 import listObjects from '../../../src/storage/object/list.js';
+
+const s3Mock = mockClient(S3Client);
 
 const Contents = [
   { Key: 'wknd/index.html', LastModified: new Date() },
   { Key: 'wknd/nav.html', LastModified: new Date() },
   { Key: 'wknd/footer.html', LastModified: new Date() },
 ];
-
 
 describe('List Objects', () => {
   beforeEach(() => {
@@ -50,11 +49,11 @@ describe('List Objects', () => {
       Prefix: 'acme/wknd/',
       Delimiter: '/',
       MaxKeys: 2,
-    }).resolves({ $metadata: { httpStatusCode: 200 }, Contents: [Contents[0], Contents[1]]});
+    }).resolves({ $metadata: { httpStatusCode: 200 }, Contents: [Contents[0], Contents[1]] });
 
     const daCtx = { bucket: 'rt-bkt', org: 'acme', key: 'wknd' };
     const resp = await listObjects({}, daCtx, 2);
     const data = JSON.parse(resp.body);
     assert.strictEqual(data.length, 2, 'Should only return 2 items');
   });
-})
+});

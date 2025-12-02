@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -9,17 +9,18 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
+/* eslint-disable no-unused-vars,camelcase */
+import assert from 'node:assert';
 import esmock from 'esmock';
 
 describe('Version Put', () => {
   it('Test putObjectWithVersion retry on new document', async () => {
-    const getObjectCalls = []
+    const getObjectCalls = [];
     const mockGetObject = async (e, u, nb) => {
-      getObjectCalls.push({e, u, nb});
+      getObjectCalls.push({ e, u, nb });
       return {
         status: 404,
-        metadata: {}
+        metadata: {},
       };
     };
 
@@ -30,8 +31,8 @@ describe('Version Put', () => {
         sendCalls.push(cmd);
         const resp = {
           $metadata: {
-            httpStatusCode: firstCall ? 412 : 200
-          }
+            httpStatusCode: firstCall ? 412 : 200,
+          },
         };
         if (firstCall) {
           firstCall = false;
@@ -39,15 +40,15 @@ describe('Version Put', () => {
         } else {
           return resp;
         }
-      }
+      },
     };
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
-        ifNoneMatch: () => mockS3Client
+        ifNoneMatch: () => mockS3Client,
       },
     });
 
@@ -57,7 +58,7 @@ describe('Version Put', () => {
     const resp = await putObjectWithVersion(mockEnv, mockCtx, mockUpdate, false);
 
     assert.equal(201, resp.status);
-    assert(resp.metadata.id)
+    assert(resp.metadata.id);
     assert.equal(2, getObjectCalls.length);
     assert.equal(getObjectCalls[0].e, mockEnv);
     assert.equal(getObjectCalls[0].u, mockUpdate);
@@ -72,12 +73,12 @@ describe('Version Put', () => {
   });
 
   it('Test putObjectWithVersion error', async () => {
-    const getObjectCalls = []
+    const getObjectCalls = [];
     const mockGetObject = async (e, u, nb) => {
-      getObjectCalls.push({e, u, nb});
+      getObjectCalls.push({ e, u, nb });
       return {
         status: 404,
-        metadata: {}
+        metadata: {},
       };
     };
 
@@ -87,19 +88,19 @@ describe('Version Put', () => {
         sendCalls.push(cmd);
         const resp = {
           $metadata: {
-            httpStatusCode: 510
-          }
+            httpStatusCode: 510,
+          },
         };
         throw resp;
-      }
+      },
     };
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
-        ifNoneMatch: () => mockS3Client
+        ifNoneMatch: () => mockS3Client,
       },
     });
 
@@ -110,12 +111,12 @@ describe('Version Put', () => {
   });
 
   it('Test putObjectWithVersion retry on existing document', async () => {
-    const getObjectCalls = []
+    const getObjectCalls = [];
     const mockGetObject = async (e, u, nb) => {
-      getObjectCalls.push({e, u, nb});
+      getObjectCalls.push({ e, u, nb });
       return {
         status: 200,
-        metadata: {}
+        metadata: {},
       };
     };
 
@@ -126,8 +127,8 @@ describe('Version Put', () => {
         sendCalls.push(cmd);
         const resp = {
           $metadata: {
-            httpStatusCode: firstCall ? 412 : 200
-          }
+            httpStatusCode: firstCall ? 412 : 200,
+          },
         };
         if (firstCall) {
           firstCall = false;
@@ -135,25 +136,25 @@ describe('Version Put', () => {
         } else {
           return resp;
         }
-      }
+      },
     };
     const mockS3PutClient = {
       async send(cmd) {
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifMatch: () => mockS3Client,
-        ifNoneMatch: () => mockS3PutClient
+        ifNoneMatch: () => mockS3PutClient,
       },
     });
 
@@ -177,12 +178,12 @@ describe('Version Put', () => {
   });
 
   it('Test putObjectWithVersion retry fails on existing document', async () => {
-    const getObjectCalls = []
+    const getObjectCalls = [];
     const mockGetObject = async (e, u, nb) => {
-      getObjectCalls.push({e, u, nb});
+      getObjectCalls.push({ e, u, nb });
       return {
         status: 200,
-        metadata: {}
+        metadata: {},
       };
     };
 
@@ -191,25 +192,25 @@ describe('Version Put', () => {
       async send(cmd) {
         sendCalls.push(cmd);
         throw new Error('testing 123');
-      }
+      },
     };
     const mockS3PutClient = {
       async send(cmd) {
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifMatch: () => mockS3Client,
-        ifNoneMatch: () => mockS3PutClient
+        ifNoneMatch: () => mockS3PutClient,
       },
     });
 
@@ -221,6 +222,7 @@ describe('Version Put', () => {
   });
 
   it('Put Object With Version store content', async () => {
+    // eslint-disable-next-line consistent-return
     const mockGetObject = async (e, u, h) => {
       if (!h) {
         return {
@@ -229,17 +231,17 @@ describe('Version Put', () => {
             id: 'x123',
             version: 'aaa-bbb',
           },
-          status: 200
+          status: 200,
         };
       }
-    }
+    };
 
     const s3VersionSent = [];
     const mockS3VersionClient = {
       send: (c) => {
         s3VersionSent.push(c);
         return { $metadata: { httpStatusCode: 200 } };
-      }
+      },
     };
     const mockIfNoneMatch = () => mockS3VersionClient;
 
@@ -248,13 +250,13 @@ describe('Version Put', () => {
       send: (c) => {
         s3Sent.push(c);
         return { $metadata: { httpStatusCode: 200 } };
-      }
+      },
     };
-    const mockIfMatch = () => mockS3Client
+    const mockIfMatch = () => mockS3Client;
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: mockIfNoneMatch,
@@ -263,8 +265,10 @@ describe('Version Put', () => {
     });
 
     const env = {};
-    const daCtx= { bucket: 'bkt', org: 'myorg', ext: 'html' };
-    const update = { bucket: 'bkt', body: 'new-body', org: 'myorg', key: 'a/x.html', type: 'text/html' };
+    const daCtx = { bucket: 'bkt', org: 'myorg', ext: 'html' };
+    const update = {
+      bucket: 'bkt', body: 'new-body', org: 'myorg', key: 'a/x.html',
+    };
     const resp = await putObjectWithVersion(env, daCtx, update, true);
     assert.equal(200, resp.status);
     assert.equal('x123', resp.metadata.id);
@@ -287,6 +291,7 @@ describe('Version Put', () => {
   });
 
   it('Put Object With Version don\'t store content', async () => {
+    // eslint-disable-next-line consistent-return
     const mockGetObject = async (e, u, h) => {
       if (!h) {
         return {
@@ -296,17 +301,17 @@ describe('Version Put', () => {
             preparsingstore: Date.now(),
             version: 'ver123',
           },
-          status: 201
+          status: 201,
         };
       }
-    }
+    };
 
     const s3VersionSent = [];
     const mockS3VersionClient = {
       send: (c) => {
         s3VersionSent.push(c);
         return { $metadata: { httpStatusCode: 200 } };
-      }
+      },
     };
     const mockIfNoneMatch = () => mockS3VersionClient;
 
@@ -315,13 +320,13 @@ describe('Version Put', () => {
       send: (c) => {
         s3Sent.push(c);
         return { $metadata: { httpStatusCode: 202 } };
-      }
+      },
     };
-    const mockIfMatch = () => mockS3Client
+    const mockIfMatch = () => mockS3Client;
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: mockIfNoneMatch,
@@ -330,8 +335,12 @@ describe('Version Put', () => {
     });
 
     const env = {};
-    const daCtx= { bucket: 'bbb', org: 'myorg', ext: 'html', users: [{"email": "foo@acme.org"}, {"email": "bar@acme.org"}] };
-    const update = { bucket: 'bbb', body: 'new-body', org: 'myorg', key: 'a/x.html', type: 'text/html' };
+    const daCtx = {
+      bucket: 'bbb', org: 'myorg', ext: 'html', users: [{ email: 'foo@acme.org' }, { email: 'bar@acme.org' }],
+    };
+    const update = {
+      bucket: 'bbb', body: 'new-body', org: 'myorg', key: 'a/x.html',
+    };
     const resp = await putObjectWithVersion(env, daCtx, update, false);
     assert.equal(202, resp.status);
     assert.equal('q123-456', resp.metadata.id);
@@ -349,20 +358,21 @@ describe('Version Put', () => {
     assert.equal('myorg/a/x.html', s3Sent[0].input.Key);
     assert.equal('q123-456', s3Sent[0].input.Metadata.ID);
     assert.equal('a/x.html', s3Sent[0].input.Metadata.Path);
-    assert.equal('[{\"email\":\"foo@acme.org\"},{\"email\":\"bar@acme.org\"}]', s3Sent[0].input.Metadata.Users);
+    assert.equal('[{"email":"foo@acme.org"},{"email":"bar@acme.org"}]', s3Sent[0].input.Metadata.Users);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
     assert((s3Sent[0].input.Metadata.Preparsingstore - s3Sent[0].input.Metadata.Timestamp) < 100);
   });
 
   it('Put First Object With Version', async () => {
+    // eslint-disable-next-line consistent-return
     const mockGetObject = async (e, u, h) => {
       if (!h) {
         return {
-          status: 404
+          status: 404,
         };
       }
-    }
+    };
 
     const s3Sent = [];
     const mockS3Client = {
@@ -370,25 +380,25 @@ describe('Version Put', () => {
         s3Sent.push(c);
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
     const mockIfNoneMatch = () => mockS3Client;
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockIfNoneMatch
+        ifNoneMatch: mockIfNoneMatch,
       },
     });
 
     const env = {};
-    const daCtx= { bucket: 'b-b', org: 'myorg' };
-    const update = { bucket: 'b-b', org: 'myorg', key: 'a/b/c.html', type: 'text/html' };
+    const daCtx = { bucket: 'b-b', org: 'myorg' };
+    const update = { bucket: 'b-b', org: 'myorg', key: 'a/b/c' };
     const resp = await putObjectWithVersion(env, daCtx, update, true);
     assert.equal(201, resp.status);
     assert(resp.metadata.id, 'The ID should be set');
@@ -402,13 +412,11 @@ describe('Version Put', () => {
   });
 
   it('Put Object With Version ID clash', async () => {
-    const mockGetObject = async (e, u, h) => {
-      return { metadata: { id: 'x123' }, status: 200 };
-    }
+    const mockGetObject = async (e, u, h) => ({ metadata: { id: 'x123' }, status: 200 });
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
     });
 
@@ -417,9 +425,7 @@ describe('Version Put', () => {
   });
 
   it('Put First Object With ID provided', async () => {
-    const mockGetObject = async (e, u, h) => {
-      return { status: 404 };
-    }
+    const mockGetObject = async (e, u, h) => ({ status: 404 });
 
     const s3Sent = [];
     const mockS3Client = {
@@ -427,19 +433,19 @@ describe('Version Put', () => {
         s3Sent.push(c);
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
     const mockIfNoneMatch = () => mockS3Client;
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockIfNoneMatch
+        ifNoneMatch: mockIfNoneMatch,
       },
     });
 
@@ -452,16 +458,17 @@ describe('Version Put', () => {
   it('Post Object With Version creates new version', async () => {
     const req = {
       json: () => ({
-        label: 'foobar'
-      })
+        label: 'foobar',
+      }),
     };
     const env = {};
     const ctx = {
       bucket: 'mybucket',
       org: 'org123',
-      key: 'q/r/t'
+      key: 'q/r/t',
     };
 
+    // eslint-disable-next-line consistent-return
     const mockGetObject = async (e, u, h) => {
       if (e === env && !h) {
         const body = ReadableStream.from('doccontent');
@@ -471,8 +478,7 @@ describe('Version Put', () => {
           contentLength: 10,
         };
       }
-    }
-
+    };
 
     const s3Sent = [];
     const mockS3Client = {
@@ -480,10 +486,10 @@ describe('Version Put', () => {
         s3Sent.push(c);
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
     const mockIfMatch = () => mockS3Client;
 
@@ -493,20 +499,20 @@ describe('Version Put', () => {
         s3INMSent.push(c);
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
     const mockIfNoneMatch = () => mockS3INMClient;
 
     const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifMatch: mockIfMatch,
-        ifNoneMatch: mockIfNoneMatch
+        ifNoneMatch: mockIfNoneMatch,
       },
     });
 
@@ -532,7 +538,7 @@ describe('Version Put', () => {
     assert.equal('text/html', s3Sent[0].input.ContentType);
     assert.equal(10, s3Sent[0].input.ContentLength);
 
-    assert(s3INMSent[0].input.Body !== s3Sent[0].input.Body )
+    assert(s3INMSent[0].input.Body !== s3Sent[0].input.Body);
   });
 
   it('Test putObjectWithVersion HEAD', async () => {
@@ -544,7 +550,7 @@ describe('Version Put', () => {
         timestamp: 123,
         users: '[{"email":"anonymous"}]',
         preparsingstore: 12345,
-      }
+      };
       return { body: '', metadata, contentLength: 616 };
     };
 
@@ -554,25 +560,25 @@ describe('Version Put', () => {
         sentToS3.push(c);
         return {
           $metadata: {
-            httpStatusCode: 201
-          }
+            httpStatusCode: 201,
+          },
         };
-      }
+      },
     };
     const mockS3Client = () => s3Client;
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
-        ifNoneMatch: mockS3Client
+        ifNoneMatch: mockS3Client,
       },
     });
 
     const resp = await putObjectWithVersion({}, { method: 'HEAD' }, { type: 'text/html' });
     assert.equal(1, sentToS3.length);
-    const input = sentToS3[0].input;
+    const { input } = sentToS3[0];
     assert.equal('', input.Body, 'Empty body for HEAD');
     assert.equal(0, input.ContentLength, 'Should have used 0 as content length for HEAD');
     assert.equal('/q', input.Metadata.Path);
@@ -587,7 +593,7 @@ describe('Version Put', () => {
         version: '101',
         path: '/qwerty',
         timestamp: 1234,
-      }
+      };
       return { body: 'Somebody...', metadata, contentLength: 616 };
     };
 
@@ -597,10 +603,10 @@ describe('Version Put', () => {
         sentToS3.push(c);
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
     const mockS3Client = () => s3Client;
 
@@ -610,20 +616,20 @@ describe('Version Put', () => {
         sentToS3_2.push(c);
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
     const mockS3Client2 = () => s3Client2;
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: mockS3Client,
-        ifMatch: mockS3Client2
+        ifMatch: mockS3Client2,
       },
     });
 
@@ -631,15 +637,15 @@ describe('Version Put', () => {
       org: 'o1',
       body: 'foobar',
       key: 'mypath',
-      type: 'text/html',
-    }
+      type: 'test/plain',
+    };
     const ctx = {
       org: 'o1',
-      users: [{ email: 'hi@acme.com' }]
-    }
-    const resp = await putObjectWithVersion({}, ctx, update, true);
+      users: [{ email: 'hi@acme.com' }],
+    };
+    await putObjectWithVersion({}, ctx, update, true);
     assert.equal(1, sentToS3.length);
-    const input = sentToS3[0].input;
+    const { input } = sentToS3[0];
     assert.equal('Somebody...', input.Body);
     assert.equal(616, input.ContentLength);
     assert.equal('/qwerty', input.Metadata.Path);
@@ -664,7 +670,7 @@ describe('Version Put', () => {
         version: '101',
         path: '/qwerty',
         timestamp: 1234,
-      }
+      };
       return { body: 'Somebody...', metadata, contentLength: 616 };
     };
 
@@ -674,10 +680,10 @@ describe('Version Put', () => {
         sentToS3.push(c);
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
     const mockS3Client = () => s3Client;
 
@@ -687,20 +693,20 @@ describe('Version Put', () => {
         sentToS3_2.push(c);
         return {
           $metadata: {
-            httpStatusCode: 200
-          }
+            httpStatusCode: 200,
+          },
         };
-      }
+      },
     };
     const mockS3Client2 = () => s3Client2;
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: mockS3Client,
-        ifMatch: mockS3Client2
+        ifMatch: mockS3Client2,
       },
     });
 
@@ -708,19 +714,19 @@ describe('Version Put', () => {
       org: 'o1',
       body: '',
       key: 'mypath',
-      type: 'text/html',
-    }
+      type: 'test/plain',
+    };
     const ctx = {
       org: 'o1',
       users: [{ email: 'hi@acme.com' }],
       method: 'PUT',
       ext: 'html',
-    }
+    };
 
-    const resp = await putObjectWithVersion({}, ctx, update, true);
+    await putObjectWithVersion({}, ctx, update, true);
 
     assert.equal(1, sentToS3.length);
-    const input = sentToS3[0].input;
+    const { input } = sentToS3[0];
 
     assert.equal('Somebody...', input.Body);
     assert.equal(616, input.ContentLength);
@@ -746,19 +752,19 @@ describe('Version Put', () => {
         const e = new Error('Test error1');
         e.$metadata = { httpStatusCode: 418 };
         throw e;
-      }
+      },
     };
     const s3client2 = {
       send: async (c) => {
         throw new Error('Test error2');
-      }
+      },
     };
     const s3client3 = {
       send: async (c) => {
         const e = new Error('Test error3');
         e.$metadata = {};
         throw e;
-      }
+      },
     };
     let s3Client = null;
     const mockS3Client = () => s3Client;
@@ -770,13 +776,13 @@ describe('Version Put', () => {
     });
 
     s3Client = s3client1;
-    const resp = await putVersion({}, { Body: 'hello'});
+    const resp = await putVersion({}, { Body: 'hello' });
     assert.equal(418, resp.status);
     s3Client = s3client2;
-    const resp2 = await putVersion({}, { Body: 'hello'});
+    const resp2 = await putVersion({}, { Body: 'hello' });
     assert.equal(500, resp2.status);
     s3Client = s3client3;
-    const resp3 = await putVersion({}, { Body: 'hello'});
+    const resp3 = await putVersion({}, { Body: 'hello' });
     assert.equal(500, resp3.status);
   });
 
@@ -786,9 +792,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -806,7 +812,7 @@ describe('Version Put', () => {
       Ext: 'html',
       Metadata: { test: 'metadata' },
       ContentLength: 12,
-      ContentType: 'text/html'
+      ContentType: 'text/html',
     };
 
     await putVersion({}, testParams);
@@ -827,36 +833,36 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const mockGetObject = async () => ({
       status: 200,
       body: 'test body',
       contentLength: 9,
-      contentType: 'text/html',
-      metadata: { existing: 'metadata' }
+      contentType: 'text/plain',
+      metadata: { existing: 'metadata' },
     });
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: () => mockS3Client,
         ifMatch: () => mockS3Client,
         generateId: () => 'generated-id',
-        generateVersion: () => 'generated-version'
+        generateVersion: () => 'generated-version',
       },
     });
 
     const env = {};
     const daCtx = {
       org: 'test-org',
-      ext: 'html',
-      users: [{ email: 'test@example.com' }]
+      ext: 'txt',
+      users: [{ email: 'test@example.com' }],
     };
 
     await putObjectWithVersion(env, daCtx, { key: 'test-file.html', type: 'text/html' }, 'test body', 'test-guid');
@@ -874,9 +880,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -897,7 +903,7 @@ describe('Version Put', () => {
       Version: 'jpeg-version-1',
       Ext: 'jpg',
       Metadata: { Users: '["user@example.com"]', Path: 'images/photo.jpg' },
-      ContentType: 'image/jpeg'
+      ContentType: 'image/jpeg',
     };
 
     const result = await putVersion({}, testParams);
@@ -919,9 +925,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -942,7 +948,7 @@ describe('Version Put', () => {
       Version: 'png-version-1',
       Ext: 'png',
       Metadata: { Users: '["user@example.com"]', Path: 'images/graphic.png' },
-      ContentType: 'image/png'
+      ContentType: 'image/png',
     };
 
     const result = await putVersion({}, testParams);
@@ -962,9 +968,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -985,7 +991,7 @@ describe('Version Put', () => {
       Version: 'video-version-1',
       Ext: 'mp4',
       Metadata: { Users: '["user@example.com"]', Path: 'videos/demo.mp4' },
-      ContentType: 'video/mp4'
+      ContentType: 'video/mp4',
     };
 
     const result = await putVersion({}, testParams);
@@ -1005,9 +1011,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -1028,7 +1034,7 @@ describe('Version Put', () => {
       Version: 'svg-version-1',
       Ext: 'svg',
       Metadata: { Users: '["user@example.com"]', Path: 'images/icon.svg' },
-      ContentType: 'image/svg+xml'
+      ContentType: 'image/svg+xml',
     };
 
     const result = await putVersion({}, testParams);
@@ -1048,13 +1054,15 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     // Simulate existing JPEG file
-    const existingJpegData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46]);
+    const existingJpegData = new Uint8Array([
+      0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46,
+    ]);
     const mockGetObject = async () => ({
       status: 200,
       body: existingJpegData,
@@ -1066,13 +1074,13 @@ describe('Version Put', () => {
         version: 'jpeg-version-old',
         timestamp: '1234567890',
         users: '["olduser@example.com"]',
-        path: 'images/photo.jpg'
-      }
+        path: 'images/photo.jpg',
+      },
     });
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: () => mockS3Client,
@@ -1084,7 +1092,7 @@ describe('Version Put', () => {
     const daCtx = {
       org: 'testorg',
       ext: 'jpg',
-      users: [{ email: 'newuser@example.com' }]
+      users: [{ email: 'newuser@example.com' }],
     };
 
     // New JPEG data to upload
@@ -1096,7 +1104,7 @@ describe('Version Put', () => {
       org: 'testorg',
       key: 'images/photo.jpg',
       body: newJpegFile,
-      type: 'image/jpeg'
+      type: 'image/jpeg',
     };
 
     const result = await putObjectWithVersion(env, daCtx, update, true);
@@ -1121,9 +1129,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -1144,7 +1152,7 @@ describe('Version Put', () => {
       Version: 'pdf-version-1',
       Ext: 'pdf',
       Metadata: { Users: '["user@example.com"]', Path: 'documents/report.pdf' },
-      ContentType: 'application/pdf'
+      ContentType: 'application/pdf',
     };
 
     const result = await putVersion({}, testParams);
@@ -1164,9 +1172,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -1187,7 +1195,7 @@ describe('Version Put', () => {
       Version: 'zip-version-1',
       Ext: 'zip',
       Metadata: { Users: '["user@example.com"]', Path: 'downloads/archive.zip' },
-      ContentType: 'application/zip'
+      ContentType: 'application/zip',
     };
 
     const result = await putVersion({}, testParams);
@@ -1207,9 +1215,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -1230,7 +1238,7 @@ describe('Version Put', () => {
       Version: 'binary-version-1',
       Ext: 'bin',
       Metadata: { Users: '["user@example.com"]', Path: 'files/data.bin' },
-      ContentType: 'application/octet-stream'
+      ContentType: 'application/octet-stream',
     };
 
     const result = await putVersion({}, testParams);
@@ -1250,9 +1258,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -1273,7 +1281,7 @@ describe('Version Put', () => {
       Version: 'audio-version-1',
       Ext: 'mp3',
       Metadata: { Users: '["user@example.com"]', Path: 'media/song.mp3' },
-      ContentType: 'audio/mpeg'
+      ContentType: 'audio/mpeg',
     };
 
     const result = await putVersion({}, testParams);
@@ -1293,9 +1301,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -1320,7 +1328,7 @@ describe('Version Put', () => {
       Version: 'html-version-1',
       Ext: 'html',
       Metadata: { Users: '["user@example.com"]', Path: 'pages/index.html' },
-      ContentType: 'text/html'
+      ContentType: 'text/html',
     };
 
     const result = await putVersion({}, testParams);
@@ -1340,9 +1348,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const { putVersion } = await esmock('../../../src/storage/version/put.js', {
@@ -1355,7 +1363,7 @@ describe('Version Put', () => {
     const jsonContent = JSON.stringify({
       name: 'Test Config',
       version: '2.0',
-      features: ['feature1', 'feature2']
+      features: ['feature1', 'feature2'],
     }, null, 2);
     const jsonFile = new File([jsonContent], 'config.json', { type: 'application/json' });
 
@@ -1367,7 +1375,7 @@ describe('Version Put', () => {
       Version: 'json-version-1',
       Ext: 'json',
       Metadata: { Users: '["user@example.com"]', Path: 'config/settings.json' },
-      ContentType: 'application/json'
+      ContentType: 'application/json',
     };
 
     const result = await putVersion({}, testParams);
@@ -1387,9 +1395,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     // Simulate existing HTML file
@@ -1405,13 +1413,13 @@ describe('Version Put', () => {
         version: 'html-version-old',
         timestamp: '1234567890',
         users: '["olduser@example.com"]',
-        path: 'pages/index.html'
-      }
+        path: 'pages/index.html',
+      },
     });
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: () => mockS3Client,
@@ -1423,7 +1431,7 @@ describe('Version Put', () => {
     const daCtx = {
       org: 'testorg',
       ext: 'html',
-      users: [{ email: 'newuser@example.com' }]
+      users: [{ email: 'newuser@example.com' }],
     };
 
     // New HTML content to upload
@@ -1435,7 +1443,7 @@ describe('Version Put', () => {
       org: 'testorg',
       key: 'pages/index.html',
       body: newHtmlFile,
-      type: 'text/html'
+      type: 'text/html',
     };
 
     const result = await putObjectWithVersion(env, daCtx, update, true);
@@ -1467,12 +1475,14 @@ describe('Version Put', () => {
     it('JPEG: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
-      
+
       const mockGetObject = async () => {
-        callCount++;
+        callCount += 1;
         // First call: file doesn't exist
         if (callCount === 1) {
-          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+          return {
+            status: 404, metadata: {}, body: '', contentLength: 0,
+          };
         }
         // Second call: file exists
         return {
@@ -1486,8 +1496,8 @@ describe('Version Put', () => {
             version: 'old-version',
             timestamp: '1234567890',
             users: '["user@example.com"]',
-            path: 'images/photo.jpg'
-          }
+            path: 'images/photo.jpg',
+          },
         };
       };
 
@@ -1495,12 +1505,12 @@ describe('Version Put', () => {
         async send(cmd) {
           sentCommands.push(cmd);
           return { $metadata: { httpStatusCode: 200 } };
-        }
+        },
       };
 
       const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
         '../../../src/storage/object/get.js': {
-          default: mockGetObject
+          default: mockGetObject,
         },
         '../../../src/storage/utils/version.js': {
           ifNoneMatch: () => mockS3Client,
@@ -1516,7 +1526,7 @@ describe('Version Put', () => {
         org: 'testorg',
         bucket: 'test-bucket',
         key: 'images/photo.jpg',
-        users: [{ email: 'user@example.com' }]
+        users: [{ email: 'user@example.com' }],
       };
 
       // FIRST CALL - file doesn't exist (404)
@@ -1526,7 +1536,7 @@ describe('Version Put', () => {
         key: 'images/photo.jpg',
         body: jpegFile,
         contentLength: jpegData.length,
-        type: 'image/jpeg'
+        type: 'image/jpeg',
       };
 
       sentCommands.length = 0;
@@ -1549,11 +1559,13 @@ describe('Version Put', () => {
     it('PNG: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
-      
+
       const mockGetObject = async () => {
-        callCount++;
+        callCount += 1;
         if (callCount === 1) {
-          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+          return {
+            status: 404, metadata: {}, body: '', contentLength: 0,
+          };
         }
         return {
           status: 200,
@@ -1566,8 +1578,8 @@ describe('Version Put', () => {
             version: 'old-version',
             timestamp: '1234567890',
             users: '["user@example.com"]',
-            path: 'images/graphic.png'
-          }
+            path: 'images/graphic.png',
+          },
         };
       };
 
@@ -1575,12 +1587,12 @@ describe('Version Put', () => {
         async send(cmd) {
           sentCommands.push(cmd);
           return { $metadata: { httpStatusCode: 200 } };
-        }
+        },
       };
 
       const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
         '../../../src/storage/object/get.js': {
-          default: mockGetObject
+          default: mockGetObject,
         },
         '../../../src/storage/utils/version.js': {
           ifNoneMatch: () => mockS3Client,
@@ -1596,7 +1608,7 @@ describe('Version Put', () => {
         org: 'testorg',
         bucket: 'test-bucket',
         key: 'images/graphic.png',
-        users: [{ email: 'user@example.com' }]
+        users: [{ email: 'user@example.com' }],
       };
 
       const update = {
@@ -1605,7 +1617,7 @@ describe('Version Put', () => {
         key: 'images/graphic.png',
         body: pngFile,
         contentLength: pngData.length,
-        type: 'image/png'
+        type: 'image/png',
       };
 
       // FIRST CALL - no version
@@ -1622,11 +1634,13 @@ describe('Version Put', () => {
     it('HTML: New file (404) creates object WITHOUT version, existing file creates version', async () => {
       const sentCommands = [];
       let callCount = 0;
-      
+
       const mockGetObject = async () => {
-        callCount++;
+        callCount += 1;
         if (callCount === 1) {
-          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+          return {
+            status: 404, metadata: {}, body: '', contentLength: 0,
+          };
         }
         return {
           status: 200,
@@ -1639,8 +1653,8 @@ describe('Version Put', () => {
             version: 'old-version',
             timestamp: '1234567890',
             users: '["user@example.com"]',
-            path: 'pages/index.html'
-          }
+            path: 'pages/index.html',
+          },
         };
       };
 
@@ -1648,12 +1662,12 @@ describe('Version Put', () => {
         async send(cmd) {
           sentCommands.push(cmd);
           return { $metadata: { httpStatusCode: 200 } };
-        }
+        },
       };
 
       const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
         '../../../src/storage/object/get.js': {
-          default: mockGetObject
+          default: mockGetObject,
         },
         '../../../src/storage/utils/version.js': {
           ifNoneMatch: () => mockS3Client,
@@ -1669,7 +1683,7 @@ describe('Version Put', () => {
         org: 'testorg',
         bucket: 'test-bucket',
         key: 'pages/index.html',
-        users: [{ email: 'user@example.com' }]
+        users: [{ email: 'user@example.com' }],
       };
 
       const update = {
@@ -1678,7 +1692,7 @@ describe('Version Put', () => {
         key: 'pages/index.html',
         body: htmlFile,
         contentLength: htmlContent.length,
-        type: 'text/html'
+        type: 'text/html',
       };
 
       // FIRST CALL - no version
@@ -1695,11 +1709,13 @@ describe('Version Put', () => {
     it('JSON: New file (404) creates object WITHOUT version, existing file creates version', async () => {
       const sentCommands = [];
       let callCount = 0;
-      
+
       const mockGetObject = async () => {
-        callCount++;
+        callCount += 1;
         if (callCount === 1) {
-          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+          return {
+            status: 404, metadata: {}, body: '', contentLength: 0,
+          };
         }
         return {
           status: 200,
@@ -1712,8 +1728,8 @@ describe('Version Put', () => {
             version: 'old-version',
             timestamp: '1234567890',
             users: '["user@example.com"]',
-            path: 'config/settings.json'
-          }
+            path: 'config/settings.json',
+          },
         };
       };
 
@@ -1721,12 +1737,12 @@ describe('Version Put', () => {
         async send(cmd) {
           sentCommands.push(cmd);
           return { $metadata: { httpStatusCode: 200 } };
-        }
+        },
       };
 
       const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
         '../../../src/storage/object/get.js': {
-          default: mockGetObject
+          default: mockGetObject,
         },
         '../../../src/storage/utils/version.js': {
           ifNoneMatch: () => mockS3Client,
@@ -1742,7 +1758,7 @@ describe('Version Put', () => {
         org: 'testorg',
         bucket: 'test-bucket',
         key: 'config/settings.json',
-        users: [{ email: 'user@example.com' }]
+        users: [{ email: 'user@example.com' }],
       };
 
       const update = {
@@ -1751,7 +1767,7 @@ describe('Version Put', () => {
         key: 'config/settings.json',
         body: jsonFile,
         contentLength: jsonContent.length,
-        type: 'application/json'
+        type: 'application/json',
       };
 
       // FIRST CALL - no version
@@ -1768,11 +1784,13 @@ describe('Version Put', () => {
     it('PDF: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
-      
+
       const mockGetObject = async () => {
-        callCount++;
+        callCount += 1;
         if (callCount === 1) {
-          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+          return {
+            status: 404, metadata: {}, body: '', contentLength: 0,
+          };
         }
         return {
           status: 200,
@@ -1785,8 +1803,8 @@ describe('Version Put', () => {
             version: 'old-version',
             timestamp: '1234567890',
             users: '["user@example.com"]',
-            path: 'docs/report.pdf'
-          }
+            path: 'docs/report.pdf',
+          },
         };
       };
 
@@ -1794,12 +1812,12 @@ describe('Version Put', () => {
         async send(cmd) {
           sentCommands.push(cmd);
           return { $metadata: { httpStatusCode: 200 } };
-        }
+        },
       };
 
       const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
         '../../../src/storage/object/get.js': {
-          default: mockGetObject
+          default: mockGetObject,
         },
         '../../../src/storage/utils/version.js': {
           ifNoneMatch: () => mockS3Client,
@@ -1815,7 +1833,7 @@ describe('Version Put', () => {
         org: 'testorg',
         bucket: 'test-bucket',
         key: 'docs/report.pdf',
-        users: [{ email: 'user@example.com' }]
+        users: [{ email: 'user@example.com' }],
       };
 
       const update = {
@@ -1824,7 +1842,7 @@ describe('Version Put', () => {
         key: 'docs/report.pdf',
         body: pdfFile,
         contentLength: pdfData.length,
-        type: 'application/pdf'
+        type: 'application/pdf',
       };
 
       // FIRST CALL - no version
@@ -1841,11 +1859,13 @@ describe('Version Put', () => {
     it('MP4: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
-      
+
       const mockGetObject = async () => {
-        callCount++;
+        callCount += 1;
         if (callCount === 1) {
-          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+          return {
+            status: 404, metadata: {}, body: '', contentLength: 0,
+          };
         }
         return {
           status: 200,
@@ -1858,8 +1878,8 @@ describe('Version Put', () => {
             version: 'old-version',
             timestamp: '1234567890',
             users: '["user@example.com"]',
-            path: 'videos/demo.mp4'
-          }
+            path: 'videos/demo.mp4',
+          },
         };
       };
 
@@ -1867,12 +1887,12 @@ describe('Version Put', () => {
         async send(cmd) {
           sentCommands.push(cmd);
           return { $metadata: { httpStatusCode: 200 } };
-        }
+        },
       };
 
       const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
         '../../../src/storage/object/get.js': {
-          default: mockGetObject
+          default: mockGetObject,
         },
         '../../../src/storage/utils/version.js': {
           ifNoneMatch: () => mockS3Client,
@@ -1880,7 +1900,9 @@ describe('Version Put', () => {
         },
       });
 
-      const mp4Data = new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D]);
+      const mp4Data = new Uint8Array([
+        0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D,
+      ]);
       const mp4File = new File([mp4Data], 'demo.mp4', { type: 'video/mp4' });
 
       const env = {};
@@ -1888,7 +1910,7 @@ describe('Version Put', () => {
         org: 'testorg',
         bucket: 'test-bucket',
         key: 'videos/demo.mp4',
-        users: [{ email: 'user@example.com' }]
+        users: [{ email: 'user@example.com' }],
       };
 
       const update = {
@@ -1897,7 +1919,7 @@ describe('Version Put', () => {
         key: 'videos/demo.mp4',
         body: mp4File,
         contentLength: mp4Data.length,
-        type: 'video/mp4'
+        type: 'video/mp4',
       };
 
       // FIRST CALL - no version
@@ -1914,11 +1936,13 @@ describe('Version Put', () => {
     it('SVG: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
-      
+
       const mockGetObject = async () => {
-        callCount++;
+        callCount += 1;
         if (callCount === 1) {
-          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+          return {
+            status: 404, metadata: {}, body: '', contentLength: 0,
+          };
         }
         return {
           status: 200,
@@ -1931,8 +1955,8 @@ describe('Version Put', () => {
             version: 'old-version',
             timestamp: '1234567890',
             users: '["user@example.com"]',
-            path: 'images/icon.svg'
-          }
+            path: 'images/icon.svg',
+          },
         };
       };
 
@@ -1940,12 +1964,12 @@ describe('Version Put', () => {
         async send(cmd) {
           sentCommands.push(cmd);
           return { $metadata: { httpStatusCode: 200 } };
-        }
+        },
       };
 
       const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
         '../../../src/storage/object/get.js': {
-          default: mockGetObject
+          default: mockGetObject,
         },
         '../../../src/storage/utils/version.js': {
           ifNoneMatch: () => mockS3Client,
@@ -1961,7 +1985,7 @@ describe('Version Put', () => {
         org: 'testorg',
         bucket: 'test-bucket',
         key: 'images/icon.svg',
-        users: [{ email: 'user@example.com' }]
+        users: [{ email: 'user@example.com' }],
       };
 
       const update = {
@@ -1970,7 +1994,7 @@ describe('Version Put', () => {
         key: 'images/icon.svg',
         body: svgFile,
         contentLength: svgContent.length,
-        type: 'image/svg+xml'
+        type: 'image/svg+xml',
       };
 
       // FIRST CALL - no version
@@ -1987,11 +2011,13 @@ describe('Version Put', () => {
     it('ZIP: Binary files NEVER create versions (first or second POST)', async () => {
       const sentCommands = [];
       let callCount = 0;
-      
+
       const mockGetObject = async () => {
-        callCount++;
+        callCount += 1;
         if (callCount === 1) {
-          return { status: 404, metadata: {}, body: '', contentLength: 0 };
+          return {
+            status: 404, metadata: {}, body: '', contentLength: 0,
+          };
         }
         return {
           status: 200,
@@ -2004,8 +2030,8 @@ describe('Version Put', () => {
             version: 'old-version',
             timestamp: '1234567890',
             users: '["user@example.com"]',
-            path: 'archives/data.zip'
-          }
+            path: 'archives/data.zip',
+          },
         };
       };
 
@@ -2013,12 +2039,12 @@ describe('Version Put', () => {
         async send(cmd) {
           sentCommands.push(cmd);
           return { $metadata: { httpStatusCode: 200 } };
-        }
+        },
       };
 
       const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
         '../../../src/storage/object/get.js': {
-          default: mockGetObject
+          default: mockGetObject,
         },
         '../../../src/storage/utils/version.js': {
           ifNoneMatch: () => mockS3Client,
@@ -2034,7 +2060,7 @@ describe('Version Put', () => {
         org: 'testorg',
         bucket: 'test-bucket',
         key: 'archives/data.zip',
-        users: [{ email: 'user@example.com' }]
+        users: [{ email: 'user@example.com' }],
       };
 
       const update = {
@@ -2043,7 +2069,7 @@ describe('Version Put', () => {
         key: 'archives/data.zip',
         body: zipFile,
         contentLength: zipData.length,
-        type: 'application/zip'
+        type: 'application/zip',
       };
 
       // FIRST CALL - no version

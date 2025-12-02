@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -22,10 +22,10 @@ export async function getVersionList({ env, daCtx }) {
 
 export async function getVersionSource({ env, daCtx, head }) {
   // daCtx.key is something like
-  // 'f85f9b05-ae48-485b-a3b3-dd203ac5c734/1b7e005b-8602-4053-b920-8e67ad8e8dba.html’
+  // 'f85f9b05-ae48-485b-a3b3-dd203ac5c734/1b7e005b-8602-4053-b920-8e67ad8e8dba.html'
   // so we have to do the permission check when the object is returned from the metadata.
 
-  const resp = await getObjectVersion(env, daCtx, head);
+  const resp = await getObjectVersion(env, daCtx, head, daCtx.conditionalHeaders);
   if (!hasPermission(daCtx, resp.metadata?.path, 'read')) return { status: 403 };
   return resp;
 }
