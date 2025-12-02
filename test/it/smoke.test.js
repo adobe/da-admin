@@ -25,8 +25,6 @@ describe('Integration Tests: smoke tests', function () {
   let devServer;
 
   before(async function () {
-    // Increase timeout for server startup
-    this.timeout(30000);
     s3rver = new S3rver({
       port: S3_PORT,
       address: '127.0.0.1',
@@ -38,7 +36,7 @@ describe('Integration Tests: smoke tests', function () {
     devServer = spawn('npx', [
       'wrangler', 'dev',
       '--port', SERVER_PORT.toString(),
-      '--env', 'it', // Use 'integration' environment from wrangler.toml
+      '--env', 'it',
       '--var', 'S3_DEF_URL:http://localhost:4569',
       '--var', 'S3_ACCESS_KEY_ID:S3RVER',
       '--var', 'S3_SECRET_ACCESS_KEY:S3RVER',
@@ -65,11 +63,6 @@ describe('Integration Tests: smoke tests', function () {
       });
 
       devServer.on('error', reject);
-
-      // Timeout if it doesn't start
-      setTimeout(() => {
-        if (!started) reject(new Error('Timeout waiting for Wrangler to start'));
-      }, 20000);
     });
   });
 
