@@ -17,7 +17,7 @@ export default defineConfig([
   globalIgnores([
     'coverage',
     'dist/*',
-    '.wrangler'
+    '.wrangler',
   ]),
   {
     languageOptions: {
