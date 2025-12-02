@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 export default function getS3Config(env) {
-  return {
+  const config = {
     region: 'auto',
     endpoint: env.S3_DEF_URL,
     credentials: {
@@ -18,4 +18,10 @@ export default function getS3Config(env) {
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     },
   };
+
+  if (env.S3_FORCE_PATH_STYLE === 'true') {
+    config.forcePathStyle = true;
+  }
+
+  return config;
 }
