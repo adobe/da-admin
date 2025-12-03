@@ -401,6 +401,54 @@ describe('Object copy', () => {
       );
     });
 
+    it('Skips copying when source does not exist (folder without object)', async () => {
+      const mockS3Client = class {
+        middlewareStack = {
+          add: () => {},
+        };
+      };
+
+      // Mock getObject to return 404 for a folder that doesn't exist as an object
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'myorg' && key === 'mysrc/virtual-folder') {
+          return {
+            status: 404,
+          };
+        }
+        return null;
+      };
+
+      // eslint-disable-next-line no-shadow
+      const { copyFile } = await esmock('../../../src/storage/object/copy.js', {
+        '@aws-sdk/client-s3': {
+          S3Client: mockS3Client,
+        },
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject,
+        },
+      });
+
+      const env = {
+        dacollab: {
+          fetch: () => {},
+        },
+      };
+      const daCtx = {
+        bucket: 'root-bucket',
+        org: 'myorg',
+        origin: 'https://test.com',
+        users: [{ email: 'test@example.com' }],
+      };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
+      const details = {
+        source: 'mysrc',
+        destination: 'mydst',
+      };
+
+      const resp = await copyFile({}, env, daCtx, 'mysrc/virtual-folder', details, false);
+      assert.strictEqual(resp.$metadata.httpStatusCode, 404);
+    });
+
     it('Copies files with special characters in names', async () => {
       const mockS3Client = class {
         // eslint-disable-next-line class-methods-use-this
