@@ -227,6 +227,7 @@ describe('Version Put', () => {
       if (!h) {
         return {
           body: 'prevbody',
+          contentType: 'text/html',
           metadata: {
             id: 'x123',
             version: 'aaa-bbb',
@@ -296,6 +297,7 @@ describe('Version Put', () => {
       if (!h) {
         return {
           body: 'prevbody',
+          contentType: 'text/html',
           metadata: {
             id: 'q123-456',
             preparsingstore: Date.now(),
@@ -339,7 +341,7 @@ describe('Version Put', () => {
       bucket: 'bbb', org: 'myorg', ext: 'html', users: [{ email: 'foo@acme.org' }, { email: 'bar@acme.org' }],
     };
     const update = {
-      bucket: 'bbb', body: 'new-body', org: 'myorg', key: 'a/x.html',
+      bucket: 'bbb', body: 'new-body', org: 'myorg', key: 'a/x.html', contentType: 'text/html',
     };
     const resp = await putObjectWithVersion(env, daCtx, update, false);
     assert.equal(202, resp.status);
@@ -398,7 +400,12 @@ describe('Version Put', () => {
 
     const env = {};
     const daCtx = { bucket: 'b-b', org: 'myorg' };
-    const update = { bucket: 'b-b', org: 'myorg', key: 'a/b/c' };
+    const update = {
+      bucket: 'b-b',
+      org: 'myorg',
+      key: 'a/b/c',
+      type: 'text/html',
+    };
     const resp = await putObjectWithVersion(env, daCtx, update, true);
     assert.equal(201, resp.status);
     assert(resp.metadata.id, 'The ID should be set');
@@ -406,7 +413,7 @@ describe('Version Put', () => {
     assert.equal(1, s3Sent.length);
     assert.equal('b-b', s3Sent[0].input.Bucket);
     assert(s3Sent[0].input.Metadata.ID);
-    assert.equal('a/b/c.html', s3Sent[0].input.Metadata.Path);
+    assert.equal('a/b/c', s3Sent[0].input.Metadata.Path);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
     assert(s3Sent[0].input.Metadata.Version);
   });
@@ -594,7 +601,12 @@ describe('Version Put', () => {
         path: '/qwerty',
         timestamp: 1234,
       };
-      return { body: 'Somebody...', metadata, contentLength: 616 };
+      return {
+        body: 'Somebody...',
+        contentType: 'text/html',
+        metadata,
+        contentLength: 616,
+      };
     };
 
     const sentToS3 = [];
@@ -637,7 +649,7 @@ describe('Version Put', () => {
       org: 'o1',
       body: 'foobar',
       key: 'mypath',
-      type: 'test/plain',
+      type: 'text/html',
     };
     const ctx = {
       org: 'o1',
@@ -714,7 +726,7 @@ describe('Version Put', () => {
       org: 'o1',
       body: '',
       key: 'mypath',
-      type: 'test/plain',
+      type: 'text/html',
     };
     const ctx = {
       org: 'o1',
@@ -842,7 +854,7 @@ describe('Version Put', () => {
       status: 200,
       body: 'test body',
       contentLength: 9,
-      contentType: 'text/plain',
+      contentType: 'text/html',
       metadata: { existing: 'metadata' },
     });
 
