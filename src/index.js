@@ -35,7 +35,7 @@ export default {
       if (e.message === 'Invalid path') {
         return daResp({ status: 400 });
       }
-      console.error('Error coumputing context', e);
+      console.error('Error computing context', e);
       return daResp({ status: 500 });
     }
 
