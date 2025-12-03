@@ -47,7 +47,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
   }
 
   // URL-encode the key parts while preserving slashes for S3 folder structure
-  const encodedSourcePath = `${daCtx.org}/${sourceKey}`
+  const encodedKey = sourceKey
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/');
@@ -55,7 +55,7 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
   const input = {
     Bucket: daCtx.bucket,
     Key: `${daCtx.org}/${Key}`,
-    CopySource: `${daCtx.bucket}/${encodedSourcePath}`,
+    CopySource: `${daCtx.bucket}/${daCtx.org}/${encodedKey}`,
     ContentType: source?.contentType || 'application/octet-stream',
   };
 
