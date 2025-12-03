@@ -879,9 +879,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const mockGetObject = async () => ({
@@ -896,13 +896,13 @@ describe('Version Put', () => {
         timestamp: '1234567890',
         users: '[{"email":"user@example.com"}]',
         path: 'docs/page.html',
-        preparsingstore: '0' // No longer triggers special behavior
-      }
+        preparsingstore: '0', // No longer triggers special behavior
+      },
     });
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifMatch: () => mockS3Client,
@@ -917,7 +917,7 @@ describe('Version Put', () => {
       key: 'docs/page.html',
       ext: 'html',
       method: 'PUT',
-      users: [{ email: 'user@example.com' }]
+      users: [{ email: 'user@example.com' }],
     };
 
     // Call without body parameter
@@ -925,7 +925,7 @@ describe('Version Put', () => {
       bucket: 'test-bucket',
       org: 'test-org',
       key: 'docs/page.html',
-      type: 'text/html'
+      type: 'text/html',
     });
 
     // Should have 2 commands: putVersion + putObject
@@ -935,8 +935,11 @@ describe('Version Put', () => {
     const versionCommand = sentCommands[0];
     assert.strictEqual(versionCommand.input.Key, 'test-org/.da-versions/doc-123/v1.html');
     assert.strictEqual(versionCommand.input.Body, ''); // Empty - no Collab Parse
-    assert.ok(versionCommand.input.ContentLength === undefined || versionCommand.input.ContentLength === 0);
-    
+    assert.ok(
+      versionCommand.input.ContentLength === undefined
+      || versionCommand.input.ContentLength === 0,
+    );
+
     // Second command should be putObject updating the main file
     const updateCommand = sentCommands[1];
     assert.strictEqual(updateCommand.input.Key, 'test-org/docs/page.html');
@@ -950,9 +953,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const mockGetObject = async () => ({
@@ -966,14 +969,14 @@ describe('Version Put', () => {
         version: 'v2',
         timestamp: '1234567890',
         users: '[{"email":"user@example.com"}]',
-        path: 'docs/page2.html'
+        path: 'docs/page2.html',
         // preparsingstore is undefined - defaults to '0'
-      }
+      },
     });
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifMatch: () => mockS3Client,
@@ -988,7 +991,7 @@ describe('Version Put', () => {
       key: 'docs/page2.html',
       ext: 'html',
       method: 'PUT',
-      users: [{ email: 'user@example.com' }]
+      users: [{ email: 'user@example.com' }],
     };
 
     // Call without body parameter
@@ -996,7 +999,7 @@ describe('Version Put', () => {
       bucket: 'test-bucket',
       org: 'test-org',
       key: 'docs/page2.html',
-      type: 'text/html'
+      type: 'text/html',
     });
 
     // Should have 2 commands: putVersion + putObject
@@ -1006,7 +1009,7 @@ describe('Version Put', () => {
     const versionCommand = sentCommands[0];
     assert.strictEqual(versionCommand.input.Key, 'test-org/.da-versions/doc-456/v2.html');
     assert.strictEqual(versionCommand.input.Body, ''); // Empty - no body stored
-    
+
     // Second command - preparsingstore should default to '0'
     const updateCommand = sentCommands[1];
     assert.strictEqual(updateCommand.input.Metadata.Preparsingstore, '0');
@@ -1018,9 +1021,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const mockGetObject = async () => ({
@@ -1035,13 +1038,13 @@ describe('Version Put', () => {
         timestamp: '1234567890',
         users: '[{"email":"user@example.com"}]',
         path: 'docs/page3.html',
-        preparsingstore: '1700000000000' // Already set - should be preserved
-      }
+        preparsingstore: '1700000000000', // Already set - should be preserved
+      },
     });
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifMatch: () => mockS3Client,
@@ -1056,7 +1059,7 @@ describe('Version Put', () => {
       key: 'docs/page3.html',
       ext: 'html',
       method: 'PUT',
-      users: [{ email: 'user@example.com' }]
+      users: [{ email: 'user@example.com' }],
     };
 
     // Call without body parameter
@@ -1064,7 +1067,7 @@ describe('Version Put', () => {
       bucket: 'test-bucket',
       org: 'test-org',
       key: 'docs/page3.html',
-      type: 'text/html'
+      type: 'text/html',
     });
 
     // Should have 2 commands: putVersion (with empty body) + putObject
@@ -1075,8 +1078,11 @@ describe('Version Put', () => {
     assert.strictEqual(versionCommand.input.Key, 'test-org/.da-versions/doc-789/v3.html');
     assert.strictEqual(versionCommand.input.Body, ''); // Empty - no body stored
     // ContentLength can be undefined or 0 for empty body
-    assert.ok(versionCommand.input.ContentLength === undefined || versionCommand.input.ContentLength === 0);
-    
+    assert.ok(
+      versionCommand.input.ContentLength === undefined
+      || versionCommand.input.ContentLength === 0,
+    );
+
     // Second command should preserve the existing preparsingstore value
     const updateCommand = sentCommands[1];
     assert.strictEqual(updateCommand.input.Metadata.Preparsingstore, '1700000000000');
@@ -1088,9 +1094,9 @@ describe('Version Put', () => {
       async send(cmd) {
         sentCommands.push(cmd);
         return {
-          $metadata: { httpStatusCode: 200 }
+          $metadata: { httpStatusCode: 200 },
         };
-      }
+      },
     };
 
     const mockGetObject = async () => ({
@@ -1105,13 +1111,13 @@ describe('Version Put', () => {
         timestamp: '1234567890',
         users: '[{"email":"user@example.com"}]',
         path: 'docs/page4.html',
-        preparsingstore: '0'
-      }
+        preparsingstore: '0',
+      },
     });
 
     const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
       '../../../src/storage/object/get.js': {
-        default: mockGetObject
+        default: mockGetObject,
       },
       '../../../src/storage/utils/version.js': {
         ifMatch: () => mockS3Client,
@@ -1126,7 +1132,7 @@ describe('Version Put', () => {
       key: 'docs/page4.html',
       ext: 'html',
       method: 'PUT',
-      users: [{ email: 'user@example.com' }]
+      users: [{ email: 'user@example.com' }],
     };
 
     // Call WITH body parameter
@@ -1135,7 +1141,7 @@ describe('Version Put', () => {
       org: 'test-org',
       key: 'docs/page4.html',
       body: '<html><body>New content</body></html>',
-      type: 'text/html'
+      type: 'text/html',
     }, true); // body parameter is true
 
     // Should have 2 commands: putVersion + putObject
