@@ -41,10 +41,21 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
     key: sourceKey,
   }, true);
 
+  // Skip if source doesn't exist (e.g., it's a folder without an actual object)
+  if (source?.status === 404) {
+    return { $metadata: { httpStatusCode: 404 } };
+  }
+
+  // URL-encode the key parts while preserving slashes for S3 folder structure
+  const encodedSourcePath = `${daCtx.org}/${sourceKey}`
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
   const input = {
     Bucket: daCtx.bucket,
     Key: `${daCtx.org}/${Key}`,
-    CopySource: `${daCtx.bucket}/${daCtx.org}/${sourceKey}`,
+    CopySource: `${daCtx.bucket}/${encodedSourcePath}`,
     ContentType: source?.contentType || 'application/octet-stream',
   };
 
