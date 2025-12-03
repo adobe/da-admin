@@ -25,7 +25,7 @@ import { hasPermission } from '../../utils/auth.js';
 const MAX_KEYS = 900;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
-  const Key = `${sourceKey.replace(details.source, details.destination)}`;
+  const Key = sourceKey.replace(details.source, details.destination);
 
   if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) {
     return {
