@@ -66,7 +66,9 @@ describe('Object storage', () => {
     it('Creates version for JPEG image upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-jpeg-id' } };
       };
 
@@ -74,7 +76,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create a mock JPEG file (using a simple byte array to simulate binary data)
@@ -88,7 +90,7 @@ describe('Object storage', () => {
         key: 'images/test-image.jpg',
         pathname: '/images/test-image',
         propsKey: 'images/test-image.jpg.props',
-        ext: 'jpg'
+        ext: 'jpg',
       };
 
       const obj = { data: jpegFile, guid: 'jpeg-guid-123' };
@@ -105,7 +107,9 @@ describe('Object storage', () => {
     it('Creates version for PNG image upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-png-id' } };
       };
 
@@ -113,7 +117,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create a mock PNG file (PNG signature)
@@ -127,7 +131,7 @@ describe('Object storage', () => {
         key: 'images/test-image.png',
         pathname: '/images/test-image',
         propsKey: 'images/test-image.png.props',
-        ext: 'png'
+        ext: 'png',
       };
 
       const obj = { data: pngFile };
@@ -143,7 +147,9 @@ describe('Object storage', () => {
     it('Creates version for MP4 video upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-video-id' } };
       };
 
@@ -151,7 +157,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create a mock MP4 file (ftyp box signature)
@@ -165,7 +171,7 @@ describe('Object storage', () => {
         key: 'videos/test-video.mp4',
         pathname: '/videos/test-video',
         propsKey: 'videos/test-video.mp4.props',
-        ext: 'mp4'
+        ext: 'mp4',
       };
 
       const obj = { data: mp4File, guid: 'video-guid-456' };
@@ -182,7 +188,9 @@ describe('Object storage', () => {
     it('Creates version for SVG image upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-svg-id' } };
       };
 
@@ -190,7 +198,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create an SVG file (text-based but still an image)
@@ -204,7 +212,7 @@ describe('Object storage', () => {
         key: 'images/test-image.svg',
         pathname: '/images/test-image',
         propsKey: 'images/test-image.svg.props',
-        ext: 'svg'
+        ext: 'svg',
       };
 
       const obj = { data: svgFile, guid: 'svg-guid-789' };
@@ -221,7 +229,9 @@ describe('Object storage', () => {
     it('Creates version for PDF document upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-pdf-id' } };
       };
 
@@ -229,7 +239,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create a mock PDF file (PDF signature: %PDF)
@@ -243,7 +253,7 @@ describe('Object storage', () => {
         key: 'documents/report.pdf',
         pathname: '/documents/report',
         propsKey: 'documents/report.pdf.props',
-        ext: 'pdf'
+        ext: 'pdf',
       };
 
       const obj = { data: pdfFile, guid: 'pdf-guid-abc' };
@@ -260,7 +270,9 @@ describe('Object storage', () => {
     it('Creates version for ZIP archive upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-zip-id' } };
       };
 
@@ -268,7 +280,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create a mock ZIP file (ZIP signature: PK)
@@ -282,7 +294,7 @@ describe('Object storage', () => {
         key: 'downloads/archive.zip',
         pathname: '/downloads/archive',
         propsKey: 'downloads/archive.zip.props',
-        ext: 'zip'
+        ext: 'zip',
       };
 
       const obj = { data: zipFile, guid: 'zip-guid-def' };
@@ -299,7 +311,9 @@ describe('Object storage', () => {
     it('Creates version for generic binary file upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-binary-id' } };
       };
 
@@ -307,7 +321,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create a generic binary file with application/octet-stream (fallback content type)
@@ -321,7 +335,7 @@ describe('Object storage', () => {
         key: 'files/data.bin',
         pathname: '/files/data',
         propsKey: 'files/data.bin.props',
-        ext: 'bin'
+        ext: 'bin',
       };
 
       const obj = { data: binaryFile, guid: 'binary-guid-ghi' };
@@ -338,7 +352,9 @@ describe('Object storage', () => {
     it('Creates version for audio file upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-audio-id' } };
       };
 
@@ -346,7 +362,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create a mock MP3 file (ID3v2 signature)
@@ -360,7 +376,7 @@ describe('Object storage', () => {
         key: 'media/audio.mp3',
         pathname: '/media/audio',
         propsKey: 'media/audio.mp3.props',
-        ext: 'mp3'
+        ext: 'mp3',
       };
 
       const obj = { data: mp3File, guid: 'audio-guid-jkl' };
@@ -377,7 +393,9 @@ describe('Object storage', () => {
     it('Creates version for HTML file upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-html-id' } };
       };
 
@@ -385,7 +403,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create an HTML file with typical content
@@ -409,7 +427,7 @@ describe('Object storage', () => {
         key: 'pages/index.html',
         pathname: '/pages/index',
         propsKey: 'pages/index.html.props',
-        ext: 'html'
+        ext: 'html',
       };
 
       const obj = { data: htmlFile, guid: 'html-guid-mno' };
@@ -426,7 +444,9 @@ describe('Object storage', () => {
     it('Creates version for JSON file upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
-        versionCalls.push({ e, daCtx, update, body, guid });
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
         return { status: 201, metadata: { id: 'test-json-id' } };
       };
 
@@ -434,7 +454,7 @@ describe('Object storage', () => {
         '../../../src/storage/version/put.js': {
           putObjectWithVersion: mockPutObjectWithVersion,
           postObjectVersion,
-        }
+        },
       });
 
       // Create a JSON file with typical structured data
@@ -443,12 +463,12 @@ describe('Object storage', () => {
         version: '1.0.0',
         settings: {
           enabled: true,
-          options: ['option1', 'option2', 'option3']
+          options: ['option1', 'option2', 'option3'],
         },
         metadata: {
           author: 'test@example.com',
-          created: '2024-01-01T00:00:00Z'
-        }
+          created: '2024-01-01T00:00:00Z',
+        },
       }, null, 2);
       const jsonFile = new File([jsonContent], 'config.json', { type: 'application/json' });
 
@@ -459,7 +479,7 @@ describe('Object storage', () => {
         key: 'config/settings.json',
         pathname: '/config/settings',
         propsKey: 'config/settings.json.props',
-        ext: 'json'
+        ext: 'json',
       };
 
       const obj = { data: jsonFile, guid: 'json-guid-pqr' };
