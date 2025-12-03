@@ -11,8 +11,8 @@
  */
 
 /* eslint-env mocha */
-import assert from 'assert';
-import { invalidateCollab } from '../../../src/storage/utils/object.js';
+import assert from 'node:assert';
+import { notifyCollab } from '../../../src/storage/utils/object.js';
 
 describe('Storage Object Utils tests', () => {
   function setupEnv() {
@@ -31,17 +31,35 @@ describe('Storage Object Utils tests', () => {
     const { called, env } = setupEnv();
 
     assert.strictEqual(called.length, 0, 'precondition');
-    await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c.html', env);
+    await notifyCollab('syncadmin', 'https://admin.da.live/source/a/b/c.html', env);
     assert.strictEqual(called.length, 1);
-    assert.strictEqual(called[0], 'https://localhost/api/v1/syncAdmin?doc=https://admin.da.live/source/a/b/c.html');
+    assert.strictEqual(called[0], 'https://localhost/api/v1/syncadmin?doc=https://admin.da.live/source/a/b/c.html');
   });
 
   it('Should not invalidate non-html documents', async () => {
     const { called, env } = setupEnv();
 
     assert.strictEqual(called.length, 0, 'precondition');
-    await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c.jpg', env);
-    await invalidateCollab('syncAdmin', 'https://admin.da.live/source/a/b/c/d', env);
+    await notifyCollab('syncadmin', 'https://admin.da.live/source/a/b/c.jpg', env);
+    await notifyCollab('syncadmin', 'https://admin.da.live/source/a/b/c/d', env);
     assert.strictEqual(called.length, 0, 'should not have invalidated anything');
+  });
+
+  it('Should invalidate (with shared secret', async () => {
+    const called = [];
+    const env = {
+      dacollab: {
+        fetch: async (url, opts) => {
+          console.log(`invalidate called with ${url}`);
+          assert.strictEqual(opts.headers.authorization, 'token example-secret');
+          called.push(url);
+        },
+      },
+      COLLAB_SHARED_SECRET: 'example-secret',
+    };
+    assert.strictEqual(called.length, 0, 'precondition');
+    await notifyCollab('syncadmin', 'https://admin.da.live/source/a/b/c.html', env);
+    assert.strictEqual(called.length, 1);
+    assert.strictEqual(called[0], 'https://localhost/api/v1/syncadmin?doc=https://admin.da.live/source/a/b/c.html');
   });
 });

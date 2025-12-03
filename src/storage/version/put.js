@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -67,7 +67,14 @@ function buildInput({
   };
 }
 
-export async function putObjectWithVersion(env, daCtx, update, body, guid) {
+export async function putObjectWithVersion(
+  env,
+  daCtx,
+  update,
+  body,
+  guid,
+  clientConditionals = null,
+) {
   const config = getS3Config(env);
   // While we are automatically storing the body once for the 'Collab Parse' changes, we never
   // do a HEAD, because we may need the content. Once we don't need to do this automatic store
@@ -87,8 +94,40 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   const Timestamp = `${Date.now()}`;
   const Path = update.key;
 
+  // Validate conflicting conditionals - both headers present is unusual for PUT
+  let effectiveConditionals = clientConditionals;
+  if (clientConditionals?.ifMatch && clientConditionals?.ifNoneMatch) {
+    // Per RFC 7232, If-Match should be evaluated first for PUT/POST
+    // If-None-Match for PUT is less common (create-only semantics)
+    // eslint-disable-next-line no-console
+    console.warn('Both If-Match and If-None-Match provided, prioritizing If-Match per RFC 7232');
+    // Clear If-None-Match to prevent confusion
+    effectiveConditionals = { ifMatch: clientConditionals.ifMatch };
+  }
+
+  // Handle client-provided If-Match: * (requires resource to exist)
+  if (effectiveConditionals?.ifMatch === '*') {
+    if (current.status === 404) {
+      return { status: 412, metadata: { id: ID } };
+    }
+    // Resource exists, proceed with update using actual ETag
+    // Fall through to update logic below with current.etag
+  }
+
+  // Handle client-provided If-None-Match: * (requires resource NOT to exist)
+  if (effectiveConditionals?.ifNoneMatch === '*') {
+    if (current.status !== 404) {
+      return { status: 412, metadata: { id: ID } };
+    }
+    // Resource doesn't exist, proceed with create
+    // Fall through to create logic below
+  }
+
   if (current.status === 404) {
-    const client = ifNoneMatch(config);
+    // Use client conditional if provided, otherwise use internal If-None-Match: *
+    const client = effectiveConditionals?.ifNoneMatch
+      ? ifNoneMatch(config, effectiveConditionals.ifNoneMatch)
+      : ifNoneMatch(config);
     const command = new PutObjectCommand({
       ...input,
       Metadata: {
@@ -98,12 +137,24 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     try {
       const resp = await client.send(command);
       return resp.$metadata.httpStatusCode === 200
-        ? { status: 201, metadata: { id: ID } }
-        : { status: resp.$metadata.httpStatusCode, metadata: { id: ID } };
+        ? { status: 201, metadata: { id: ID }, etag: resp.ETag }
+        : { status: resp.$metadata.httpStatusCode, metadata: { id: ID }, etag: resp.ETag };
     } catch (e) {
       const status = e.$metadata?.httpStatusCode || 500;
       if (status === 412) {
-        return putObjectWithVersion(env, daCtx, update, body);
+        // Only retry if no client conditionals (internal operation) and under retry limit
+        if (!effectiveConditionals?.ifNoneMatch) {
+          return putObjectWithVersion(
+            env,
+            daCtx,
+            update,
+            body,
+            guid,
+            clientConditionals,
+          );
+        }
+        // Client conditional failed or max retries exceeded, return 412
+        return { status: 412, metadata: { id: ID } };
       }
 
       // eslint-disable-next-line no-console
@@ -150,7 +201,16 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     return { status: versionResp.status, metadata: { id: ID } };
   }
 
-  const client = ifMatch(config, `${current.etag}`);
+  // Use client-provided If-Match if available, otherwise use current ETag
+  // Special case: If client sent If-Match:*, we already validated existence above,
+  // so now use the actual ETag for proper version control
+  let matchValue;
+  if (effectiveConditionals?.ifMatch === '*') {
+    matchValue = `${current.etag}`;
+  } else {
+    matchValue = effectiveConditionals?.ifMatch || `${current.etag}`;
+  }
+  const client = ifMatch(config, matchValue);
   const command = new PutObjectCommand({
     ...input,
     Metadata: {
@@ -160,11 +220,27 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   try {
     const resp = await client.send(command);
 
-    return { status: resp.$metadata.httpStatusCode, metadata: { id: ID } };
+    return {
+      status: resp.$metadata.httpStatusCode,
+      metadata: { id: ID },
+      etag: resp.ETag,
+    };
   } catch (e) {
     const status = e.$metadata?.httpStatusCode || 500;
     if (status === 412) {
-      return putObjectWithVersion(env, daCtx, update, body);
+      // Only retry if no client conditionals (internal operation) and under retry limit
+      if (!effectiveConditionals?.ifMatch) {
+        return putObjectWithVersion(
+          env,
+          daCtx,
+          update,
+          body,
+          guid,
+          clientConditionals,
+        );
+      }
+      // Client conditional failed or max retries exceeded, return 412
+      return { status: 412, metadata: { id: ID } };
     }
 
     // eslint-disable-next-line no-console

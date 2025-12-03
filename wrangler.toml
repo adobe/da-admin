@@ -52,3 +52,20 @@ kv_namespaces = [
 r2_buckets = [
   { binding = "AEM_CONTENT", bucket_name = "aem-content-dev" }
 ]
+
+[env.it]
+vars = { ENVIRONMENT = "it", DA_COLLAB = "http://localhost:4711", AEM_BUCKET_NAME = "aem-content-local" }
+
+services = [
+  { binding = "dacollab", service = "da-collab-local" }
+]
+
+kv_namespaces = [
+  { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
+  { binding = "DA_CONFIG", id = "3f6f6db5c27348fabee7c2a8ed39be17" },
+  { binding = "DA_JOBS", id = "66265e68cb2b422d8dc7a34b9fe2b0c9" }
+]
+
+r2_buckets = [
+  { binding = "AEM_CONTENT", bucket_name = "aem-content-local" }
+]

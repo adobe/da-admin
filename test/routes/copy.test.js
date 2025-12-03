@@ -9,14 +9,16 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
+import assert from 'node:assert';
 import esmock from 'esmock';
 
 describe('Copy Route', () => {
   it('Test copyHandler with permissions', async () => {
     const copyCalled = [];
     const copyObject = (e, c, d, m) => {
-      copyCalled.push({e, c, d, m});
+      copyCalled.push({
+        e, c, d, m,
+      });
       return { status: 200 };
     };
 
@@ -28,42 +30,39 @@ describe('Copy Route', () => {
         return false;
       }
       return true;
-    }
-    const copyHandler = await esmock(
-      '../../src/routes/copy.js', {
-        '../../src/storage/object/copy.js': {
-          default: copyObject
-        },
-        '../../src/utils/auth.js': {
-          hasPermission        }
-      }
-    );
+    };
+    const copyHandler = await esmock('../../src/routes/copy.js', {
+      '../../src/storage/object/copy.js': {
+        default: copyObject,
+      },
+      '../../src/utils/auth.js': { hasPermission },
+    });
 
     const formdata = new Map();
-    formdata.set('destination', '/myorg/MY/dest.html')
+    formdata.set('destination', '/myorg/MY/dest.html');
     const req = {
-      formData: () => formdata
+      formData: () => formdata,
     };
 
-    const resp = await copyHandler({ req, env: {}, daCtx: { key: 'my/src.html' }});
+    const resp = await copyHandler({ req, env: {}, daCtx: { key: 'my/src.html' } });
     assert.strictEqual(403, resp.status);
     assert.strictEqual(copyCalled.length, 0);
 
-    const resp2 = await copyHandler({ req, env: {}, daCtx: { key: 'my/src2.html' }});
+    const resp2 = await copyHandler({ req, env: {}, daCtx: { key: 'my/src2.html' } });
     assert.strictEqual(403, resp2.status);
     assert.strictEqual(copyCalled.length, 0);
 
     const formdata2 = new Map();
-    formdata2.set('destination', '/myorg/MY/dest2.html')
+    formdata2.set('destination', '/myorg/MY/dest2.html');
     const req2 = {
-      formData: () => formdata2
+      formData: () => formdata2,
     };
 
-    const resp3 = await copyHandler({ req: req2, env: {}, daCtx: { key: 'my/src.html' }});
+    const resp3 = await copyHandler({ req: req2, env: {}, daCtx: { key: 'my/src.html' } });
     assert.strictEqual(403, resp3.status);
     assert.strictEqual(copyCalled.length, 0);
 
-    const resp4 = await copyHandler({ req: req2, env: {}, daCtx: { key: 'my/src2.html' }});
+    const resp4 = await copyHandler({ req: req2, env: {}, daCtx: { key: 'my/src2.html' } });
     assert.strictEqual(200, resp4.status);
     assert.strictEqual(copyCalled.length, 1);
     assert.strictEqual('my/src2.html', copyCalled[0].d.source);

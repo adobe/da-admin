@@ -9,8 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
-import esmock from 'esmock';
+import assert from 'node:assert';
 
 import daResp from '../../src/utils/daResp.js';
 
@@ -21,13 +20,15 @@ describe('DA Resp', () => {
     const body = 'foobar';
     const metadata = { id: '1234', LastModified: '2024-06-24T13:20:00.000Z' };
 
-    const resp = daResp({status: 200, body, contentType: 'text/plain', contentLength: 777, metadata}, ctx);
+    const resp = daResp({
+      status: 200, body, contentType: 'text/plain', contentLength: 777, metadata,
+    }, ctx);
     assert.strictEqual(body, await resp.text());
     assert.strictEqual(200, resp.status);
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
-    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id', resp.headers.get('Access-Control-Expose-Headers'));
+    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, ETag', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('text/plain', resp.headers.get('Content-Type'));
     assert.strictEqual('777', resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/bar.html=read,write', resp.headers.get('X-da-actions'));
@@ -43,12 +44,12 @@ describe('DA Resp', () => {
     const body = null;
     const metadata = {};
 
-    const resp = daResp({status: 404, body, metadata}, ctx);
+    const resp = daResp({ status: 404, body, metadata }, ctx);
     assert.strictEqual(404, resp.status);
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
-    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id', resp.headers.get('Access-Control-Expose-Headers'));
+    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, ETag', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('application/json', resp.headers.get('Content-Type'));
     assert(!resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/blah.html=read', resp.headers.get('X-da-actions'));
@@ -59,7 +60,7 @@ describe('DA Resp', () => {
   it('test 500', () => {
     const aclCtx = { actionSet: ['read', 'write'], pathLookup: new Map() };
     const ctx = { key: 'foo/blah.html', aclCtx };
-    const resp = daResp({status: 500}, ctx);
+    const resp = daResp({ status: 500 }, ctx);
     assert.strictEqual(500, resp.status);
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
@@ -71,11 +72,11 @@ describe('DA Resp', () => {
   });
 
   it('test child actions header', () => {
-    const aclCtx = { actionSet: ['read'], childRules: ['/haha/hoho/**=read,write'] }
-    const ctx = { key: 'foo/bar.html', aclCtx }
-    const resp = daResp({status: 200, body: 'foobar'}, ctx);
+    const aclCtx = { actionSet: ['read'], childRules: ['/haha/hoho/**=read,write'] };
+    const ctx = { key: 'foo/bar.html', aclCtx };
+    const resp = daResp({ status: 200, body: 'foobar' }, ctx);
     assert.strictEqual(200, resp.status);
-    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id', resp.headers.get('Access-Control-Expose-Headers'));
+    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, ETag', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('/haha/hoho/**=read,write', resp.headers.get('X-da-child-actions'));
-  })
+  });
 });

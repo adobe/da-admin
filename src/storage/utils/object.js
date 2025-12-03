@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -9,7 +9,14 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-export async function invalidateCollab(api, url, env) {
+/**
+ * Sends a `api` request to collab
+ * @param {string} api The API ('syncadmin' or 'deleteadmin')
+ * @param {string} url Url of the resource
+ * @param {Env} env
+ * @returns {Promise<void>}
+ */
+export async function notifyCollab(api, url, env) {
   if (!url.endsWith('.html')) {
     // collab only deals with .html files, no need to invalidate anything else
     return;
@@ -19,5 +26,13 @@ export async function invalidateCollab(api, url, env) {
 
   // Use dacollab service binding, hostname is not relevant
   const invURL = `https://localhost${invPath}`;
-  await env.dacollab.fetch(invURL);
+  const headers = {};
+  if (env.COLLAB_SHARED_SECRET) {
+    headers.authorization = `token ${env.COLLAB_SHARED_SECRET}`;
+  }
+  await env.dacollab.fetch(invURL, {
+    // TODO: use POST for state changing operations
+    // method: 'POST',
+    headers,
+  });
 }

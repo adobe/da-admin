@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -35,6 +35,10 @@ export default async function getDaCtx(req, env) {
   const [org, ...parts] = split;
   const bucket = env.AEM_BUCKET_NAME;
 
+  // Extract conditional headers
+  const ifMatch = req.headers?.get('if-match') || null;
+  const ifNoneMatch = req.headers?.get('if-none-match') || null;
+
   // Set base details
   const daCtx = {
     path: pathname,
@@ -45,11 +49,22 @@ export default async function getDaCtx(req, env) {
     fullKey,
     origin: new URL(req.url).origin,
     method: req.method,
+    conditionalHeaders: {
+      ifMatch,
+      ifNoneMatch,
+    },
   };
 
   // Sanitize the remaining path parts
   const path = parts.filter((part) => part !== '');
   const keyBase = path.join('/');
+
+  const pnlc = pathname.toLocaleLowerCase();
+  const validPath = `/${api}/${org}/${keyBase}`;
+
+  if (!org || !(pnlc === validPath || pnlc === `${validPath}/`)) {
+    throw new Error('Invalid path');
+  }
 
   // Get the final source name
   daCtx.filename = path.pop() || '';
