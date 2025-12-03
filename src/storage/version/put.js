@@ -56,6 +56,13 @@ export async function putVersion(config, {
   }
 }
 
+function shouldCreateVersion(contentType) {
+  // Only create versions for HTML and JSON files
+  if (!contentType) return false;
+  const type = contentType.toLowerCase();
+  return type.startsWith('text/html') || type.startsWith('application/json');
+}
+
 function buildInput({
   bucket, org, key, body, type, contentLength,
 }) {
@@ -87,6 +94,10 @@ export async function putObjectWithVersion(
   } else if (guid && ID !== guid) {
     return { status: 409, metadata: { id: ID } };
   }
+
+  // Only create versions for HTML and JSON files
+  const contentType = update.type || current.contentType;
+  const createVersion = shouldCreateVersion(contentType);
 
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
@@ -124,15 +135,20 @@ export async function putObjectWithVersion(
   }
 
   if (current.status === 404) {
+    const metadata = {
+      ID, Users, Timestamp, Path,
+    };
+    // Only include Version metadata for files that support versioning
+    if (createVersion) {
+      metadata.Version = Version;
+    }
     // Use client conditional if provided, otherwise use internal If-None-Match: *
     const client = effectiveConditionals?.ifNoneMatch
       ? ifNoneMatch(config, effectiveConditionals.ifNoneMatch)
       : ifNoneMatch(config);
     const command = new PutObjectCommand({
       ...input,
-      Metadata: {
-        ID, Version, Users, Timestamp, Path,
-      },
+      Metadata: metadata,
     });
     try {
       const resp = await client.send(command);
@@ -163,44 +179,54 @@ export async function putObjectWithVersion(
     }
   }
 
-  const Preparsingstore = current.metadata?.preparsingstore || '0';
+  let pps = current.metadata?.preparsingstore || '0';
   let storeBody = false;
   let Label = update.label;
 
-  if (daCtx.method === 'PUT'
-    && daCtx.ext === 'html'
-    && current.contentLength > EMPTY_DOC_SIZE
-    && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
-    // we are about to empty the document body
-    // this should almost never happen but it does in some unexpectedcases
-    // we want then to store a version of the full document as a Restore Point
-    // eslint-disable-next-line no-console
-    console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
-    storeBody = true;
-    Label = 'Restore Point';
+  if (createVersion) {
+    if (daCtx.method === 'PUT'
+      && daCtx.ext === 'html'
+      && current.contentLength > EMPTY_DOC_SIZE
+      && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
+      // we are about to empty the document body
+      // this should almost never happen but it does in some unexpectedcases
+      // we want then to store a version of the full document as a Restore Point
+      // eslint-disable-next-line no-console
+      console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
+      storeBody = true;
+      Label = 'Restore Point';
+      pps = Timestamp;
+    }
+
+    const versionResp = await putVersion(config, {
+      Bucket: input.Bucket,
+      Org: daCtx.org,
+      Body: (body || storeBody ? current.body : ''),
+      ContentLength: (body || storeBody ? current.contentLength : undefined),
+      ContentType: current.contentType,
+      ID,
+      Version,
+      Ext: daCtx.ext,
+      Metadata: {
+        Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
+        Timestamp: current.metadata?.timestamp || Timestamp,
+        Path: current.metadata?.path || Path,
+        Label,
+      },
+    });
+
+    if (versionResp.status !== 200 && versionResp.status !== 412) {
+      return { status: versionResp.status, metadata: { id: ID } };
+    }
   }
 
-  const versionResp = await putVersion(config, {
-    Bucket: input.Bucket,
-    Org: daCtx.org,
-    Body: (body || storeBody ? current.body : ''),
-    ContentLength: (body || storeBody ? current.contentLength : undefined),
-    ContentType: current.contentType,
-    ID,
-    Version,
-    Ext: daCtx.ext,
-    Metadata: {
-      Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
-      Timestamp: current.metadata?.timestamp || Timestamp,
-      Path: current.metadata?.path || Path,
-      Label,
-    },
-  });
-
-  if (versionResp.status !== 200 && versionResp.status !== 412) {
-    return { status: versionResp.status, metadata: { id: ID } };
+  const metadata = {
+    ID, Users, Timestamp, Path, Preparsingstore: pps,
+  };
+  // Only include Version metadata for files that support versioning
+  if (createVersion) {
+    metadata.Version = crypto.randomUUID();
   }
-
   // Use client-provided If-Match if available, otherwise use current ETag
   // Special case: If client sent If-Match:*, we already validated existence above,
   // so now use the actual ETag for proper version control
@@ -213,9 +239,7 @@ export async function putObjectWithVersion(
   const client = ifMatch(config, matchValue);
   const command = new PutObjectCommand({
     ...input,
-    Metadata: {
-      ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Preparsingstore,
-    },
+    Metadata: metadata,
   });
   try {
     const resp = await client.send(command);
