@@ -229,7 +229,7 @@ describe('Object copy', () => {
       assert.strictEqual(1, collabcalls.length);
       assert.deepStrictEqual(
         collabcalls,
-        ['https://localhost/api/v1/syncAdmin?doc=somehost.sometld/source/foo/mydir/newdir/xyz.html'],
+        ['https://localhost/api/v1/syncadmin?doc=somehost.sometld/source/foo/mydir/newdir/xyz.html'],
       );
     });
 
@@ -299,7 +299,7 @@ describe('Object copy', () => {
 
       assert.deepStrictEqual(
         collabcalls,
-        ['https://localhost/api/v1/syncAdmin?doc=http://localhost:3000/source/testorg/mydir/dir2/myfile.html'],
+        ['https://localhost/api/v1/syncadmin?doc=http://localhost:3000/source/testorg/mydir/dir2/myfile.html'],
       );
     });
 
@@ -397,7 +397,7 @@ describe('Object copy', () => {
 
       assert.deepStrictEqual(
         collabCalled,
-        ['https://localhost/api/v1/syncAdmin?doc=https://blahblah:7890/source/myorg/mydst/abc/def.html'],
+        ['https://localhost/api/v1/syncadmin?doc=https://blahblah:7890/source/myorg/mydst/abc/def.html'],
       );
     });
 
@@ -644,7 +644,7 @@ describe('Object copy', () => {
       assert.strictEqual(resp.$metadata.httpStatusCode, 404);
       assert.deepStrictEqual(
         collabCalled,
-        ['https://localhost/api/v1/syncAdmin?doc=http://qqq/source/qqqorg/qqqdst/abc/def.html'],
+        ['https://localhost/api/v1/syncadmin?doc=http://qqq/source/qqqorg/qqqdst/abc/def.html'],
       );
     });
   });
