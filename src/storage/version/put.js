@@ -179,7 +179,6 @@ export async function putObjectWithVersion(
     }
   }
 
-  let pps = current.metadata?.preparsingstore || '0';
   let storeBody = false;
   let Label = update.label;
 
@@ -195,7 +194,6 @@ export async function putObjectWithVersion(
       console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
       storeBody = true;
       Label = 'Restore Point';
-      pps = Timestamp;
     }
 
     const versionResp = await putVersion(config, {
@@ -221,8 +219,9 @@ export async function putObjectWithVersion(
   }
 
   const metadata = {
-    ID, Users, Timestamp, Path, Preparsingstore: pps,
+    ID, Users, Timestamp, Path,
   };
+
   // Only include Version metadata for files that support versioning
   if (createVersion) {
     metadata.Version = crypto.randomUUID();
