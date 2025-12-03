@@ -506,7 +506,7 @@ describe('Object copy', () => {
       // Test file with commas, equals signs, and spaces
       const resp1 = await copyFile({}, env, daCtx, 'mysrc/icon=gift-box, style=two-toned.svg', details, false);
       assert.strictEqual(resp1.constructor.name, 'CopyObjectCommand');
-      assert.strictEqual(resp1.input.CopySource, 'root-bucket/myorg/mysrc/icon%3Dgift-box%2C%20style%3Dtwo-toned.svg');
+      assert.strictEqual(resp1.input.CopySource, 'root-bucket/myorg/mysrc/icon=gift-box,%20style=two-toned.svg');
       assert.strictEqual(resp1.input.Key, 'myorg/mydst/icon=gift-box, style=two-toned.svg');
 
       // Test file with spaces

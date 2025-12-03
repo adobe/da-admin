@@ -46,16 +46,10 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
     return { $metadata: { httpStatusCode: 404 } };
   }
 
-  // URL-encode the key parts while preserving slashes for S3 folder structure
-  const encodedKey = sourceKey
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
-
   const input = {
     Bucket: daCtx.bucket,
     Key: `${daCtx.org}/${Key}`,
-    CopySource: `${daCtx.bucket}/${daCtx.org}/${encodedKey}`,
+    CopySource: `${daCtx.bucket}/${daCtx.org}/${encodeURI(sourceKey)}`,
     ContentType: source?.contentType || 'application/octet-stream',
   };
 
