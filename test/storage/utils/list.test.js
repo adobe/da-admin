@@ -13,6 +13,7 @@
 import assert from 'node:assert';
 import sinon from 'sinon';
 
+import getDaCtx from '../../../src/utils/daCtx.js';
 import formatList, { listCommand } from '../../../src/storage/utils/list.js';
 
 const MOCK = {
@@ -60,8 +61,12 @@ const MOCK = {
   ],
 };
 
+const req = new Request('https://example.com/source/adobecom');
+
+const daCtx = getDaCtx(req, {});
+
 describe('Format object list', () => {
-  const list = formatList(MOCK);
+  const list = formatList(MOCK, daCtx);
 
   it('should return a true folder / common prefix', () => {
     assert.strictEqual(list[0].name, 'blog');
@@ -93,21 +98,21 @@ describe('Format object list', () => {
 
   it('should handle empty CommonPrefixes', () => {
     const emptyMock = { Contents: MOCK.Contents };
-    const result = formatList(emptyMock);
+    const result = formatList(emptyMock, daCtx);
     assert(Array.isArray(result));
     assert(result.length > 0);
   });
 
   it('should handle empty Contents', () => {
     const emptyMock = { CommonPrefixes: MOCK.CommonPrefixes };
-    const result = formatList(emptyMock);
+    const result = formatList(emptyMock, daCtx);
     assert(Array.isArray(result));
     assert(result.length > 0);
   });
 
   it('should handle both empty CommonPrefixes and Contents', () => {
     const emptyMock = {};
-    const result = formatList(emptyMock);
+    const result = formatList(emptyMock, daCtx);
     assert(Array.isArray(result));
     assert.strictEqual(result.length, 0);
   });
@@ -119,7 +124,7 @@ describe('Format object list', () => {
         { Prefix: 'normal-folder/' },
       ],
     };
-    const result = formatList(mockWithExtensionFolder);
+    const result = formatList(mockWithExtensionFolder, daCtx);
     const extensionFolder = result.find((item) => item.name === 'file.jpg');
     assert.strictEqual(extensionFolder, undefined);
     const normalFolder = result.find((item) => item.name === 'normal-folder');
@@ -135,7 +140,7 @@ describe('Format object list', () => {
         },
       ],
     };
-    const result = formatList(mockWithComplexFile);
+    const result = formatList(mockWithComplexFile, daCtx);
     assert.strictEqual(result.length, 0);
   });
 
@@ -148,7 +153,7 @@ describe('Format object list', () => {
         },
       ],
     };
-    const result = formatList(mockWithHiddenFile);
+    const result = formatList(mockWithHiddenFile, daCtx);
     assert.strictEqual(result.length, 0);
   });
 
@@ -161,7 +166,7 @@ describe('Format object list', () => {
         },
       ],
     };
-    const result = formatList(mockWithProps);
+    const result = formatList(mockWithProps, daCtx);
     const propsItem = result.find((item) => item.name === 'test');
     assert(propsItem);
     assert.strictEqual(propsItem.ext, undefined);
@@ -178,7 +183,7 @@ describe('Format object list', () => {
         },
       ],
     };
-    const result = formatList(mockWithBoth);
+    const result = formatList(mockWithBoth, daCtx);
     const testItems = result.filter((item) => item.name === 'test');
     assert.strictEqual(testItems.length, 1);
   });
@@ -191,7 +196,7 @@ describe('Format object list', () => {
         { Key: 'beta.html', LastModified: new Date('2025-01-01') },
       ],
     };
-    const result = formatList(mockForSorting);
+    const result = formatList(mockForSorting, daCtx);
     assert.strictEqual(result[0].name, 'alpha');
     assert.strictEqual(result[1].name, 'beta');
     assert.strictEqual(result[2].name, 'zebra');
