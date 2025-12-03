@@ -90,8 +90,8 @@ version-list:
                 readyForLoc: true
                 lastRollout: Wed, 29 Nov 2023 01:20:40 GMT
             aem: 
-              previewUrl: "https://main--blog--adobecom.hlx.page/my-cool-post"
-              liveUrl: "https://main--blog--adobecom.hlx.live/my-cool-post"
+              previewUrl: "https://main--blog--adobecom.aem.page/my-cool-post"
+              liveUrl: "https://main--blog--adobecom.aem.live/my-cool-post"
 '204':
   description: The request was completed successfully.
 

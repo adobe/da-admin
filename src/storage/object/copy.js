@@ -25,7 +25,7 @@ import { hasPermission } from '../../utils/auth.js';
 const MAX_KEYS = 900;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
-  const Key = `${sourceKey.replace(details.source, details.destination)}`;
+  const Key = sourceKey.replace(details.source, details.destination);
 
   if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) {
     return {
@@ -41,10 +41,15 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
     key: sourceKey,
   }, true);
 
+  // Skip if source doesn't exist (e.g., it's a folder without an actual object)
+  if (source?.status === 404) {
+    return { $metadata: { httpStatusCode: 404 } };
+  }
+
   const input = {
     Bucket: daCtx.bucket,
     Key: `${daCtx.org}/${Key}`,
-    CopySource: `${daCtx.bucket}/${daCtx.org}/${sourceKey}`,
+    CopySource: `${daCtx.bucket}/${daCtx.org}/${encodeURI(sourceKey)}`,
     ContentType: source?.contentType || 'application/octet-stream',
   };
 

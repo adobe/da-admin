@@ -11,7 +11,9 @@
     "build:docs": "npx @redocly/cli build-docs -o docs/index.html admin@v1",
     "watch:docs": "npx @redocly/cli preview-docs admin@v1",
     "lint": "eslint .",
-    "test": "c8 mocha --spec=test/**/*.test.js",
+    "test": "c8 mocha --spec=test/**/*.test.js --ignore=test/it/**/*.test.js",
+    "test:it": "mocha test/it/**/*.test.js",
+    "test:all": "npm run test && npm run test:it",
     "dev": "wrangler dev",
     "deploy:prod": "wrangler deploy",
     "deploy:stage": "wrangler deploy --env stage",
@@ -27,7 +29,9 @@
     "eslint": "9.4.0",
     "esmock": "2.7.3",
     "mocha": "^11.0.0",
+    "s3rver": "3.7.1",
     "sinon": "21.0.0",
+    "tree-kill": "1.2.2",
     "wrangler": "^4.10.0"
   },
   "lint-staged": {
