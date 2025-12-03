@@ -60,7 +60,7 @@ function shouldCreateVersion(contentType) {
   // Only create versions for HTML and JSON files
   if (!contentType) return false;
   const type = contentType.toLowerCase();
-  return type.includes('text/html') || type.includes('application/json');
+  return type.startsWith('text/html') || type.startsWith('application/json');
 }
 
 function buildInput({
