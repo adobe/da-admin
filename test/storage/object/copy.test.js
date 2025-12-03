@@ -401,6 +401,128 @@ describe('Object copy', () => {
       );
     });
 
+    it('Skips copying when source does not exist (folder without object)', async () => {
+      const mockS3Client = class {
+        middlewareStack = {
+          add: () => {},
+        };
+      };
+
+      // Mock getObject to return 404 for a folder that doesn't exist as an object
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'myorg' && key === 'mysrc/virtual-folder') {
+          return {
+            status: 404,
+          };
+        }
+        return null;
+      };
+
+      // eslint-disable-next-line no-shadow
+      const { copyFile } = await esmock('../../../src/storage/object/copy.js', {
+        '@aws-sdk/client-s3': {
+          S3Client: mockS3Client,
+        },
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject,
+        },
+      });
+
+      const env = {
+        dacollab: {
+          fetch: () => {},
+        },
+      };
+      const daCtx = {
+        bucket: 'root-bucket',
+        org: 'myorg',
+        origin: 'https://test.com',
+        users: [{ email: 'test@example.com' }],
+      };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
+      const details = {
+        source: 'mysrc',
+        destination: 'mydst',
+      };
+
+      const resp = await copyFile({}, env, daCtx, 'mysrc/virtual-folder', details, false);
+      assert.strictEqual(resp.$metadata.httpStatusCode, 404);
+    });
+
+    it('Copies files with special characters in names', async () => {
+      const mockS3Client = class {
+        // eslint-disable-next-line class-methods-use-this
+        send(command) {
+          return command;
+        }
+
+        middlewareStack = {
+          add: () => {},
+        };
+      };
+
+      // Mock getObject to return content type for HEAD requests
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'root-bucket' && org === 'myorg') {
+          if (key === 'mysrc/icon=gift-box, style=two-toned.svg'
+            || key === 'mysrc/boost saver_img1.jpg'
+            || key === 'mysrc/file%20with%20encoded.png') {
+            return {
+              contentType: 'image/svg+xml',
+              status: 200,
+            };
+          }
+        }
+        return null;
+      };
+
+      // eslint-disable-next-line no-shadow
+      const { copyFile } = await esmock('../../../src/storage/object/copy.js', {
+        '@aws-sdk/client-s3': {
+          S3Client: mockS3Client,
+        },
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject,
+        },
+      });
+
+      const env = {
+        dacollab: {
+          fetch: () => {},
+        },
+      };
+      const daCtx = {
+        bucket: 'root-bucket',
+        org: 'myorg',
+        origin: 'https://test.com',
+        users: [{ email: 'test@example.com' }],
+      };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
+      const details = {
+        source: 'mysrc',
+        destination: 'mydst',
+      };
+
+      // Test file with commas, equals signs, and spaces
+      const resp1 = await copyFile({}, env, daCtx, 'mysrc/icon=gift-box, style=two-toned.svg', details, false);
+      assert.strictEqual(resp1.constructor.name, 'CopyObjectCommand');
+      assert.strictEqual(resp1.input.CopySource, 'root-bucket/myorg/mysrc/icon=gift-box,%20style=two-toned.svg');
+      assert.strictEqual(resp1.input.Key, 'myorg/mydst/icon=gift-box, style=two-toned.svg');
+
+      // Test file with spaces
+      const resp2 = await copyFile({}, env, daCtx, 'mysrc/boost saver_img1.jpg', details, false);
+      assert.strictEqual(resp2.constructor.name, 'CopyObjectCommand');
+      assert.strictEqual(resp2.input.CopySource, 'root-bucket/myorg/mysrc/boost%20saver_img1.jpg');
+      assert.strictEqual(resp2.input.Key, 'myorg/mydst/boost saver_img1.jpg');
+
+      // Test file with already-encoded characters
+      const resp3 = await copyFile({}, env, daCtx, 'mysrc/file%20with%20encoded.png', details, false);
+      assert.strictEqual(resp3.constructor.name, 'CopyObjectCommand');
+      // The %20 should be double-encoded to %2520
+      assert.strictEqual(resp3.input.CopySource, 'root-bucket/myorg/mysrc/file%2520with%2520encoded.png');
+      assert.strictEqual(resp3.input.Key, 'myorg/mydst/file%20with%20encoded.png');
+    });
+
     it('Copy content when destination already exists', async () => {
       const error = {
         $metadata: { httpStatusCode: 412 },
