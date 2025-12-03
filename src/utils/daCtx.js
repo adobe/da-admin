@@ -59,6 +59,13 @@ export default async function getDaCtx(req, env) {
   const path = parts.filter((part) => part !== '');
   const keyBase = path.join('/');
 
+  const pnlc = pathname.toLocaleLowerCase();
+  const validPath = `/${api}/${org}/${keyBase}`;
+
+  if (!org || !(pnlc === validPath || pnlc === `${validPath}/`)) {
+    throw new Error('Invalid path');
+  }
+
   // Get the final source name
   daCtx.filename = path.pop() || '';
 

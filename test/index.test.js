@@ -25,7 +25,7 @@ describe('fetch', () => {
 
   it('should return a response object for unknown', async () => {
     const resp = await handler.fetch({ url: 'https://www.example.com', method: 'BLAH' }, {});
-    assert.strictEqual(resp.status, 501);
+    assert.strictEqual(resp.status, 400);
   });
 
   it('should return 401 when not authorized and not logged in', async () => {
@@ -49,9 +49,38 @@ describe('fetch', () => {
     const resp = await hnd.fetch({ method: 'GET' }, {});
     assert.strictEqual(resp.status, 403);
   });
+});
 
-  it('return 404 for unknown get route', async () => {
-    const resp = await handler.fetch({ method: 'GET', url: 'http://www.example.com/' }, {});
-    assert.strictEqual(resp.status, 404);
+describe('invalid routes', () => {
+  const fetchStatus = async (path, method) => {
+    const resp = await handler.fetch({ method, url: `http://www.sample.com${path}` }, {});
+    return resp.status;
+  };
+
+  const test = async (path, status) => {
+    const methods = ['GET', 'POST', 'PUT', 'DELETE'];
+    for (const method of methods) {
+      // eslint-disable-next-line no-await-in-loop
+      const s = await fetchStatus(path, method);
+      assert.strictEqual(s, status);
+    }
+  };
+
+  it('return 400 for invalid paths', async () => {
+    await test('/', 400);
+    await test('/source/owner', 400);
+    await test('/source//owner/repo/path/file.html', 400);
+    await test('/source/owner//repo/path/file.html', 400);
+    await test('/source/owner/repo//path/file.html', 400);
+    await test('/source/owner/repo/path//file.html', 400);
+  });
+
+  it('return 404 for unknown paths', async () => {
+    await test('/unknown/owner/repo/path/file.html', 404);
+  });
+
+  it('return 405 for unknown methods', async () => {
+    const status = await fetchStatus('/source/owner/repo/path/file.html', 'BLAH');
+    assert.strictEqual(status, 405);
   });
 });
