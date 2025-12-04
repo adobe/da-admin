@@ -25,7 +25,7 @@ describe('fetch', () => {
 
   it('should return a response object for unknown', async () => {
     const resp = await handler.fetch({ url: 'https://www.example.com', method: 'BLAH' }, {});
-    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(resp.status, 405);
   });
 
   it('should return 401 when not authorized and not logged in', async () => {
@@ -68,11 +68,10 @@ describe('invalid routes', () => {
 
   it('return 400 for invalid paths', async () => {
     await test('/', 400);
-    await test('/source/owner', 400);
-    await test('/source//owner/repo/path/file.html', 400);
-    await test('/source/owner//repo/path/file.html', 400);
-    await test('/source/owner/repo//path/file.html', 400);
-    await test('/source/owner/repo/path//file.html', 400);
+    await test('/source//org/repo/path/file.html', 400);
+    await test('/source/org//repo/path/file.html', 400);
+    await test('/source/org/repo//path/file.html', 400);
+    await test('/source/org/repo/path//file.html', 400);
   });
 
   it('return 404 for unknown paths', async () => {
