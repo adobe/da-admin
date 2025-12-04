@@ -3,8 +3,9 @@ main = "src/index.js"
 compatibility_date = "2024-11-11"
 keep_vars = true
 
-vars = { DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "aem-content" }
-
+# ----------------------------------------------------------------------
+# production environment
+[env.production]
 services = [
   { binding = "dacollab", service = "da-collab" }
 ]
@@ -19,9 +20,15 @@ r2_buckets = [
   { binding = "AEM_CONTENT", bucket_name = "aem-content" }
 ]
 
-[env.stage]
-vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "aem-content-stage" }
+[env.production.vars]
+ENVIRONMENT = "production"
+VERSION = "@@VERSION@@"
+DA_COLLAB = "https://collab.da.page"
+AEM_BUCKET_NAME = "aem-content"
 
+# ----------------------------------------------------------------------
+# stage environment
+[env.stage]
 services = [
   { binding = "dacollab", service = "da-collab-stage" }
 ]
@@ -36,9 +43,39 @@ r2_buckets = [
   { binding = "AEM_CONTENT", bucket_name = "aem-content-stage" }
 ]
 
-[env.dev]
-vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", AEM_BUCKET_NAME = "aem-content-dev" }
+[env.stage.vars]
+ENVIRONMENT = "stage"
+VERSION = "@@VERSION@@-stage"
+DA_COLLAB = "https://collab.da.page"
+AEM_BUCKET_NAME = "aem-content-stage"
 
+# ----------------------------------------------------------------------
+# ci environment (using stage content)
+[env.ci]
+services = [
+  { binding = "dacollab", service = "da-collab-stage" }
+]
+
+kv_namespaces = [
+  { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
+  { binding = "DA_CONFIG", id = "3f6f6db5c27348fabee7c2a8ed39be17" },
+  { binding = "DA_JOBS", id = "66265e68cb2b422d8dc7a34b9fe2b0c9" }
+]
+
+r2_buckets = [
+  { binding = "AEM_CONTENT", bucket_name = "aem-content-stage" }
+]
+
+[env.ci.vars]
+ENVIRONMENT = "ci"
+VERSION = "@@VERSION@@-stage"
+DA_COLLAB = "https://collab.da.page"
+AEM_BUCKET_NAME = "aem-content-stage"
+
+
+# ----------------------------------------------------------------------
+# dev environment (local)
+[env.dev]
 services = [
   { binding = "dacollab", service = "da-collab-local" }
 ]
@@ -53,9 +90,15 @@ r2_buckets = [
   { binding = "AEM_CONTENT", bucket_name = "aem-content-dev" }
 ]
 
-[env.it]
-vars = { ENVIRONMENT = "it", DA_COLLAB = "http://localhost:4711", AEM_BUCKET_NAME = "aem-content-local" }
+[env.dev.vars]
+ENVIRONMENT = "dev"
+VERSION="0.0.0-dev"
+DA_COLLAB = "http://localhost:4711"
+AEM_BUCKET_NAME = "aem-content-dev"
 
+# ----------------------------------------------------------------------
+# integration test environment (local)
+[env.it]
 services = [
   { binding = "dacollab", service = "da-collab-local" }
 ]
@@ -69,3 +112,10 @@ kv_namespaces = [
 r2_buckets = [
   { binding = "AEM_CONTENT", bucket_name = "aem-content-local" }
 ]
+
+[env.it.vars]
+ENVIRONMENT = "it"
+VERSION="0.0.0-it"
+DA_COLLAB = "http://localhost:4711"
+AEM_BUCKET_NAME = "aem-content-local"
+
