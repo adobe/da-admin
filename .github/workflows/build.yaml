@@ -58,6 +58,10 @@ jobs:
         run: npm ci
       - name: Branch Deployment
         run: npm run deploy:ci
+        env:
+          apiToken: ${{secrets.CLOUDFLARE_API_TOKEN}}
+          accountId: ${{secrets.CLOUDFLARE_ACCOUNT_ID}}
+
       - name: Post-Deployment Integration Test
         run: npm run test-postdeploy
       - name: Semantic Release (Dry Run)
