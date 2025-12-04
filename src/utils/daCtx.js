@@ -59,14 +59,16 @@ export default async function getDaCtx(req, env) {
   const path = parts.filter((part) => part !== '');
   const keyBase = path.join('/');
 
+  // Compare incoming pathname and intent we understand from it
   const pnlc = pathname.toLocaleLowerCase();
-
   let validPath = '';
   if (api) validPath += `/${api}`;
   if (org) validPath += `/${org}`;
   if (keyBase) validPath += `/${keyBase}`;
 
-  if (!(pnlc === validPath || pnlc === `${validPath}/` || `${pnlc}/` === `${validPath}/` || `${pnlc}/` === validPath)) {
+  // Normalize paths by removing trailing slashes before comparison
+  const normalize = (p) => p.replace(/\/+$/, '');
+  if (normalize(pnlc) !== normalize(validPath)) {
     // if intent is not what is requested (+/- trailing slash), declare invalid
     throw new Error('Invalid path');
   }
