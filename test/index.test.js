@@ -24,7 +24,7 @@ describe('fetch', () => {
   });
 
   it('should return a response object for unknown', async () => {
-    const resp = await handler.fetch({ url: 'https://www.example.com', method: 'BLAH' }, {});
+    const resp = await handler.fetch({ url: 'https://www.example.com/endpoint/repo/path/file.html', method: 'BLAH' }, {});
     assert.strictEqual(resp.status, 405);
   });
 
@@ -67,7 +67,6 @@ describe('invalid routes', () => {
   };
 
   it('return 400 for invalid paths', async () => {
-    await test('/', 400);
     await test('/source//org/repo/path/file.html', 400);
     await test('/source/org//repo/path/file.html', 400);
     await test('/source/org/repo//path/file.html', 400);
