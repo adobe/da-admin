@@ -42,6 +42,7 @@
     "mocha": "^11.0.0",
     "s3rver": "3.7.1",
     "semantic-release": "25.0.2",
+    "semantic-release-slack-bot": "4.0.2",
     "sinon": "21.0.0",
     "tree-kill": "1.2.2",
     "wrangler": "^4.10.0"
