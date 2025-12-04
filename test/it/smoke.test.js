@@ -43,7 +43,7 @@ describe('Integration Tests: smoke tests', function () {
       port: S3_PORT,
       address: '127.0.0.1',
       directory: path.resolve(S3_DIR),
-      // silent: true,
+      silent: true,
     });
     await s3rver.run();
 
@@ -67,7 +67,6 @@ describe('Integration Tests: smoke tests', function () {
       let started = false;
       devServer.stdout.on('data', (data) => {
         const str = data.toString();
-        console.log(str);
         if (str.includes('Ready on http://localhost') && !started) {
           started = true;
           resolve();
