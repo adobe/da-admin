@@ -21,6 +21,9 @@ const SERVER_PORT = 8788;
 const SERVER_URL = `http://localhost:${SERVER_PORT}`;
 const S3_DIR = './test/it/bucket';
 
+const ORG = 'test-org';
+const REPO = 'test-repo';
+
 describe('Integration Tests: smoke tests', function () {
   let s3rver;
   let devServer;
@@ -32,7 +35,7 @@ describe('Integration Tests: smoke tests', function () {
       port: S3_PORT,
       address: '127.0.0.1',
       directory: path.resolve(S3_DIR),
-      silent: true,
+      // silent: true,
     });
     await s3rver.run();
 
@@ -56,6 +59,7 @@ describe('Integration Tests: smoke tests', function () {
       let started = false;
       devServer.stdout.on('data', (data) => {
         const str = data.toString();
+        console.log(str);
         if (str.includes('Ready on http://localhost') && !started) {
           started = true;
           resolve();
@@ -100,11 +104,9 @@ describe('Integration Tests: smoke tests', function () {
   });
 
   it('should get a object via HTTP request', async () => {
-    const org = 'test-org';
-    const repo = 'test-repo';
     const pathname = 'test-folder/page1.html';
 
-    const url = `${SERVER_URL}/source/${org}/${repo}/${pathname}`;
+    const url = `${SERVER_URL}/source/${ORG}/${REPO}/${pathname}`;
     const resp = await fetch(url);
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
@@ -114,11 +116,9 @@ describe('Integration Tests: smoke tests', function () {
   });
 
   it('should list objects via HTTP request', async () => {
-    const org = 'test-org';
-    const repo = 'test-repo';
     const key = 'test-folder';
 
-    const url = `${SERVER_URL}/list/${org}/${repo}/${key}`;
+    const url = `${SERVER_URL}/list/${ORG}/${REPO}/${key}`;
     const resp = await fetch(url);
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
@@ -131,8 +131,6 @@ describe('Integration Tests: smoke tests', function () {
   });
 
   it('should post an object via HTTP request', async () => {
-    const org = 'test-org';
-    const repo = 'test-repo';
     const key = 'test-folder/page3';
     const ext = '.html';
 
@@ -142,7 +140,7 @@ describe('Integration Tests: smoke tests', function () {
     const htmlFile = new File([htmlBlob], 'page3.html', { type: 'text/html' });
     formData.append('data', htmlFile);
 
-    const url = `${SERVER_URL}/source/${org}/${repo}/${key}${ext}`;
+    const url = `${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`;
     let resp = await fetch(url, {
       method: 'POST',
       body: formData,
@@ -151,17 +149,44 @@ describe('Integration Tests: smoke tests', function () {
     assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
 
     let body = await resp.json();
-    assert.strictEqual(body.source.editUrl, `https://da.live/edit#/${org}/${repo}/${key}`);
-    assert.strictEqual(body.source.contentUrl, `https://content.da.live/${org}/${repo}/${key}`);
-    assert.strictEqual(body.aem.previewUrl, `https://main--test-repo--test-org.aem.page/${key}`);
-    assert.strictEqual(body.aem.liveUrl, `https://main--test-repo--test-org.aem.live/${key}`);
+    assert.strictEqual(body.source.editUrl, `https://da.live/edit#/${ORG}/${REPO}/${key}`);
+    assert.strictEqual(body.source.contentUrl, `https://content.da.live/${ORG}/${REPO}/${key}`);
+    assert.strictEqual(body.aem.previewUrl, `https://main--${REPO}--${ORG}.aem.page/${key}`);
+    assert.strictEqual(body.aem.liveUrl, `https://main--${REPO}--${ORG}.aem.live/${key}`);
 
     // validate page is here (include extension in GET request)
-    resp = await fetch(`${SERVER_URL}/source/${org}/${repo}/${key}${ext}`);
+    resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`);
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
     body = await resp.text();
     assert.strictEqual(body, '<html><body><h1>Page 3</h1></body></html>');
+  });
+
+  it('should logout via HTTP request', async () => {
+    const url = `${SERVER_URL}/logout`;
+    const resp = await fetch(url, {
+      method: 'POST',
+    });
+
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+  });
+
+  it('should list repos via HTTP request', async () => {
+    const url = `${SERVER_URL}/list/${ORG}`;
+    const resp = await fetch(url);
+
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+
+    const body = await resp.json();
+    assert.strictEqual(body.length, 1, `Expected 1 repo, got ${body.length}`);
+    assert.strictEqual(body[0].name, REPO, `Expected ${REPO}, got ${body[0].name}`);
+  });
+
+  it.only('should deal with no config found via HTTP request', async () => {
+    const url = `${SERVER_URL}/config/${ORG}`;
+    const resp = await fetch(url);
+
+    assert.strictEqual(resp.status, 404, `Expected 404, got ${resp.status}`);
   });
 });
