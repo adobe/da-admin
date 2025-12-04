@@ -54,6 +54,19 @@ describe('fetch', () => {
     const resp = await handler.fetch({ method: 'GET', url: 'http://www.example.com/' }, {});
     assert.strictEqual(resp.status, 404);
   });
+
+  it('should return 500 when getDaCtx throws unexpected error', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => {
+          throw new Error('Unexpected ctx error');
+        },
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/source/org/repo/file.html' }, {});
+    assert.strictEqual(resp.status, 500);
+  });
 });
 
 describe('invalid routes', () => {
