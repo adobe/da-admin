@@ -38,6 +38,7 @@
     "eslint": "9.4.0",
     "esmock": "2.7.3",
     "husky": "9.1.7",
+    "lint-staged": "16.2.7",
     "mocha": "^11.0.0",
     "s3rver": "3.7.1",
     "semantic-release": "25.0.2",
