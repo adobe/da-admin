@@ -63,7 +63,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{secrets.CLOUDFLARE_ACCOUNT_ID}}
 
       - name: Post-Deployment Integration Test
-        run: npm run test-postdeploy
+        run: npm run test:postdeploy
       - name: Semantic Release (Dry Run)
         run: npm run semantic-release-dry
         env:
