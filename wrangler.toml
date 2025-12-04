@@ -104,9 +104,9 @@ services = [
 ]
 
 kv_namespaces = [
-  { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
-  { binding = "DA_CONFIG", id = "3f6f6db5c27348fabee7c2a8ed39be17" },
-  { binding = "DA_JOBS", id = "66265e68cb2b422d8dc7a34b9fe2b0c9" }
+  { binding = "DA_AUTH", id = "local-da-auth" },
+  { binding = "DA_CONFIG", id = "local-da-config" },
+  { binding = "DA_JOBS", id = "local-da-jobs" }
 ]
 
 r2_buckets = [

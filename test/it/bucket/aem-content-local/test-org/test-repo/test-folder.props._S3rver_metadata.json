@@ -1,0 +1,8 @@
+{
+  "content-type": "application/json",
+  "x-amz-meta-id": "4875c756-42ce-4898-ae86-9b0d88146fbe",
+  "x-amz-meta-path": "test-repo/test-folder.props",
+  "x-amz-meta-timestamp": "1764844348129",
+  "x-amz-meta-users": "[{\"email\":\"anonymous\"}]",
+  "x-amz-meta-version": "7dd6da34-02a3-4d7f-be02-8170a695199b"
+}

@@ -33,19 +33,38 @@ describe('DA context', () => {
     });
   });
 
+  describe('Endpoint context', async () => {
+    let daCtx;
+    let daCtxNoTrail;
+
+    before(async () => {
+      daCtx = await getDaCtx(reqs.endpoint, env);
+      daCtxNoTrail = await getDaCtx(reqs.endpointNoTrail, env);
+    });
+
+    it('should support endpoint paths', () => {
+      assert.strictEqual(daCtx.api, 'endpoint');
+      assert.strictEqual(daCtxNoTrail.api, 'endpoint');
+    });
+  });
+
   describe('Org context', async () => {
     let daCtx;
+    let daCtxNoTrail;
 
     before(async () => {
       daCtx = await getDaCtx(reqs.org, env);
+      daCtxNoTrail = await getDaCtx(reqs.orgNoTrail, env);
     });
 
     it('should return an undefined site', () => {
       assert.strictEqual(daCtx.site, undefined);
+      assert.strictEqual(daCtxNoTrail.site, undefined);
     });
 
     it('should return a blank filename', () => {
       assert.strictEqual(daCtx.filename, '');
+      assert.strictEqual(daCtxNoTrail.filename, '');
     });
   });
 
