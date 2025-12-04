@@ -1,20 +1,26 @@
 name: Build
 on: [push]
 
+env:
+  CI_BUILD_NUM: ${{ github.run_id }}
+  CI_BRANCH: ${{ github.ref_name }}
+
+permissions:
+  contents: write  # semantic-release-dry verifies the write permissions
+  issues: read # needed by semantic-release
+  pull-requests: write # needed by semantic-release
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [24.x]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-      - name: Set up Node.js ${{ matrix.node-version }}
+      - name: Set up Node.js 24.x
         uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '24.x'
 
       - name: Install dependencies
         run: npm ci
@@ -33,15 +39,59 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/lcov.info
 
-  release:
-    name: Deploy
+  test-deploy:
+    name: Test Deploy
     runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/main'
     needs: test
-    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v5
-      - name: Deploy
-        uses: cloudflare/wrangler-action@v3
+      - name: Use Node.js 24.x
+        uses: actions/setup-node@v5
         with:
-          apiToken: ${{secrets.CLOUDFLARE_API_TOKEN}}
-          accountId: ${{secrets.CLOUDFLARE_ACCOUNT_ID}}
+          node-version: '24.x'
+      - name: extracting last commit message
+        run: |
+          echo "CI_LAST_COMMIT_MSG=$(git show -s --format="%s")" >> $GITHUB_ENV
+          echo CI_LAST_COMMIT_MSG
+      - name: Install dependencies
+        run: npm ci
+      - name: Branch Deployment
+        run: npm run deploy:ci
+        env:
+          CLOUDFLARE_API_TOKEN: ${{secrets.CLOUDFLARE_API_TOKEN}}
+          CLOUDFLARE_ACCOUNT_ID: ${{secrets.CLOUDFLARE_ACCOUNT_ID}}
+
+      - name: Post-Deployment Integration Test
+        run: npm run test:postdeploy
+      - name: Semantic Release (Dry Run)
+        run: npm run semantic-release-dry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_TOKEN: ${{secrets.SLACK_TOKEN}}
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24.x'
+      - name: extracting last commit message
+        run: |
+          echo "CI_LAST_COMMIT_MSG=$(git show -s --format="%s")" >> $GITHUB_ENV
+          echo CI_LAST_COMMIT_MSG
+      - name: Install dependencies
+        run: npm ci
+      - name: Semantic Release
+        run: npm run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{secrets.CLOUDFLARE_API_TOKEN}}
+          CLOUDFLARE_ACCOUNT_ID: ${{secrets.CLOUDFLARE_ACCOUNT_ID}}
+          SLACK_TOKEN: ${{secrets.SLACK_TOKEN}}
+
