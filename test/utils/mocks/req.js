@@ -47,11 +47,14 @@ const optsWithForceFail = {
 const reqs = {
   api: new Request('https://da.live/api/source/cq/', optsWithEmptyHead),
   org: new Request('https://da.live/source/cq/', optsWithEmptyHead),
+  orgNoTrail: new Request('https://da.live/list/cq', optsWithEmptyHead),
   site: new Request('https://da.live/source/cq/Geometrixx', optsWithAuth),
   folder: new Request('https://da.live/source/cq/Geometrixx/NFT/', optsWithExpAuth),
   file: new Request('https://da.live/source/cq/Geometrixx/NFT/Outreach.html', optsWithEmptyBearer),
   media: new Request('https://da.live/source/cq/Geometrixx/NFT/blockchain.png', optsWithForceFail),
   siteMulti: new Request('https://da.live/source/cq/Geometrixx', optsWithMultiAuthAnon),
+  endpoint: new Request('https://da.live/endpoint/', optsWithEmptyHead),
+  endpointNoTrail: new Request('https://da.live/endpoint', optsWithEmptyHead),
 };
 
 export default reqs;
