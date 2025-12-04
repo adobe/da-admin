@@ -170,6 +170,21 @@ describe('Integration Tests: smoke tests', function () {
     assert.strictEqual(body, '<html><body><h1>Page 3</h1></body></html>');
   });
 
+  it('should delete an object via HTTP request', async () => {
+    const key = 'test-folder/page3';
+    const ext = '.html';
+
+    const url = `${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`;
+    let resp = await fetch(url, {
+      method: 'DELETE',
+    });
+    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status}`);
+
+    // validate page is not here
+    resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`);
+    assert.strictEqual(resp.status, 404, `Expected 404 Not Found, got ${resp.status}`);
+  });
+
   it('should logout via HTTP request', async () => {
     const url = `${SERVER_URL}/logout`;
     const resp = await fetch(url, {
