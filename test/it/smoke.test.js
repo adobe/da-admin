@@ -183,7 +183,7 @@ describe('Integration Tests: smoke tests', function () {
     assert.strictEqual(body[0].name, REPO, `Expected ${REPO}, got ${body[0].name}`);
   });
 
-  it.only('should deal with no config found via HTTP request', async () => {
+  it('should deal with no config found via HTTP request', async () => {
     const url = `${SERVER_URL}/config/${ORG}`;
     const resp = await fetch(url);
 
