@@ -67,7 +67,7 @@ jobs:
       - name: Semantic Release (Dry Run)
         run: npm run semantic-release-dry
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ADOBE_BOT_GITHUB_TOKEN }}
           SLACK_TOKEN: ${{secrets.SLACK_TOKEN}}
 
   release:
@@ -90,7 +90,7 @@ jobs:
       - name: Semantic Release
         run: npm run semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ADOBE_BOT_GITHUB_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{secrets.CLOUDFLARE_API_TOKEN}}
           CLOUDFLARE_ACCOUNT_ID: ${{secrets.CLOUDFLARE_ACCOUNT_ID}}
           SLACK_TOKEN: ${{secrets.SLACK_TOKEN}}
