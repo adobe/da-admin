@@ -14,7 +14,7 @@ module.exports = {
     }],
     ['@semantic-release/exec', {
       prepareCmd: 'npm run deploy:ci && npm run test:postdeploy',
-      publishCmd: 'npm run deploy:stage',
+      publishCmd: 'npm run deploy:prod',
       successCmd: 'echo "${nextRelease.version}" > released.txt',
     }],
     '@semantic-release/github',
