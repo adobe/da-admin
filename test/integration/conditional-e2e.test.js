@@ -58,7 +58,7 @@ describe('Conditional Headers End-to-End', () => {
     );
   });
 
-  it.skip('GET with If-None-Match returns 304 with ETag header in response', async () => {
+  it('GET with If-None-Match returns 304 with ETag header in response', async () => {
     const etag = '"test-etag-123"';
     s3Mock
       .on(GetObjectCommand)
@@ -156,7 +156,7 @@ describe('Conditional Headers End-to-End', () => {
     assert.strictEqual(resp.headers.get('Access-Control-Allow-Origin'), '*');
   });
 
-  it.skip('versionsource GET with conditionals works correctly', async () => {
+  it('versionsource GET with conditionals works correctly', async () => {
     const etag = '"version-etag"';
     s3Mock
       .on(GetObjectCommand)
