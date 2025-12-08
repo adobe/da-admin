@@ -15,7 +15,7 @@
     "test": "c8 mocha --spec=test/**/*.test.js --ignore=test/it/**/*.test.js",
     "test:it": "mocha test/it/**/*.test.js",
     "test:all": "npm run test && npm run test:it",
-    "test:postdeploy": "source .deployment-env && npm run test:it",
+    "test:postdeploy": ". .deployment-env && npm run test:it && rm .deployment-env",
     "dev": "wrangler dev -e dev",
     "deploy:ci": "./deploy-ci-version.sh ci",
     "deploy:prod": "node prepare-deploy.js && wrangler deploy -e production -c wrangler-versioned.toml",
