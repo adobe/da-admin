@@ -13,7 +13,7 @@ import getDaCtx from './utils/daCtx.js';
 import daResp from './utils/daResp.js';
 
 import headHandler from './handlers/head.js';
-import getHandler from './handlers/get.js';
+// import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
 
@@ -54,7 +54,7 @@ export default {
         respObj = await headHandler({ env, daCtx });
         break;
       case 'GET':
-        respObj = await getHandler({ env, daCtx });
+        // respObj = await getHandler({ env, daCtx });
         break;
       case 'PUT':
         respObj = await postHandler({ req, env, daCtx });
