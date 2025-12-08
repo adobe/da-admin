@@ -11,6 +11,7 @@
  */
 import assert from 'node:assert';
 
+// eslint-disable-next-line func-names
 export default (SERVER_URL, ORG, REPO) => describe('Integration Tests: it tests', function () {
   // Enable bail to stop on first failure - tests are interdependent
   this.bail(true);
