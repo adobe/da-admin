@@ -44,15 +44,23 @@ echo "$OUTPUT"
 WORKER_VERSION_ID=$(echo "$OUTPUT" | grep "Worker Version ID:" | sed 's/.*Worker Version ID: //')
 VERSION_PREVIEW_URL=$(echo "$OUTPUT" | grep "Version Preview URL:" | sed 's/.*Version Preview URL: //')
 
-# Write to a file that can be sourced
+# Write to a file that can be sourced (for local use)
 cat > .deployment-env << EOF
 export WORKER_VERSION_ID="$WORKER_VERSION_ID"
 export VERSION_PREVIEW_URL="$VERSION_PREVIEW_URL"
 export VERSION_PREVIEW_ORG="ci-test-org-$BRANCH"
 EOF
 
-# probably useless...
-wrangler versions deploy -y -e ci --version-id $WORKER_VERSION_ID
+# If running in GitHub Actions, also write to GITHUB_ENV
+if [ -n "$GITHUB_ENV" ]; then
+  echo "WORKER_VERSION_ID=$WORKER_VERSION_ID" >> "$GITHUB_ENV"
+  echo "VERSION_PREVIEW_URL=$VERSION_PREVIEW_URL" >> "$GITHUB_ENV"
+  echo "VERSION_PREVIEW_ORG=ci-test-org-$BRANCH" >> "$GITHUB_ENV"
+  echo "Variables exported to GitHub Actions environment"
+fi
+
+# Deploy the version
+wrangler versions deploy -y -e ci --version-id "$WORKER_VERSION_ID"
 
 echo ""
 echo "Version deployment complete!"
@@ -60,5 +68,6 @@ echo "----------------------------------------"
 echo "Deployment information:"
 echo "WORKER_VERSION_ID=$WORKER_VERSION_ID"
 echo "VERSION_PREVIEW_URL=$VERSION_PREVIEW_URL"
+echo "VERSION_PREVIEW_ORG=ci-test-org-$BRANCH"
 echo "----------------------------------------"
 
