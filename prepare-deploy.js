@@ -23,6 +23,9 @@ try {
   const { version } = JSON.parse(await readFile(resolve(__dirname, 'package.json')));
   toml = toml.replaceAll('@@VERSION@@', version);
   await writeFile(resolve(__dirname, 'wrangler-versioned.toml'), toml, 'utf-8');
+
+  // Export version for use in deploy scripts
+  console.log(version);
 } catch (e) {
   console.error(e);
   process.exitCode = 1;
