@@ -23,32 +23,48 @@ export async function listObjectVersions(env, { bucket, org, key }) {
   if (resp.status !== 200) {
     return resp;
   }
-  const versions = await Promise.all(JSON.parse(resp.body).map(async (entry) => {
-    const entryResp = await getObject(env, {
-      bucket,
-      org,
-      key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
-    }, true);
-    if (entryResp.status !== 200 || !entryResp.metadata) {
-      // this might fire 500 requests in parallel,
-      // some might fail for many reasons (system busy, rate limiting, etc.).
-      return undefined;
-    }
-    const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
-    const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
-    const { label, path } = entryResp.metadata;
+  const list = JSON.parse(resp.body);
+  // make 50 requests per batch to avoid overwhelming the system
+  const batches = [];
+  for (let i = 0; i < list.length; i += 50) {
+    batches.push(list.slice(i, i + 50));
+  }
 
-    if (entryResp.contentLength > 0) {
-      return {
-        url: `/versionsource/${org}/${current.metadata.id}/${entry.name}.${entry.ext}`,
-        users,
-        timestamp,
-        path,
-        label,
-      };
-    }
-    return { users, timestamp, path };
-  })).filter((version) => version !== undefined);
+  const versions = [];
+  // Process batches sequentially to avoid .flat() which is not available in Workers
+  for (const batch of batches) {
+    // eslint-disable-next-line no-await-in-loop
+    const batchResp = await Promise.all(batch.map(async (entry) => {
+      const entryResp = await getObject(env, {
+        bucket,
+        org,
+        key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
+      }, true);
+
+      if (entryResp.status !== 200 || !entryResp.metadata) {
+        // Some requests might fail for unknown reasons (system busy, etc.)
+        return undefined;
+      }
+
+      const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
+      const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
+      const { label, path } = entryResp.metadata;
+
+      if (entryResp.contentLength > 0) {
+        return {
+          url: `/versionsource/${org}/${current.metadata.id}/${entry.name}.${entry.ext}`,
+          users,
+          timestamp,
+          path,
+          label,
+        };
+      }
+      return { users, timestamp, path };
+    }));
+
+    // Filter out undefined entries and add to versions array
+    versions.push(...batchResp.filter((version) => version !== undefined));
+  }
 
   return {
     status: resp.status,
