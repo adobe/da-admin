@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/adobe/da-admin/compare/v1.0.0...v1.0.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* capture failing version requests ([#220](https://github.com/adobe/da-admin/issues/220)) ([729c8f5](https://github.com/adobe/da-admin/commit/729c8f5cc85573cd0dd2f761eb6ab8d471a820cb))
+
 # 1.0.0 (2025-12-04)
 
 
