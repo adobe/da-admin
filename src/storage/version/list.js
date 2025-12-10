@@ -9,10 +9,12 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import processQueue from '@adobe/helix-shared-process-queue';
 import getObject from '../object/get.js';
 import listObjects from '../object/list.js';
 
 const MAX_VERSIONS = 500;
+const CONCURRENCY = 50;
 
 export async function listObjectVersions(env, { bucket, org, key }) {
   const current = await getObject(env, { bucket, org, key }, true);
@@ -24,51 +26,41 @@ export async function listObjectVersions(env, { bucket, org, key }) {
     return resp;
   }
   const list = JSON.parse(resp.body);
-  // make 50 requests per batch to avoid overwhelming the system
-  const batches = [];
-  for (let i = 0; i < list.length; i += 50) {
-    batches.push(list.slice(i, i + 50));
-  }
 
-  const versions = [];
-  // Process batches sequentially to avoid .flat() which is not available in Workers
-  for (const batch of batches) {
-    // eslint-disable-next-line no-await-in-loop
-    const batchResp = await Promise.all(batch.map(async (entry) => {
-      const entryResp = await getObject(env, {
-        bucket,
-        org,
-        key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
-      }, true);
+  const versions = await processQueue(list, async (entry) => {
+    const entryResp = await getObject(env, {
+      bucket,
+      org,
+      key: `.da-versions/${current.metadata.id}/${entry.name}.${entry.ext}`,
+    }, true);
 
-      if (entryResp.status !== 200 || !entryResp.metadata) {
-        // Some requests might fail for unknown reasons (system busy, etc.)
-        return undefined;
-      }
+    if (entryResp.status !== 200 || !entryResp.metadata) {
+      // Some requests might fail for unknown reasons (system busy, etc.)
+      return undefined;
+    }
 
-      const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
-      const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
-      const { label, path } = entryResp.metadata;
+    const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
+    const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
+    const { label, path } = entryResp.metadata;
 
-      if (entryResp.contentLength > 0) {
-        return {
-          url: `/versionsource/${org}/${current.metadata.id}/${entry.name}.${entry.ext}`,
-          users,
-          timestamp,
-          path,
-          label,
-        };
-      }
-      return { users, timestamp, path };
-    }));
+    if (entryResp.contentLength > 0) {
+      return {
+        url: `/versionsource/${org}/${current.metadata.id}/${entry.name}.${entry.ext}`,
+        users,
+        timestamp,
+        path,
+        label,
+      };
+    }
+    return { users, timestamp, path };
+  }, CONCURRENCY);
 
-    // Filter out undefined entries and add to versions array
-    versions.push(...batchResp.filter((version) => version !== undefined));
-  }
+  // Filter out undefined entries (failed requests)
+  const filteredVersions = versions.filter((version) => version !== undefined);
 
   return {
     status: resp.status,
     contentType: resp.contentType,
-    body: JSON.stringify(versions),
+    body: JSON.stringify(filteredVersions),
   };
 }
