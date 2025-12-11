@@ -26,7 +26,7 @@ describe('Source Route', () => {
       DA_COLLAB: 'http://localhost:4444',
     };
 
-    const daCtx = { aclCtx: { pathLookup: new Map() } };
+    const daCtx = { key: '/somedoc.html', aclCtx: { pathLookup: new Map() } };
     const putResp = async (e, c) => {
       if (e === env && c === daCtx) {
         return { status: 200 };
@@ -76,7 +76,7 @@ describe('Source Route', () => {
       };
 
       const env = { DA_COLLAB: 'http://localhost:1234' };
-      const daCtx = { aclCtx: { pathLookup: new Map() } };
+      const daCtx = { key: '/a/b/mydoc.html', aclCtx: { pathLookup: new Map() } };
 
       const resp = await postSource({ req, env, daCtx });
       assert.equal(201, resp.status);
@@ -109,7 +109,7 @@ describe('Source Route', () => {
       };
 
       const env = { DA_COLLAB: 'http://localhost:1234' };
-      const daCtx = { aclCtx: { pathLookup: new Map() } };
+      const daCtx = { key: '/a/b/mydoc.html', aclCtx: { pathLookup: new Map() } };
 
       const resp = await postSource({ req, env, daCtx });
       assert.equal(500, resp.status);
@@ -121,7 +121,7 @@ describe('Source Route', () => {
 
   it('Test getSource', async () => {
     const env = {};
-    const daCtx = { aclCtx: { pathLookup: new Map() } };
+    const daCtx = { key: '/test.html', aclCtx: { pathLookup: new Map() } };
 
     const called = [];
     const getResp = async (e, c) => {
@@ -143,7 +143,7 @@ describe('Source Route', () => {
 
   it('Test getSource with 204', async () => {
     const env = {};
-    const daCtx = { aclCtx: { pathLookup: new Map() } };
+    const daCtx = { key: '/test.html', aclCtx: { pathLookup: new Map() } };
 
     const deleteResp = async (e, c) => {
       if (e === env && c === daCtx) {
