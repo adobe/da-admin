@@ -372,6 +372,7 @@ export function getChildRules(daCtx) {
 }
 
 export function hasPermission(daCtx, path, action, keywordPath = false) {
+  if (!path) return false;
   if (daCtx.aclCtx.pathLookup.size === 0) {
     return true;
   }

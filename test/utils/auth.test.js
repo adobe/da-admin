@@ -208,6 +208,31 @@ describe('DA auth', () => {
       assert(paths[6] === '/**' || paths[7] === '/**', '/** should be counted as longer than /x');
     });
 
+    it('test hasPermission returns false when path is falsy', async () => {
+      const users = [{ orgs: [{ orgIdent: '2345B0EA551D747', groups: [{ groupName: '4711' }] }] }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      // Test with null path
+      assert(!hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, null, 'read'));
+
+      // Test with undefined path
+      assert(!hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, undefined, 'read'));
+
+      // Test with empty string path
+      assert(!hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '', 'read'));
+
+      // Test with 0 (falsy but not typical for paths)
+      assert(!hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, 0, 'read'));
+    });
+
     it('test anonymous permissions', async () => {
       const users = [{ email: 'anonymous' }];
       const aclCtx = await getAclCtx(env2, 'test', users, '/test');
