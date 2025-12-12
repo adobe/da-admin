@@ -34,7 +34,7 @@ describe('fetch', () => {
     assert.strictEqual(resp.status, 405);
   });
 
-  it('should return 412 when user is anonymous', async () => {
+  it('should return 401 when user is anonymous', async () => {
     const hnd = await esmock('../src/index.js', {
       '../src/utils/daCtx.js': {
         default: async () => ({ authorized: false, users: [{ email: 'anonymous' }] }),
@@ -42,7 +42,7 @@ describe('fetch', () => {
     });
 
     const resp = await hnd.fetch({ method: 'GET' }, {});
-    assert.strictEqual(resp.status, 412);
+    assert.strictEqual(resp.status, 401);
   });
 
   it('should return 401 when not authorized and not logged in', async () => {

@@ -43,7 +43,7 @@ export default {
 
     // Anonymous users are not permitted
     const anon = users.some((user) => user.email === 'anonymous');
-    if (anon) return daResp({ status: 412 });
+    if (anon) return daResp({ status: 401 });
 
     if (!authorized) return daResp({ status: 403 });
 
