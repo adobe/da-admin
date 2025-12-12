@@ -39,11 +39,14 @@ export default {
       return daResp({ status: 500 });
     }
 
-    const { authorized, key } = daCtx;
-    if (!authorized) {
-      const status = daCtx.users[0].email === 'anonymous' ? 401 : 403;
-      return daResp({ status });
-    }
+    const { users, authorized, key } = daCtx;
+
+    // Anonymous users are not permitted
+    const anon = users.some((user) => user.email === 'anonymous');
+    if (anon) return daResp({ status: 401 });
+
+    if (!authorized) return daResp({ status: 403 });
+
     if (key?.startsWith('.da-versions')) {
       return daResp({ status: 404 });
     }
