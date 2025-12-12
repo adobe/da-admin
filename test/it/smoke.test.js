@@ -15,18 +15,27 @@ import S3rver from 's3rver';
 import { spawn } from 'child_process';
 import path from 'path';
 import kill from 'tree-kill';
+import http from 'http';
+import { SignJWT, generateKeyPair, exportJWK } from 'jose';
 
 const S3_PORT = 4569;
 const SERVER_PORT = 8788;
+const IMS_PORT = 9999;
 const SERVER_URL = `http://localhost:${SERVER_PORT}`;
 const S3_DIR = './test/it/bucket';
 
 const ORG = 'test-org';
 const REPO = 'test-repo';
 
+// JWT token and keys will be set up in before() hook
+let AUTH_HEADERS = {};
+let publicJWK;
+let privateKey;
+
 describe('Integration Tests: smoke tests', function () {
   let s3rver;
   let devServer;
+  let imsServer;
 
   before(async function () {
     // Increase timeout for server startup
@@ -38,6 +47,65 @@ describe('Integration Tests: smoke tests', function () {
     if (fs.existsSync(wranglerState)) {
       fs.rmSync(wranglerState, { recursive: true });
     }
+
+    // Generate JWT key pair for testing
+    const { publicKey, privateKey: privKey } = await generateKeyPair('RS256');
+    privateKey = privKey;
+    publicJWK = await exportJWK(publicKey);
+    publicJWK.kid = 'test-key-id';
+    publicJWK.alg = 'RS256';
+    publicJWK.use = 'sig';
+
+    // Create a valid JWT token
+    const jwt = await new SignJWT({
+      email: 'test@example.com',
+      userId: 'test-user-id',
+      name: 'Test User',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key-id' })
+      .setIssuedAt()
+      .setExpirationTime('24h')
+      .sign(privateKey);
+
+    // Set up auth headers with the JWT
+    AUTH_HEADERS = {
+      Authorization: `Bearer ${jwt}`,
+    };
+
+    // Start mock IMS server
+    imsServer = http.createServer((req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+
+      if (req.url === '/ims/profile/v1') {
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          userId: 'test-user-id',
+          email: 'test@example.com',
+          name: 'Test User',
+        }));
+      } else if (req.url === '/ims/organizations/v5') {
+        res.writeHead(200);
+        res.end(JSON.stringify([
+          {
+            orgName: 'Test Org',
+            orgRef: { ident: 'test-org-id' },
+            groups: [],
+          },
+        ]));
+      } else if (req.url === '/ims/keys') {
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          keys: [publicJWK],
+        }));
+      } else {
+        res.writeHead(404);
+        res.end('{}');
+      }
+    });
+
+    await new Promise((resolve) => {
+      imsServer.listen(IMS_PORT, '127.0.0.1', resolve);
+    });
 
     s3rver = new S3rver({
       port: S3_PORT,
@@ -108,13 +176,18 @@ describe('Integration Tests: smoke tests', function () {
     if (s3rver) {
       await s3rver.close();
     }
+    if (imsServer) {
+      await new Promise((resolve) => {
+        imsServer.close(resolve);
+      });
+    }
   });
 
   it('should get a object via HTTP request', async () => {
     const pathname = 'test-folder/page1.html';
 
     const url = `${SERVER_URL}/source/${ORG}/${REPO}/${pathname}`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: AUTH_HEADERS });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
@@ -126,7 +199,7 @@ describe('Integration Tests: smoke tests', function () {
     const key = 'test-folder';
 
     const url = `${SERVER_URL}/list/${ORG}/${REPO}/${key}`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: AUTH_HEADERS });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
@@ -150,6 +223,7 @@ describe('Integration Tests: smoke tests', function () {
     const url = `${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`;
     let resp = await fetch(url, {
       method: 'POST',
+      headers: AUTH_HEADERS,
       body: formData,
     });
 
@@ -162,7 +236,7 @@ describe('Integration Tests: smoke tests', function () {
     assert.strictEqual(body.aem.liveUrl, `https://main--${REPO}--${ORG}.aem.live/${key}`);
 
     // validate page is here (include extension in GET request)
-    resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`);
+    resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`, { headers: AUTH_HEADERS });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
@@ -174,6 +248,7 @@ describe('Integration Tests: smoke tests', function () {
     const url = `${SERVER_URL}/logout`;
     const resp = await fetch(url, {
       method: 'POST',
+      headers: AUTH_HEADERS,
     });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
@@ -181,7 +256,7 @@ describe('Integration Tests: smoke tests', function () {
 
   it('should list repos via HTTP request', async () => {
     const url = `${SERVER_URL}/list/${ORG}`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: AUTH_HEADERS });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
@@ -192,7 +267,7 @@ describe('Integration Tests: smoke tests', function () {
 
   it('should deal with no config found via HTTP request', async () => {
     const url = `${SERVER_URL}/config/${ORG}`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: AUTH_HEADERS });
 
     assert.strictEqual(resp.status, 404, `Expected 404, got ${resp.status}`);
   });
@@ -217,6 +292,7 @@ describe('Integration Tests: smoke tests', function () {
     let url = `${SERVER_URL}/config/${ORG}`;
     let resp = await fetch(url, {
       method: 'POST',
+      headers: AUTH_HEADERS,
       body: formData,
     });
 
@@ -224,7 +300,7 @@ describe('Integration Tests: smoke tests', function () {
 
     // Now GET the config
     url = `${SERVER_URL}/config/${ORG}`;
-    resp = await fetch(url);
+    resp = await fetch(url, { headers: AUTH_HEADERS });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 

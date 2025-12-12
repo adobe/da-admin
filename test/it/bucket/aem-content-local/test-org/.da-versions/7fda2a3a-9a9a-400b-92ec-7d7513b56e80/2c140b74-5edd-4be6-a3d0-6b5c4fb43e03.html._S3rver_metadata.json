@@ -1,0 +1,7 @@
+{
+  "content-type": "text/html",
+  "x-amz-meta-label": "Collab Parse",
+  "x-amz-meta-path": "test-repo/test-folder/page3.html",
+  "x-amz-meta-timestamp": "1765521343817",
+  "x-amz-meta-users": "[{\"email\":\"anonymous\"}]"
+}
