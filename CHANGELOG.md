@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/adobe/da-admin/compare/v1.0.1...v1.0.2) (2025-12-15)
+
+
+### Bug Fixes
+
+* exception when no path ([#223](https://github.com/adobe/da-admin/issues/223)) ([cb97c95](https://github.com/adobe/da-admin/commit/cb97c95c87ef019448b18c56b358aa27e0d31f73))
+
 ## [1.0.1](https://github.com/adobe/da-admin/compare/v1.0.0...v1.0.1) (2025-12-10)
 
 
