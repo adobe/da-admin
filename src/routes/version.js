@@ -26,10 +26,7 @@ export async function getVersionSource({ env, daCtx, head }) {
   // so we have to do the permission check when the object is returned from the metadata.
 
   const resp = await getObjectVersion(env, daCtx, head, daCtx.conditionalHeaders);
-  // Skip permission check for conditional responses (304/412) as they don't include metadata
-  if (resp.status !== 304 && resp.status !== 412) {
-    if (!hasPermission(daCtx, resp.metadata?.path, 'read')) return { status: 403 };
-  }
+  if (!hasPermission(daCtx, resp.metadata?.path, 'read')) return { status: 403 };
   return resp;
 }
 
