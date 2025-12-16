@@ -14,12 +14,17 @@ import S3rver from 's3rver';
 import { spawn } from 'child_process';
 import path from 'path';
 import kill from 'tree-kill';
+import { generateKeyPair, exportJWK, SignJWT } from 'jose';
+import { createServer } from 'http';
 
 import itTests from './it-tests.js';
 
 const S3_PORT = 4569;
 const SERVER_PORT = 8788;
+
 const LOCAL_SERVER_URL = `http://localhost:${SERVER_PORT}`;
+const IMS_PORT = 9999;
+
 const S3_DIR = './test/it/bucket';
 
 const LOCAL_ORG = 'test-org';
@@ -28,11 +33,112 @@ const REPO = 'test-repo';
 describe('Integration Tests: smoke tests', function () {
   let s3rver;
   let devServer;
+  let imsServer;
+  let publicKeyJwk;
 
   const context = {
-    SERVER_URL: LOCAL_SERVER_URL,
-    ORG: LOCAL_ORG,
-    REPO,
+    serverUrl: LOCAL_SERVER_URL,
+    org: LOCAL_ORG,
+    repo: REPO,
+    accessToken: '',
+  };
+
+  const setupIMSServer = async () => {
+    // Generate JWT token for authentication
+    const kid = 'test-key-id';
+    const { publicKey, privateKey } = await generateKeyPair('RS256');
+    publicKeyJwk = await exportJWK(publicKey);
+    publicKeyJwk.use = 'sig';
+    publicKeyJwk.kid = kid;
+    publicKeyJwk.alg = 'RS256';
+
+    // Create JWT with timestamps in milliseconds (as IMS does)
+    const now = Date.now();
+    context.accessToken = await new SignJWT({
+      user_id: 'test_user',
+      type: 'access_token',
+      created_at: now, // milliseconds since epoch
+      expires_in: 3600000, // milliseconds (1 hour)
+    })
+      .setProtectedHeader({ alg: 'RS256', kid })
+      .sign(privateKey);
+
+    // Start mock IMS server
+    imsServer = createServer((req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+
+      // Log requests for debugging
+      console.log(`[IMS Mock] ${req.method} ${req.url}`);
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+      } else if (req.url === '/ims/keys') {
+        res.writeHead(200);
+        res.end(JSON.stringify({ keys: [publicKeyJwk] }));
+      } else if (req.url === '/ims/profile/v1') {
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          email: 'test@example.com',
+          userId: 'test_user',
+        }));
+      } else if (req.url === '/ims/organizations/v5') {
+        res.writeHead(200);
+        res.end(JSON.stringify([]));
+      } else {
+        console.log(`[IMS Mock] 404 Not Found: ${req.url}`);
+        res.writeHead(404);
+        res.end(JSON.stringify({ error: 'Not found' }));
+      }
+    });
+
+    await new Promise((resolve) => {
+      imsServer.listen(IMS_PORT, '127.0.0.1', resolve);
+    });
+  };
+
+  const setupS3rver = async () => {
+    s3rver = new S3rver({
+      port: S3_PORT,
+      address: '127.0.0.1',
+      directory: path.resolve(S3_DIR),
+      silent: true,
+    });
+    await s3rver.run();
+  };
+
+  const setupDevServer = async () => {
+    devServer = spawn('npx', [
+      'wrangler', 'dev',
+      '--port', SERVER_PORT.toString(),
+      '--env', 'it',
+      // '--log-level', 'debug',
+    ], {
+      stdio: 'pipe', // Capture output for debugging
+      detached: false, // Keep in same process group for easier cleanup
+    });
+
+    // Wait for server to be ready
+    await new Promise((resolve, reject) => {
+      let started = false;
+      devServer.stdout.on('data', (data) => {
+        const str = data.toString();
+        // Always log wrangler output including errors
+        // console.log('[Wrangler]', str.trim());
+        if (str.includes('Ready on http://localhost') && !started) {
+          started = true;
+          resolve();
+        }
+      });
+
+      devServer.stderr.on('data', (data) => {
+        console.error('[Wrangler Err]', data.toString());
+      });
+
+      devServer.on('error', reject);
+    });
   };
 
   before(async function () {
@@ -52,49 +158,10 @@ describe('Integration Tests: smoke tests', function () {
         fs.rmSync(wranglerState, { recursive: true });
       }
 
-      s3rver = new S3rver({
-        port: S3_PORT,
-        address: '127.0.0.1',
-        directory: path.resolve(S3_DIR),
-        silent: true,
-      });
-      await s3rver.run();
-
-      devServer = spawn('npx', [
-        'wrangler', 'dev',
-        '--port', SERVER_PORT.toString(),
-        '--env', 'it',
-        '--var', 'S3_DEF_URL:http://localhost:4569',
-        '--var', 'S3_ACCESS_KEY_ID:S3RVER',
-        '--var', 'S3_SECRET_ACCESS_KEY:S3RVER',
-        '--var', 'S3_FORCE_PATH_STYLE:true',
-        '--var', 'IMS_ORIGIN:http://localhost:9999',
-        '--var', 'AEM_ADMIN_MEDIA_API_KEY:test-key',
-      ], {
-        stdio: 'pipe', // Capture output for debugging
-        detached: false, // Keep in same process group for easier cleanup
-      });
-
-      // Wait for server to be ready
-      await new Promise((resolve, reject) => {
-        let started = false;
-        devServer.stdout.on('data', (data) => {
-          const str = data.toString();
-          if (str.includes('Ready on http://localhost') && !started) {
-            started = true;
-            resolve();
-          }
-        });
-
-        devServer.stderr.on('data', (data) => {
-          console.error('[Wrangler Err]', data.toString());
-        });
-
-        devServer.on('error', reject);
-      });
+      await setupIMSServer();
+      await setupS3rver();
+      await setupDevServer();
     }
-
-    console.log('CONTEXT', context);
   });
 
   after(async function () {
@@ -127,6 +194,11 @@ describe('Integration Tests: smoke tests', function () {
     }
     if (s3rver) {
       await s3rver.close();
+    }
+    if (imsServer) {
+      await new Promise((resolve) => {
+        imsServer.close(resolve);
+      });
     }
   });
 

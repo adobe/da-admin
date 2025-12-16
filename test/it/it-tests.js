@@ -17,37 +17,47 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
   this.bail(true);
 
   it('delete root folder should cleanup the bucket', async () => {
-    const { SERVER_URL, ORG, REPO } = ctx;
-    const url = `${SERVER_URL}/source/${ORG}/${REPO}`;
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
+    const url = `${serverUrl}/source/${org}/${repo}`;
     console.log('url', url);
     const resp = await fetch(url, {
       method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status}`);
 
     // validate bucket is empty
-    const listResp = await fetch(`${SERVER_URL}/list/${ORG}/${REPO}`);
+    const listResp = await fetch(`${serverUrl}/list/${org}/${repo}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     assert.strictEqual(listResp.status, 200, `Expected 200 OK, got ${listResp.status}`);
     const listBody = await listResp.json();
     assert.strictEqual(listBody.length, 0, `Expected 0 items, got ${listBody.length}`);
   });
 
   it('should create a repo via HTTP request', async () => {
-    const { SERVER_URL, ORG, REPO } = ctx;
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
     const formData = new FormData();
     const blob = new Blob(['{}'], { type: 'application/json' });
-    const file = new File([blob], `${REPO}.props`, { type: 'application/json' });
+    const file = new File([blob], `${repo}.props`, { type: 'application/json' });
     formData.append('data', file);
 
-    const resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${REPO}.props`, {
+    const resp = await fetch(`${serverUrl}/source/${org}/${repo}/${repo}.props`, {
       method: 'POST',
       body: formData,
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     assert.ok([200, 201].includes(resp.status), `Expected 200 or 201 for marker, got ${resp.status}`);
   });
 
   it('should post an object via HTTP request', async () => {
-    const { SERVER_URL, ORG, REPO } = ctx;
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
     // Now create the actual page
     const key = 'test-folder/page1';
     const ext = '.html';
@@ -58,22 +68,25 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     const file = new File([blob], 'page1.html', { type: 'text/html' });
     formData.append('data', file);
 
-    const url = `${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`;
+    const url = `${serverUrl}/source/${org}/${repo}/${key}${ext}`;
     let resp = await fetch(url, {
       method: 'POST',
       body: formData,
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
 
     let body = await resp.json();
-    assert.strictEqual(body.source.editUrl, `https://da.live/edit#/${ORG}/${REPO}/${key}`);
-    assert.strictEqual(body.source.contentUrl, `https://content.da.live/${ORG}/${REPO}/${key}`);
-    assert.strictEqual(body.aem.previewUrl, `https://main--${REPO}--${ORG}.aem.page/${key}`);
-    assert.strictEqual(body.aem.liveUrl, `https://main--${REPO}--${ORG}.aem.live/${key}`);
+    assert.strictEqual(body.source.editUrl, `https://da.live/edit#/${org}/${repo}/${key}`);
+    assert.strictEqual(body.source.contentUrl, `https://content.da.live/${org}/${repo}/${key}`);
+    assert.strictEqual(body.aem.previewUrl, `https://main--${repo}--${org}.aem.page/${key}`);
+    assert.strictEqual(body.aem.liveUrl, `https://main--${repo}--${org}.aem.live/${key}`);
 
     // validate page is here (include extension in GET request)
-    resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`);
+    resp = await fetch(`${serverUrl}/source/${org}/${repo}/${key}${ext}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
@@ -87,19 +100,24 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     const htmlBlob2 = new Blob(['<html><body><h1>Page 2</h1></body></html>'], { type: 'text/html' });
     const htmlFile2 = new File([htmlBlob2], 'page2.html', { type: 'text/html' });
     formData2.append('data', htmlFile2);
-    resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${key2}${ext2}`, {
+    resp = await fetch(`${serverUrl}/source/${org}/${repo}/${key2}${ext2}`, {
       method: 'POST',
       body: formData2,
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
   });
 
   it('should list objects via HTTP request', async () => {
-    const { SERVER_URL, ORG, REPO } = ctx;
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
     const key = 'test-folder';
 
-    const url = `${SERVER_URL}/list/${ORG}/${REPO}/${key}`;
-    const resp = await fetch(url);
+    const url = `${serverUrl}/list/${org}/${repo}/${key}`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
@@ -111,60 +129,78 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
   });
 
   it('should list repos via HTTP request', async () => {
-    const { SERVER_URL, ORG, REPO } = ctx;
-    const url = `${SERVER_URL}/list/${ORG}`;
-    const resp = await fetch(url);
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
+    const url = `${serverUrl}/list/${org}`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
     const body = await resp.json();
     assert.strictEqual(body.length, 1, `Expected 1 repo, got ${body.length}`);
-    assert.strictEqual(body[0].name, REPO, `Expected ${REPO}, got ${body[0].name}`);
+    assert.strictEqual(body[0].name, repo, `Expected ${repo}, got ${body[0].name}`);
   });
 
   it('should delete an object via HTTP request', async () => {
-    const { SERVER_URL, ORG, REPO } = ctx;
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
     const key = 'test-folder/page2';
     const ext = '.html';
 
-    const url = `${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`;
+    const url = `${serverUrl}/source/${org}/${repo}/${key}${ext}`;
     let resp = await fetch(url, {
       method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status}`);
 
     // validate page is not here
-    resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`);
+    resp = await fetch(`${serverUrl}/source/${org}/${repo}/${key}${ext}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     assert.strictEqual(resp.status, 404, `Expected 404 Not Found, got ${resp.status}`);
   });
 
   it('should deal with no config found via HTTP request', async () => {
-    const { SERVER_URL, ORG } = ctx;
-    const url = `${SERVER_URL}/config/${ORG}`;
-    const resp = await fetch(url);
+    const {
+      serverUrl, org, accessToken,
+    } = ctx;
+    const url = `${serverUrl}/config/${org}`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
     assert.strictEqual(resp.status, 404, `Expected 404, got ${resp.status}`);
   });
 
   it('should delete root folder', async () => {
-    const { SERVER_URL, ORG, REPO } = ctx;
-    const url = `${SERVER_URL}/source/${ORG}/${REPO}`;
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
+    const url = `${serverUrl}/source/${org}/${repo}`;
     const resp = await fetch(url, {
       method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     assert.strictEqual(resp.status, 204, `Previous test should have logged out, got ${resp.status}`);
   });
 
   it('should post and get org config via HTTP request', async () => {
-    const { SERVER_URL, ORG } = ctx;
+    const {
+      serverUrl, org, accessToken,
+    } = ctx;
     // First POST the config - must include CONFIG write permission
     const configData = JSON.stringify({
       total: 2,
       limit: 2,
       offset: 0,
       data: [
-        { path: 'CONFIG', groups: 'anonymous', actions: 'write' },
-        { path: '/+**', groups: 'anonymous', actions: 'write' },
+        { path: 'CONFIG', groups: 'test@example.com', actions: 'write' },
+        { path: '/+**', groups: 'test@example.com', actions: 'write' },
       ],
       ':type': 'sheet',
       ':sheetname': 'permissions',
@@ -173,49 +209,56 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     const formData = new FormData();
     formData.append('config', configData);
 
-    let url = `${SERVER_URL}/config/${ORG}`;
+    let url = `${serverUrl}/config/${org}`;
     let resp = await fetch(url, {
       method: 'POST',
       body: formData,
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
 
     // Now GET the config
-    url = `${SERVER_URL}/config/${ORG}`;
-    resp = await fetch(url);
+    url = `${serverUrl}/config/${org}`;
+    resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
     const body = await resp.json();
     assert.strictEqual(body.total, 2, `Expected 2, got ${body.total}`);
     assert.strictEqual(body.data[0].path, 'CONFIG', `Expected CONFIG, got ${body.data[0].path}`);
-    assert.strictEqual(body.data[0].groups, 'anonymous', `Expected anonymous, got ${body.data[0].groups}`);
+    assert.strictEqual(body.data[0].groups, 'test@example.com', `Expected test@example.com, got ${body.data[0].groups}`);
     assert.strictEqual(body.data[0].actions, 'write', `Expected write, got ${body.data[0].actions}`);
     assert.strictEqual(body.data[1].path, '/+**', `Expected /+**, got ${body.data[1].path}`);
-    assert.strictEqual(body.data[1].groups, 'anonymous', `Expected anonymous, got ${body.data[1].groups}`);
+    assert.strictEqual(body.data[1].groups, 'test@example.com', `Expected test@example.com, got ${body.data[1].groups}`);
     assert.strictEqual(body.data[1].actions, 'write', `Expected write, got ${body.data[1].actions}`);
   });
 
   it('cannot recreate root folder because of auth (previous test should setup auth)', async () => {
-    const { SERVER_URL, ORG, REPO } = ctx;
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
     const formData = new FormData();
     const blob = new Blob(['{}'], { type: 'application/json' });
-    const file = new File([blob], `${REPO}.props`, { type: 'application/json' });
+    const file = new File([blob], `${repo}.props`, { type: 'application/json' });
     formData.append('data', file);
 
-    const resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${REPO}.props`, {
+    const resp = await fetch(`${serverUrl}/source/${org}/${repo}/${repo}.props`, {
       method: 'POST',
       body: formData,
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
   });
 
   it('should logout via HTTP request', async () => {
-    const { SERVER_URL } = ctx;
-    const url = `${SERVER_URL}/logout`;
+    const { serverUrl, accessToken } = ctx;
+    const url = `${serverUrl}/logout`;
     const resp = await fetch(url, {
       method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
