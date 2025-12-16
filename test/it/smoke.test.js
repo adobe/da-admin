@@ -23,9 +23,17 @@ const S3_PORT = 4569;
 const SERVER_PORT = 8788;
 
 const LOCAL_SERVER_URL = `http://localhost:${SERVER_PORT}`;
-const IMS_PORT = 9999;
 
-const IMS_KID = 'ims';
+const IMS_LOCAL_PORT = 9999;
+const IMS_LOCAL_KID = 'ims';
+
+const IMS_STAGE = {
+  ENDPOINT: 'https://ims-na1-stg1.adobelogin.com',
+  CLIENT_ID: process.env.IMS_STAGE_CLIENT_ID,
+  CLIENT_SECRET: process.env.IMS_STAGE_CLIENT_SECRET,
+  ORG_ID: process.env.IMS_STAGE_ORG_ID,
+  SCOPES: process.env.IMS_STAGE_SCOPES,
+};
 
 const S3_DIR = './test/it/bucket';
 
@@ -45,11 +53,42 @@ describe('Integration Tests: smoke tests', function () {
     accessToken: '',
   };
 
-  const testIMSToken = async () => {
+  const connectToIMSStage = async () => {
+    const postData = {
+      grant_type: 'client_credentials',
+      client_id: IMS_STAGE.CLIENT_ID,
+      client_secret: IMS_STAGE.CLIENT_SECRET,
+      org_id: IMS_STAGE.ORG_ID,
+      scope: IMS_STAGE.SCOPES,
+    };
+
+    const form = new FormData();
+    Object.entries(postData).forEach(([k, v]) => {
+      form.append(k, v);
+    });
+
+    let res;
+    try {
+      res = await fetch(`${IMS_STAGE.ENDPOINT}/ims/token/v2`, {
+        method: 'POST',
+        body: form,
+      });
+    } catch (e) {
+      throw new Error(`cannot send request to IMS: ${e.message}`);
+    }
+
+    if (res.ok) {
+      const json = await res.json();
+      return json.access_token;
+    }
+    throw new Error(`error response from IMS with status: ${res.status} and body: ${await res.text()}`);
+  };
+
+  const getIMSLocalToken = async () => {
     const { publicKey, privateKey } = await generateKeyPair('RS256');
     publicKeyJwk = await exportJWK(publicKey);
     publicKeyJwk.use = 'sig';
-    publicKeyJwk.kid = IMS_KID;
+    publicKeyJwk.kid = IMS_LOCAL_KID;
     publicKeyJwk.alg = 'RS256';
 
     const accessToken = await new SignJWT({
@@ -59,7 +98,7 @@ describe('Integration Tests: smoke tests', function () {
       created_at: String(Date.now() - 1000),
       expires_in: '86400000',
     })
-      .setProtectedHeader({ alg: 'RS256', kid: IMS_KID })
+      .setProtectedHeader({ alg: 'RS256', kid: IMS_LOCAL_KID })
       .sign(privateKey);
 
     return accessToken;
@@ -98,7 +137,7 @@ describe('Integration Tests: smoke tests', function () {
     });
 
     await new Promise((resolve) => {
-      imsServer.listen(IMS_PORT, '127.0.0.1', resolve);
+      imsServer.listen(IMS_LOCAL_PORT, '127.0.0.1', resolve);
     });
   };
 
@@ -151,7 +190,7 @@ describe('Integration Tests: smoke tests', function () {
     if (process.env.VERSION_PREVIEW_URL) {
       context.serverUrl = process.env.VERSION_PREVIEW_URL;
       context.org = process.env.VERSION_PREVIEW_ORG;
-      // TODO solve IMS authentication for postdeploy tests
+      context.accessToken = await connectToIMSStage();
     } else {
       // local testing, start the server
 
@@ -162,7 +201,7 @@ describe('Integration Tests: smoke tests', function () {
         fs.rmSync(wranglerState, { recursive: true });
       }
 
-      context.accessToken = await testIMSToken();
+      context.accessToken = await getIMSLocalToken();
       await setupIMSServer();
       await setupS3rver();
       await setupDevServer();
