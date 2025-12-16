@@ -25,7 +25,12 @@ describe('Object delete', () => {
   describe('single context', () => {
     it('Delete a file', async () => {
       const collabCalled = [];
-      const dacollab = { fetch: (u) => collabCalled.push(u) };
+      const dacollab = {
+        fetch: (u) => {
+          collabCalled.push(u);
+          return { body: { cancel: () => {} } };
+        },
+      };
 
       const client = {};
       const env = { dacollab };
@@ -227,8 +232,7 @@ describe('Object delete', () => {
       };
       const env = {
         dacollab: {
-          fetch: () => {
-          },
+          fetch: () => ({ body: { cancel: () => {} } }),
         },
       };
       const mockPostObjectVersion = async () => ({ status: 201 });
@@ -257,8 +261,7 @@ describe('Object delete', () => {
       };
       const env = {
         dacollab: {
-          fetch: () => {
-          },
+          fetch: () => ({ body: { cancel: () => {} } }),
         },
       };
       const mockPostObjectVersion = async () => ({ status: 201 });
