@@ -146,8 +146,9 @@ describe('Integration Tests: smoke tests', function () {
     this.timeout(30000);
 
     if (process.env.VERSION_PREVIEW_URL) {
-      context.SERVER_URL = process.env.VERSION_PREVIEW_URL;
-      context.ORG = process.env.VERSION_PREVIEW_ORG;
+      context.serverUrl = process.env.VERSION_PREVIEW_URL;
+      context.org = process.env.VERSION_PREVIEW_ORG;
+      // TODO solve IMS authentication for postdeploy tests
     } else {
       // local testing, start the server
 
@@ -162,6 +163,8 @@ describe('Integration Tests: smoke tests', function () {
       await setupS3rver();
       await setupDevServer();
     }
+
+    console.log('Running tests with context:', context);
   });
 
   after(async function () {
