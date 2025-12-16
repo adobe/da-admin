@@ -25,6 +25,8 @@ const SERVER_PORT = 8788;
 const LOCAL_SERVER_URL = `http://localhost:${SERVER_PORT}`;
 const IMS_PORT = 9999;
 
+const IMS_KID = 'ims';
+
 const S3_DIR = './test/it/bucket';
 
 const LOCAL_ORG = 'test-org';
@@ -43,26 +45,27 @@ describe('Integration Tests: smoke tests', function () {
     accessToken: '',
   };
 
-  const setupIMSServer = async () => {
-    // Generate JWT token for authentication
-    const kid = 'test-key-id';
+  const testIMSToken = async () => {
     const { publicKey, privateKey } = await generateKeyPair('RS256');
     publicKeyJwk = await exportJWK(publicKey);
     publicKeyJwk.use = 'sig';
-    publicKeyJwk.kid = kid;
+    publicKeyJwk.kid = IMS_KID;
     publicKeyJwk.alg = 'RS256';
 
-    // Create JWT with timestamps in milliseconds (as IMS does)
-    const now = Date.now();
-    context.accessToken = await new SignJWT({
-      user_id: 'test_user',
+    const accessToken = await new SignJWT({
+      // as: 'ims-na1-stg1',
       type: 'access_token',
-      created_at: now, // milliseconds since epoch
-      expires_in: 3600000, // milliseconds (1 hour)
+      user_id: 'test_user',
+      created_at: String(Date.now() - 1000),
+      expires_in: '86400000',
     })
-      .setProtectedHeader({ alg: 'RS256', kid })
+      .setProtectedHeader({ alg: 'RS256', kid: IMS_KID })
       .sign(privateKey);
 
+    return accessToken;
+  };
+
+  const setupIMSServer = async () => {
     // Start mock IMS server
     imsServer = createServer((req, res) => {
       res.setHeader('Content-Type', 'application/json');
@@ -159,6 +162,7 @@ describe('Integration Tests: smoke tests', function () {
         fs.rmSync(wranglerState, { recursive: true });
       }
 
+      context.accessToken = await testIMSToken();
       await setupIMSServer();
       await setupS3rver();
       await setupDevServer();
