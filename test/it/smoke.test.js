@@ -10,14 +10,18 @@
  * governing permissions and limitations under the License.
  */
 /* eslint-disable prefer-arrow-callback, func-names */
-import S3rver from 's3rver';
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import kill from 'tree-kill';
+import config from 'dotenv';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { createServer } from 'http';
+import S3rver from 's3rver';
 
 import itTests from './it-tests.js';
+
+config.config();
 
 const S3_PORT = 4569;
 const SERVER_PORT = 8788;
@@ -28,11 +32,10 @@ const IMS_LOCAL_PORT = 9999;
 const IMS_LOCAL_KID = 'ims';
 
 const IMS_STAGE = {
-  ENDPOINT: 'https://ims-na1-stg1.adobelogin.com',
-  CLIENT_ID: process.env.IMS_STAGE_CLIENT_ID,
-  CLIENT_SECRET: process.env.IMS_STAGE_CLIENT_SECRET,
-  ORG_ID: process.env.IMS_STAGE_ORG_ID,
-  SCOPES: process.env.IMS_STAGE_SCOPES,
+  ENDPOINT: process.env.IT_IMS_STAGE_ENDPOINT,
+  CLIENT_ID: process.env.IT_IMS_STAGE_CLIENT_ID,
+  CLIENT_SECRET: process.env.IT_IMS_STAGE_CLIENT_SECRET,
+  SCOPES: process.env.IT_IMS_STAGE_SCOPES,
 };
 
 const S3_DIR = './test/it/bucket';
@@ -53,12 +56,18 @@ describe('Integration Tests: smoke tests', function () {
     accessToken: '',
   };
 
+  const cleanupWranglerState = () => {
+    const wranglerState = path.join(process.cwd(), '.wrangler/state');
+    if (fs.existsSync(wranglerState)) {
+      fs.rmSync(wranglerState, { recursive: true });
+    }
+  };
+
   const connectToIMSStage = async () => {
     const postData = {
       grant_type: 'client_credentials',
       client_id: IMS_STAGE.CLIENT_ID,
       client_secret: IMS_STAGE.CLIENT_SECRET,
-      org_id: IMS_STAGE.ORG_ID,
       scope: IMS_STAGE.SCOPES,
     };
 
@@ -69,7 +78,7 @@ describe('Integration Tests: smoke tests', function () {
 
     let res;
     try {
-      res = await fetch(`${IMS_STAGE.ENDPOINT}/ims/token/v2`, {
+      res = await fetch(`${IMS_STAGE.ENDPOINT}/ims/token/v3`, {
         method: 'POST',
         body: form,
       });
@@ -82,6 +91,17 @@ describe('Integration Tests: smoke tests', function () {
       return json.access_token;
     }
     throw new Error(`error response from IMS with status: ${res.status} and body: ${await res.text()}`);
+  };
+
+  const getIMSProfile = async (accessToken) => {
+    const res = await fetch(`${IMS_STAGE.ENDPOINT}/ims/profile/v1`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return json.email;
+    }
+    throw new Error(`Failed to fetch IMS profile: ${res.status}`);
   };
 
   const getIMSLocalToken = async () => {
@@ -188,20 +208,23 @@ describe('Integration Tests: smoke tests', function () {
     this.timeout(30000);
 
     if (process.env.VERSION_PREVIEW_URL) {
+      if (!IMS_STAGE.ENDPOINT || !IMS_STAGE.CLIENT_ID
+        || !IMS_STAGE.CLIENT_SECRET || !IMS_STAGE.SCOPES) {
+        throw new Error('IT_IMS_STAGE_ENDPOINT, IT_IMS_STAGE_CLIENT_ID, '
+          + 'IT_IMS_STAGE_CLIENT_SECRET, and IT_IMS_STAGE_SCOPES must be set');
+      }
+
       context.serverUrl = process.env.VERSION_PREVIEW_URL;
       context.org = process.env.VERSION_PREVIEW_ORG;
       context.accessToken = await connectToIMSStage();
+      context.email = await getIMSProfile(context.accessToken);
+      context.local = false;
     } else {
-      // local testing, start the server
-
-      // Clear wrangler state to start fresh - needed only for local testing
-      const fs = await import('fs');
-      const wranglerState = path.join(process.cwd(), '.wrangler/state');
-      if (fs.existsSync(wranglerState)) {
-        fs.rmSync(wranglerState, { recursive: true });
-      }
-
+      context.local = true;
       context.accessToken = await getIMSLocalToken();
+      context.email = 'test@example.com';
+
+      cleanupWranglerState();
       await setupIMSServer();
       await setupS3rver();
       await setupDevServer();
