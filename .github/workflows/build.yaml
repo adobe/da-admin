@@ -32,12 +32,6 @@ jobs:
         run: npm run test
       - name: Run the integration tests
         run: npm run test:it
-        env:
-          IT_IMS_STAGE_ENDPOINT: ${{ secrets.IT_IMS_STAGE_ENDPOINT }}
-          IT_IMS_STAGE_CLIENT_ID: ${{ secrets.IT_IMS_STAGE_CLIENT_ID }}
-          IT_IMS_STAGE_CLIENT_SECRET: ${{ secrets.IT_IMS_STAGE_CLIENT_SECRET }}
-          IT_IMS_STAGE_SCOPES: ${{ secrets.IT_IMS_STAGE_SCOPES }}
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -69,6 +63,11 @@ jobs:
 
       - name: Post-Deployment Integration Test
         run: npm run test:postdeploy
+        env:
+          IT_IMS_STAGE_ENDPOINT: ${{ secrets.IT_IMS_STAGE_ENDPOINT }}
+          IT_IMS_STAGE_CLIENT_ID: ${{ secrets.IT_IMS_STAGE_CLIENT_ID }}
+          IT_IMS_STAGE_CLIENT_SECRET: ${{ secrets.IT_IMS_STAGE_CLIENT_SECRET }}
+          IT_IMS_STAGE_SCOPES: ${{ secrets.IT_IMS_STAGE_SCOPES }}
       - name: Semantic Release (Dry Run)
         run: npm run semantic-release-dry
         env:
