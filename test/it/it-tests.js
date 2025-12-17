@@ -290,6 +290,18 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(resp.status, 404, `Expected 404 Not Found, got ${resp.status}`);
   });
 
+  it('should do a final delete of the root folder', async () => {
+    const {
+      serverUrl, org, repo, accessToken,
+    } = ctx;
+    const url = `${serverUrl}/source/${org}/${repo}`;
+    const resp = await fetch(url, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status}`);
+  });
+
   it('should logout via HTTP request', async () => {
     const { serverUrl, accessToken } = ctx;
     const url = `${serverUrl}/logout`;
