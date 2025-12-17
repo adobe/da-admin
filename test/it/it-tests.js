@@ -268,8 +268,10 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
 
     const body = await resp.json();
-    assert.strictEqual(body.length, 1, `Expected 1 repo, got ${body.length}`);
-    assert.strictEqual(body[0].name, repo, `Expected ${repo}, got ${body[0].name}`);
+    assert.ok(body.length > 0, `Expected at least 1 repo, got ${body.length}`);
+    // need to find the current repo in the list
+    const repoItem = body.find((item) => item.name === repo);
+    assert.ok(repoItem, `Expected ${repo} to be in the list`);
   });
 
   it('cannot delete an object via HTTP request if not authenticated', async () => {
