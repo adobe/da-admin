@@ -19,7 +19,10 @@ describe('Source Route', () => {
   it('Test invalidate using service binding', async () => {
     const sb_callbacks = [];
     const dacollab = {
-      fetch: async (url) => sb_callbacks.push(url),
+      fetch: async (url) => {
+        sb_callbacks.push(url);
+        return { body: { cancel: () => {} } };
+      },
     };
     const env = {
       dacollab,

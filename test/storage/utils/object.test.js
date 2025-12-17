@@ -21,6 +21,7 @@ describe('Storage Object Utils tests', () => {
       fetch: async (url) => {
         console.log(`invalidate called with ${url}`);
         called.push(url);
+        return { body: { cancel: () => {} } };
       },
     };
     const env = { dacollab };
@@ -53,6 +54,7 @@ describe('Storage Object Utils tests', () => {
           console.log(`invalidate called with ${url}`);
           assert.strictEqual(opts.headers.authorization, 'token example-secret');
           called.push(url);
+          return { body: { cancel: () => {} } };
         },
       },
       COLLAB_SHARED_SECRET: 'example-secret',

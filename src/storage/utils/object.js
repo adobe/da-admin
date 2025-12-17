@@ -30,9 +30,10 @@ export async function notifyCollab(api, url, env) {
   if (env.COLLAB_SHARED_SECRET) {
     headers.authorization = `token ${env.COLLAB_SHARED_SECRET}`;
   }
-  await env.dacollab.fetch(invURL, {
+  const resp = await env.dacollab.fetch(invURL, {
     // TODO: use POST for state changing operations
     // method: 'POST',
     headers,
   });
+  resp.body.cancel();
 }

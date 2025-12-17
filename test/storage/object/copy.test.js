@@ -343,7 +343,10 @@ describe('Object copy', () => {
       const collabCalled = [];
       const env = {
         dacollab: {
-          fetch: (x) => { collabCalled.push(x); },
+          fetch: (x) => {
+            collabCalled.push(x);
+            return { body: { cancel: () => {} } };
+          },
         },
       };
       const daCtx = {
@@ -569,7 +572,10 @@ describe('Object copy', () => {
       const collabCalled = [];
       const env = {
         dacollab: {
-          fetch: (x) => { collabCalled.push(x); },
+          fetch: (x) => {
+            collabCalled.push(x);
+            return { body: { cancel: () => {} } };
+          },
         },
       };
       const daCtx = { bucket: 'mybucket', org: 'xorg' };
@@ -631,7 +637,10 @@ describe('Object copy', () => {
       const collabCalled = [];
       const env = {
         dacollab: {
-          fetch: (x) => { collabCalled.push(x); },
+          fetch: (x) => {
+            collabCalled.push(x);
+            return { body: { cancel: () => {} } };
+          },
         },
       };
       const daCtx = { bucket: 'test-bucket', org: 'qqqorg', origin: 'http://qqq' };
@@ -680,7 +689,7 @@ describe('Object copy', () => {
         return null;
       };
 
-      const env = { dacollab: { fetch: () => {} } };
+      const env = { dacollab: { fetch: () => ({ body: { cancel: () => {} } }) } };
       const ctx = {
         bucket: 'root-bucket',
         org: 'foo',
@@ -713,7 +722,7 @@ describe('Object copy', () => {
             DA_JOBS[key] = value;
           },
         },
-        dacollab: { fetch: () => {} },
+        dacollab: { fetch: () => ({ body: { cancel: () => {} } }) },
       };
       s3Mock.on(ListObjectsV2Command)
         .resolves({
@@ -797,7 +806,7 @@ describe('Object copy', () => {
             return DA_JOBS[key];
           },
         },
-        dacollab: { fetch: () => {} },
+        dacollab: { fetch: () => ({ body: { cancel: () => {} } }) },
       };
 
       // Mock getObject to return content type for HEAD requests
@@ -858,7 +867,7 @@ describe('Object copy', () => {
             delete DA_JOBS[key];
           },
         },
-        dacollab: { fetch: () => {} },
+        dacollab: { fetch: () => ({ body: { cancel: () => {} } }) },
       };
 
       // Mock getObject to return content type for HEAD requests
