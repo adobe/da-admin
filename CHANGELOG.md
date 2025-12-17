@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/adobe/da-admin/compare/v1.0.2...v1.0.3) (2025-12-17)
+
+
+### Bug Fixes
+
+* stalled response ([#226](https://github.com/adobe/da-admin/issues/226)) ([d32fa3e](https://github.com/adobe/da-admin/commit/d32fa3eb470c8fbdbca61e9b9ba7961956ab9bbf))
+
 ## [1.0.2](https://github.com/adobe/da-admin/compare/v1.0.1...v1.0.2) (2025-12-15)
 
 
