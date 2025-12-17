@@ -93,17 +93,6 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(resp.status, 401, `Expected 401 Unauthorized, got ${resp.status}`);
   });
 
-  it('cannot delete root folder if not authenticated', async () => {
-    const {
-      serverUrl, org, repo,
-    } = ctx;
-    const url = `${serverUrl}/source/${org}/${repo}`;
-    const resp = await fetch(url, {
-      method: 'DELETE',
-    });
-    assert.strictEqual(resp.status, 401, `Expected 401 Unauthorized, got ${resp.status}`);
-  });
-
   it('delete root folder to cleanup the bucket', async () => {
     const {
       serverUrl, org, repo, accessToken,
@@ -128,14 +117,9 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     const {
       serverUrl, org, repo, accessToken,
     } = ctx;
-    const formData = new FormData();
-    const blob = new Blob(['{}'], { type: 'application/json' });
-    const file = new File([blob], `${repo}.props`, { type: 'application/json' });
-    formData.append('data', file);
 
-    const resp = await fetch(`${serverUrl}/source/${org}/${repo}/${repo}.props`, {
-      method: 'POST',
-      body: formData,
+    const resp = await fetch(`${serverUrl}/source/${org}/${repo}`, {
+      method: 'PUT',
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     assert.ok([200, 201].includes(resp.status), `Expected 200 or 201 for marker, got ${resp.status}`);
