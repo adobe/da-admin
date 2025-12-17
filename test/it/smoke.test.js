@@ -40,8 +40,8 @@ const IMS_STAGE = {
 
 const S3_DIR = './test/it/bucket';
 
-const LOCAL_ORG = 'test-org';
-const REPO = 'test-repo';
+const IT_ORG = 'da-admin-ci-it-org';
+const IT_DEFAULT_REPO = 'test-repo';
 
 describe('Integration Tests: smoke tests', function () {
   let s3rver;
@@ -51,8 +51,8 @@ describe('Integration Tests: smoke tests', function () {
 
   const context = {
     serverUrl: LOCAL_SERVER_URL,
-    org: LOCAL_ORG,
-    repo: REPO,
+    org: IT_ORG,
+    repo: IT_DEFAULT_REPO,
     accessToken: '',
   };
 
@@ -215,7 +215,11 @@ describe('Integration Tests: smoke tests', function () {
       }
 
       context.serverUrl = process.env.VERSION_PREVIEW_URL;
-      context.org = process.env.VERSION_PREVIEW_ORG;
+      const branch = process.env.VERSION_PREVIEW_BRANCH;
+      if (!branch) {
+        throw new Error('VERSION_PREVIEW_BRANCH must be set');
+      }
+      context.repo += `-${branch.toLowerCase().replace(/[ /_]/g, '-')}`;
       context.accessToken = await connectToIMSStage();
       context.email = await getIMSProfile(context.accessToken);
       context.local = false;

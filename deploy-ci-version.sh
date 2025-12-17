@@ -48,14 +48,14 @@ VERSION_PREVIEW_URL=$(echo "$OUTPUT" | grep "Version Preview URL:" | sed 's/.*Ve
 cat > .deployment-env << EOF
 export WORKER_VERSION_ID="$WORKER_VERSION_ID"
 export VERSION_PREVIEW_URL="$VERSION_PREVIEW_URL"
-export VERSION_PREVIEW_ORG="ci-test-org-$BRANCH"
+export VERSION_PREVIEW_BRANCH="$BRANCH"
 EOF
 
 # If running in GitHub Actions, also write to GITHUB_ENV
 if [ -n "$GITHUB_ENV" ]; then
   echo "WORKER_VERSION_ID=$WORKER_VERSION_ID" >> "$GITHUB_ENV"
   echo "VERSION_PREVIEW_URL=$VERSION_PREVIEW_URL" >> "$GITHUB_ENV"
-  echo "VERSION_PREVIEW_ORG=ci-test-org-$BRANCH" >> "$GITHUB_ENV"
+  echo "VERSION_PREVIEW_BRANCH=$BRANCH" >> "$GITHUB_ENV"
   echo "Variables exported to GitHub Actions environment"
 fi
 
@@ -68,6 +68,6 @@ echo "----------------------------------------"
 echo "Deployment information:"
 echo "WORKER_VERSION_ID=$WORKER_VERSION_ID"
 echo "VERSION_PREVIEW_URL=$VERSION_PREVIEW_URL"
-echo "VERSION_PREVIEW_ORG=ci-test-org-$BRANCH"
+echo "VERSION_PREVIEW_BRANCH=$BRANCH"
 echo "----------------------------------------"
 
