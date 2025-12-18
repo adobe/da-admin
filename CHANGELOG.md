@@ -1,3 +1,10 @@
+## [1.0.5](https://github.com/adobe/da-admin/compare/v1.0.4...v1.0.5) (2025-12-18)
+
+
+### Bug Fixes
+
+* fix prod worker name ([#227](https://github.com/adobe/da-admin/issues/227)) ([73b05c7](https://github.com/adobe/da-admin/commit/73b05c72aace78c99b8a3f54ea517172fa3120f0))
+
 ## [1.0.4](https://github.com/adobe/da-admin/compare/v1.0.3...v1.0.4) (2025-12-18)
 
 
