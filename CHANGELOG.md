@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/adobe/da-admin/compare/v1.0.3...v1.0.4) (2025-12-18)
+
+
+### Bug Fixes
+
+* GH-221 - Disable anonymous access ([#225](https://github.com/adobe/da-admin/issues/225)) ([df98f3e](https://github.com/adobe/da-admin/commit/df98f3eca7b51ae05db7106a01b7f77f25f3c6c8)), closes [#221](https://github.com/adobe/da-admin/issues/221) [#221](https://github.com/adobe/da-admin/issues/221) [#221](https://github.com/adobe/da-admin/issues/221)
+
 ## [1.0.3](https://github.com/adobe/da-admin/compare/v1.0.2...v1.0.3) (2025-12-17)
 
 
