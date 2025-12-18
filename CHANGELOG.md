@@ -1,3 +1,24 @@
+## [1.0.5](https://github.com/adobe/da-admin/compare/v1.0.4...v1.0.5) (2025-12-18)
+
+
+### Bug Fixes
+
+* fix prod worker name ([#227](https://github.com/adobe/da-admin/issues/227)) ([73b05c7](https://github.com/adobe/da-admin/commit/73b05c72aace78c99b8a3f54ea517172fa3120f0))
+
+## [1.0.4](https://github.com/adobe/da-admin/compare/v1.0.3...v1.0.4) (2025-12-18)
+
+
+### Bug Fixes
+
+* GH-221 - Disable anonymous access ([#225](https://github.com/adobe/da-admin/issues/225)) ([df98f3e](https://github.com/adobe/da-admin/commit/df98f3eca7b51ae05db7106a01b7f77f25f3c6c8)), closes [#221](https://github.com/adobe/da-admin/issues/221) [#221](https://github.com/adobe/da-admin/issues/221) [#221](https://github.com/adobe/da-admin/issues/221)
+
+## [1.0.3](https://github.com/adobe/da-admin/compare/v1.0.2...v1.0.3) (2025-12-17)
+
+
+### Bug Fixes
+
+* stalled response ([#226](https://github.com/adobe/da-admin/issues/226)) ([d32fa3e](https://github.com/adobe/da-admin/commit/d32fa3eb470c8fbdbca61e9b9ba7961956ab9bbf))
+
 ## [1.0.2](https://github.com/adobe/da-admin/compare/v1.0.1...v1.0.2) (2025-12-15)
 
 

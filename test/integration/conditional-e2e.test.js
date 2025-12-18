@@ -110,7 +110,7 @@ describe('Conditional Headers End-to-End', () => {
     const env = {
       AEM_BUCKET_NAME: 'test-bucket',
       dacollab: {
-        fetch: async () => ({ status: 200 }),
+        fetch: async () => ({ status: 200, body: { cancel: () => {} } }),
       },
     };
     const resp = await handler.default.fetch(req, env);

@@ -6,6 +6,7 @@ keep_vars = true
 # ----------------------------------------------------------------------
 # production environment
 [env.production]
+name = "da-admin"
 services = [
   { binding = "dacollab", service = "da-collab" }
 ]
@@ -29,6 +30,7 @@ AEM_BUCKET_NAME = "aem-content"
 # ----------------------------------------------------------------------
 # stage environment
 [env.stage]
+name = "da-admin-stage"
 services = [
   { binding = "dacollab", service = "da-collab-stage" }
 ]
@@ -52,6 +54,7 @@ AEM_BUCKET_NAME = "aem-content-stage"
 # ----------------------------------------------------------------------
 # ci environment (using stage content)
 [env.ci]
+name = "da-admin-ci"
 services = [
   { binding = "dacollab", service = "da-collab-stage" }
 ]
@@ -76,6 +79,7 @@ AEM_BUCKET_NAME = "aem-content-stage"
 # ----------------------------------------------------------------------
 # dev environment (local)
 [env.dev]
+name = "da-admin-dev"
 services = [
   { binding = "dacollab", service = "da-collab-local" }
 ]
@@ -99,6 +103,7 @@ AEM_BUCKET_NAME = "aem-content-dev"
 # ----------------------------------------------------------------------
 # integration test environment (local)
 [env.it]
+name = "da-admin-it"
 services = [
   { binding = "dacollab", service = "da-collab-local" }
 ]
