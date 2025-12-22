@@ -59,11 +59,13 @@ To debug CI failures or test against a deployed worker from your local machine:
     This script will generate the `.deployment-env` file in your root directory.
 
 2.  **Configure Credentials**:
-    Create a `.env` file (or set environment variables) with the required IMS credentials for the test account:
+    Create a `.env` file (or set environment variables) with the required IMS credentials for the test accounts:
     ```env
     IT_IMS_STAGE_ENDPOINT=https://ims-na1.adobelogin.com
-    IT_IMS_STAGE_CLIENT_ID=<client-id>
-    IT_IMS_STAGE_CLIENT_SECRET=<client-secret>
+    IT_IMS_STAGE_CLIENT_ID_SUPER_USER=<client-id-super-user>
+    IT_IMS_STAGE_CLIENT_SECRET_SUPER_USER=<client-secret-super-user>
+    IT_IMS_STAGE_CLIENT_ID_LIMITED_USER=<client-id-limited-user>
+    IT_IMS_STAGE_CLIENT_SECRET_LIMITED_USER=<client-secret-limited-user>
     IT_IMS_STAGE_SCOPES=openid,AdobeID,aem.frontend.all,read_organizations,additional_info.projectedProductContext
     ```
 
@@ -87,12 +89,12 @@ If the configuration is lost or needs to be reset, the expected permission model
   "data": [
     {
       "path": "CONFIG",
-      "groups": "<test-user-email>",
+      "groups": "<super-user-email>",
       "actions": "write"
     },
     {
       "path": "/+**",
-      "groups": "<test-user-email>",
+      "groups": "<super-user-email>",
       "actions": "write"
     }
   ],
@@ -117,7 +119,7 @@ The integration tests use dedicated service accounts defined in the [Adobe Stage
 
 -   **Authenticated User Project**:
     -   **Purpose**: Simulates a user who is logged in but may not have specific permissions (used for negative testing or basic access).
-    -   **Credentials**: Defined in CI secrets as `IT_IMS_STAGE_CLIENT_ID` / `IT_IMS_STAGE_CLIENT_SECRET`.
+    -   **Credentials**: Defined in CI secrets as `IT_IMS_STAGE_CLIENT_ID_SUPER_USER` / `IT_IMS_STAGE_CLIENT_SECRET_SUPER_USER`.
     -   **API**: Uses `Edge Delivery Service` to create OAuth Server-to-Server credentials.
 
 -   **Authorized User Project**:

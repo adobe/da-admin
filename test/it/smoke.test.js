@@ -33,8 +33,10 @@ const IMS_LOCAL_KID = 'ims';
 
 const IMS_STAGE = {
   ENDPOINT: process.env.IT_IMS_STAGE_ENDPOINT,
-  CLIENT_ID: process.env.IT_IMS_STAGE_CLIENT_ID,
-  CLIENT_SECRET: process.env.IT_IMS_STAGE_CLIENT_SECRET,
+  CLIENT_ID_SUPER_USER: process.env.IT_IMS_STAGE_CLIENT_ID_SUPER_USER,
+  CLIENT_SECRET_SUPER_USER: process.env.IT_IMS_STAGE_CLIENT_SECRET_SUPER_USER,
+  CLIENT_ID_LIMITED_USER: process.env.IT_IMS_STAGE_CLIENT_ID_LIMITED_USER,
+  CLIENT_SECRET_LIMITED_USER: process.env.IT_IMS_STAGE_CLIENT_SECRET_LIMITED_USER,
   SCOPES: process.env.IT_IMS_STAGE_SCOPES,
 };
 
@@ -63,11 +65,22 @@ describe('Integration Tests: smoke tests', function () {
     }
   };
 
-  const connectToIMSStage = async () => {
+  const getIMSProfile = async (accessToken) => {
+    const res = await fetch(`${IMS_STAGE.ENDPOINT}/ims/profile/v1`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return json;
+    }
+    throw new Error(`Failed to fetch IMS profile: ${res.status}`);
+  };
+
+  const connectToIMS = async (clientId, clientSecret) => {
     const postData = {
       grant_type: 'client_credentials',
-      client_id: IMS_STAGE.CLIENT_ID,
-      client_secret: IMS_STAGE.CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       scope: IMS_STAGE.SCOPES,
     };
 
@@ -88,40 +101,51 @@ describe('Integration Tests: smoke tests', function () {
 
     if (res.ok) {
       const json = await res.json();
-      return json.access_token;
+      const profile = await getIMSProfile(json.access_token);
+      return {
+        accessToken: json.access_token,
+        email: profile.email,
+        userId: profile.userId,
+      };
     }
     throw new Error(`error response from IMS with status: ${res.status} and body: ${await res.text()}`);
   };
 
-  const getIMSProfile = async (accessToken) => {
-    const res = await fetch(`${IMS_STAGE.ENDPOINT}/ims/profile/v1`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (res.ok) {
-      const json = await res.json();
-      return json.email;
-    }
-    throw new Error(`Failed to fetch IMS profile: ${res.status}`);
-  };
+  /* eslint-disable max-len */
+  const connectAsSuperUser = async () => connectToIMS(IMS_STAGE.CLIENT_ID_SUPER_USER, IMS_STAGE.CLIENT_SECRET_SUPER_USER);
 
-  const getIMSLocalToken = async () => {
-    const { publicKey, privateKey } = await generateKeyPair('RS256');
+  /* eslint-disable max-len */
+  const connectAsLimitedUser = async () => connectToIMS(IMS_STAGE.CLIENT_ID_LIMITED_USER, IMS_STAGE.CLIENT_SECRET_LIMITED_USER);
+
+  const localTokenCache = {};
+  let IMSPrivateKey;
+
+  const setupIMSLocalKey = async () => {
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    IMSPrivateKey = privateKey;
     publicKeyJwk = await exportJWK(publicKey);
     publicKeyJwk.use = 'sig';
     publicKeyJwk.kid = IMS_LOCAL_KID;
     publicKeyJwk.alg = 'RS256';
+  };
 
+  const getIMSLocalToken = async (userId) => {
+    const email = `${userId}@example.com`;
     const accessToken = await new SignJWT({
-      // as: 'ims-na1-stg1',
       type: 'access_token',
-      user_id: 'test_user',
+      user_id: email,
       created_at: String(Date.now() - 1000),
       expires_in: '86400000',
     })
       .setProtectedHeader({ alg: 'RS256', kid: IMS_LOCAL_KID })
-      .sign(privateKey);
+      .sign(IMSPrivateKey);
 
-    return accessToken;
+    localTokenCache[accessToken] = {
+      accessToken,
+      email,
+      userId: email,
+    };
+    return localTokenCache[accessToken];
   };
 
   const setupIMSServer = async () => {
@@ -141,10 +165,16 @@ describe('Integration Tests: smoke tests', function () {
         res.writeHead(200);
         res.end(JSON.stringify({ keys: [publicKeyJwk] }));
       } else if (req.url === '/ims/profile/v1') {
+        const cachedToken = localTokenCache[req.headers.authorization.split(' ').pop()];
+        if (!cachedToken) {
+          res.writeHead(401);
+          res.end(JSON.stringify({ error: 'Unauthorized' }));
+          return;
+        }
         res.writeHead(200);
         res.end(JSON.stringify({
-          email: 'test@example.com',
-          userId: 'test_user',
+          email: cachedToken.email,
+          userId: cachedToken.userId,
         }));
       } else if (req.url === '/ims/organizations/v5') {
         res.writeHead(200);
@@ -208,25 +238,28 @@ describe('Integration Tests: smoke tests', function () {
     this.timeout(30000);
 
     if (process.env.WORKER_PREVIEW_URL) {
-      if (!IMS_STAGE.ENDPOINT || !IMS_STAGE.CLIENT_ID
-        || !IMS_STAGE.CLIENT_SECRET || !IMS_STAGE.SCOPES) {
-        throw new Error('IT_IMS_STAGE_ENDPOINT, IT_IMS_STAGE_CLIENT_ID, '
-          + 'IT_IMS_STAGE_CLIENT_SECRET, and IT_IMS_STAGE_SCOPES must be set');
+      if (!IMS_STAGE.ENDPOINT
+        || !IMS_STAGE.CLIENT_ID_SUPER_USER
+        || !IMS_STAGE.CLIENT_SECRET_SUPER_USER
+        || !IMS_STAGE.CLIENT_ID_LIMITED_USER
+        || !IMS_STAGE.CLIENT_SECRET_LIMITED_USER
+        || !IMS_STAGE.SCOPES) {
+        throw new Error('IT_IMS_STAGE_ENDPOINT, IT_IMS_STAGE_CLIENT_ID_SUPER_USER, IT_IMS_STAGE_CLIENT_SECRET_SUPER_USER, IT_IMS_STAGE_CLIENT_ID_LIMITED_USER, IT_IMS_STAGE_CLIENT_SECRET_LIMITED_USER, and IT_IMS_STAGE_SCOPES must be set');
       }
-
+      context.local = false;
       context.serverUrl = process.env.WORKER_PREVIEW_URL;
       const branch = process.env.WORKER_PREVIEW_BRANCH;
       if (!branch) {
         throw new Error('WORKER_PREVIEW_BRANCH must be set');
       }
       context.repo += `-${branch.toLowerCase().replace(/[ /_]/g, '-')}`;
-      context.accessToken = await connectToIMSStage();
-      context.email = await getIMSProfile(context.accessToken);
-      context.local = false;
+      context.superUser = await connectAsSuperUser();
+      context.limitedUser = await connectAsLimitedUser();
     } else {
       context.local = true;
-      context.accessToken = await getIMSLocalToken();
-      context.email = 'test@example.com';
+      await setupIMSLocalKey();
+      context.superUser = await getIMSLocalToken('super-user-id');
+      context.limitedUser = await getIMSLocalToken('limited-user-id');
 
       cleanupWranglerState();
       await setupIMSServer();
