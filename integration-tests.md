@@ -113,7 +113,7 @@ In **Stage Mode**, tests execute against the **IMS Stage** environment.
 
 ### Test Users Setup
 
-The integration tests use dedicated service accounts defined in the [Adobe Stage Developer Console](https://developer-stage.adobe.com/) under the `Document Authoring Stage` organization. Two distinct projects were created to simulate different user roles:
+The integration tests use dedicated service accounts defined in the [Adobe Stage Developer Console](https://developer-stage.adobe.com/) (VPN required) under the `Document Authoring Stage` organization. Two distinct projects were created to simulate different user roles:
 
 -   **Authenticated User Project**:
     -   **Purpose**: Simulates a user who is logged in but may not have specific permissions (used for negative testing or basic access).
