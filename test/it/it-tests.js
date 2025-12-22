@@ -16,7 +16,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
   // Enable bail to stop on first failure - tests are interdependent
   this.bail(true);
 
-  it('should set org config', async function shouldSetOrgConfig() {
+  it('[super user] should set org config', async function shouldSetOrgConfig() {
     if (!ctx.local) {
       // in stage, the config is already set and we should not overwrite it
       // to preserve the setup and be able to access the content
@@ -47,7 +47,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
 
-    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
+    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status} - user: ${superUser.email}`);
   });
 
   it('[super user] should get org config', async () => {
@@ -59,7 +59,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
 
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
 
     const body = await resp.json();
     assert.strictEqual(body.total, 2, `Expected 2, got ${body.total}`);
@@ -91,10 +91,10 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status}`);
+    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status} - user: ${limitedUser.email}`);
   });
 
-  it('[super user] delete root folder to cleanup the bucket', async () => {
+  it('[super user] should delete root folder to cleanup the bucket', async () => {
     const {
       serverUrl, org, repo, superUser,
     } = ctx;
@@ -103,15 +103,15 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status}`);
+    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status} - user: ${superUser.email}`);
 
     // validate bucket is empty
     const listResp = await fetch(`${serverUrl}/list/${org}/${repo}`, {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.strictEqual(listResp.status, 200, `Expected 200 OK, got ${listResp.status}`);
+    assert.strictEqual(listResp.status, 200, `Expected 200 OK, got ${listResp.status} - user: ${superUser.email}`);
     const listBody = await listResp.json();
-    assert.strictEqual(listBody.length, 0, `Expected 0 items, got ${listBody.length}`);
+    assert.strictEqual(listBody.length, 0, `Expected 0 items, got ${listBody.length} - user: ${superUser.email}`);
   });
 
   it('[super user] should create a repo', async () => {
@@ -123,7 +123,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       method: 'PUT',
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201 for marker, got ${resp.status}`);
+    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201 for marker, got ${resp.status} - user: ${superUser.email}`);
   });
 
   it('[anonymous] not allowed to read', async () => {
@@ -146,7 +146,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       method: 'GET',
       headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status}`);
+    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status} - user: ${limitedUser.email}`);
   });
 
   it('[anonymous] cannot list repos', async () => {
@@ -166,7 +166,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status}`);
+    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status} - user: ${limitedUser.email}`);
   });
 
   it('[super user] should list repos', async () => {
@@ -178,13 +178,13 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
 
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
 
     const body = await resp.json();
-    assert.ok(body.length > 0, `Expected at least 1 repo, got ${body.length}`);
+    assert.ok(body.length > 0, `Expected at least 1 repo, got ${body.length} - user: ${superUser.email}`);
     // need to find the current repo in the list
     const repoItem = body.find((item) => item.name === repo);
-    assert.ok(repoItem, `Expected ${repo} to be in the list`);
+    assert.ok(repoItem, `Expected ${repo} to be in the list - user: ${superUser.email}`);
   });
 
   it('[anonymous] cannot create a page', async () => {
@@ -231,7 +231,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
     });
 
-    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status}`);
+    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status} - user: ${limitedUser.email}`);
   });
 
   it('[super user] should create pages', async () => {
@@ -255,7 +255,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
 
-    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
+    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status} - user: ${superUser.email}`);
 
     let body = await resp.json();
     assert.strictEqual(body.source.editUrl, `https://da.live/edit#/${org}/${repo}/${key}`);
@@ -268,7 +268,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
 
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
 
     body = await resp.text();
     assert.strictEqual(body, '<html><body><h1>Page 1</h1></body></html>');
@@ -285,7 +285,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       body: formData2,
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
+    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status} - user: ${superUser.email}`);
   });
 
   it('[limited user] cannot read page1', async () => {
@@ -296,7 +296,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status}`);
+    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status} - user: ${limitedUser.email}`);
   });
 
   it('[limited user] cannot read page2', async () => {
@@ -307,7 +307,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status}`);
+    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status} - user: ${limitedUser.email}`);
   });
 
   it('[super user] should update the config to allow limited user to read page2', async () => {
@@ -340,7 +340,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       body: formData,
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 201, `Expected 201 Created, got ${resp.status}`);
+    assert.strictEqual(resp.status, 201, `Expected 201 Created, got ${resp.status} - user: ${superUser.email}`);
   });
 
   it('[limited user] can now read page2', async () => {
@@ -376,7 +376,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       body: formData,
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 201, `Expected 201 Created, got ${resp.status}`);
+    assert.strictEqual(resp.status, 201, `Expected 201 Created, got ${resp.status} - user: ${superUser.email}`);
     resp = await fetch(url, {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
@@ -399,7 +399,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status}`);
+    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status} - user: ${limitedUser.email}`);
   });
 
   it('[anonymous] cannot list objects', async () => {
@@ -422,7 +422,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
 
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
 
     const body = await resp.json();
 
@@ -454,13 +454,13 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status}`);
+    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status} - user: ${superUser.email}`);
 
     // validate page is not here
     resp = await fetch(`${serverUrl}/source/${org}/${repo}/${key}${ext}`, {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 404, `Expected 404 Not Found, got ${resp.status}`);
+    assert.strictEqual(resp.status, 404, `Expected 404 Not Found, got ${resp.status} - user: ${superUser.email}`);
   });
 
   it('[super user] should do a final delete of the root folder', async () => {
@@ -472,7 +472,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
-    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status}`);
+    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status} - user: ${superUser.email}`);
   });
 
   it('[limited user] should logout', async () => {
@@ -483,7 +483,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
     });
 
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${limitedUser.email}`);
   });
 
   it('[super user] should logout', async () => {
@@ -494,6 +494,6 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       headers: { Authorization: `Bearer ${superUser.accessToken}` },
     });
 
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.userId}`);
   });
 });
