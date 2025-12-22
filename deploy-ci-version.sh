@@ -42,20 +42,20 @@ echo "$OUTPUT"
 
 # Parse the deployment information
 WORKER_VERSION_ID=$(echo "$OUTPUT" | grep "Worker Version ID:" | sed 's/.*Worker Version ID: //')
-VERSION_PREVIEW_URL=$(echo "$OUTPUT" | grep "Version Preview URL:" | sed 's/.*Version Preview URL: //')
+WORKER_PREVIEW_URL=$(echo "$OUTPUT" | grep "Version Preview URL:" | sed 's/.*Version Preview URL: //')
 
 # Write to a file that can be sourced (for local use)
 cat > .deployment-env << EOF
 export WORKER_VERSION_ID="$WORKER_VERSION_ID"
-export VERSION_PREVIEW_URL="$VERSION_PREVIEW_URL"
-export VERSION_PREVIEW_BRANCH="$BRANCH"
+export WORKER_PREVIEW_URL="$WORKER_PREVIEW_URL"
+export WORKER_PREVIEW_BRANCH="$BRANCH"
 EOF
 
 # If running in GitHub Actions, also write to GITHUB_ENV
 if [ -n "$GITHUB_ENV" ]; then
   echo "WORKER_VERSION_ID=$WORKER_VERSION_ID" >> "$GITHUB_ENV"
-  echo "VERSION_PREVIEW_URL=$VERSION_PREVIEW_URL" >> "$GITHUB_ENV"
-  echo "VERSION_PREVIEW_BRANCH=$BRANCH" >> "$GITHUB_ENV"
+  echo "WORKER_PREVIEW_URL=$WORKER_PREVIEW_URL" >> "$GITHUB_ENV"
+  echo "WORKER_PREVIEW_BRANCH=$BRANCH" >> "$GITHUB_ENV"
   echo "Variables exported to GitHub Actions environment"
 fi
 
@@ -67,7 +67,7 @@ echo "Version deployment complete!"
 echo "----------------------------------------"
 echo "Deployment information: (copy inside a .deployment-env file to run locally)"
 echo "export WORKER_VERSION_ID=$WORKER_VERSION_ID"
-echo "export VERSION_PREVIEW_URL=$VERSION_PREVIEW_URL"
-echo "export VERSION_PREVIEW_BRANCH=$BRANCH"
+echo "export WORKER_PREVIEW_URL=$WORKER_PREVIEW_URL"
+echo "export WORKER_PREVIEW_BRANCH=$BRANCH"
 echo "----------------------------------------"
 

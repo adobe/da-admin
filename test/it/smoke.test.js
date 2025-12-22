@@ -207,17 +207,17 @@ describe('Integration Tests: smoke tests', function () {
     // Increase timeout for server startup
     this.timeout(30000);
 
-    if (process.env.VERSION_PREVIEW_URL) {
+    if (process.env.WORKER_PREVIEW_URL) {
       if (!IMS_STAGE.ENDPOINT || !IMS_STAGE.CLIENT_ID
         || !IMS_STAGE.CLIENT_SECRET || !IMS_STAGE.SCOPES) {
         throw new Error('IT_IMS_STAGE_ENDPOINT, IT_IMS_STAGE_CLIENT_ID, '
           + 'IT_IMS_STAGE_CLIENT_SECRET, and IT_IMS_STAGE_SCOPES must be set');
       }
 
-      context.serverUrl = process.env.VERSION_PREVIEW_URL;
-      const branch = process.env.VERSION_PREVIEW_BRANCH;
+      context.serverUrl = process.env.WORKER_PREVIEW_URL;
+      const branch = process.env.WORKER_PREVIEW_BRANCH;
       if (!branch) {
-        throw new Error('VERSION_PREVIEW_BRANCH must be set');
+        throw new Error('WORKER_PREVIEW_BRANCH must be set');
       }
       context.repo += `-${branch.toLowerCase().replace(/[ /_]/g, '-')}`;
       context.accessToken = await connectToIMSStage();
@@ -238,7 +238,7 @@ describe('Integration Tests: smoke tests', function () {
   });
 
   after(async function () {
-    if (process.env.VERSION_PREVIEW_URL) {
+    if (process.env.WORKER_PREVIEW_URL) {
       return;
     }
 
