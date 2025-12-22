@@ -33,6 +33,8 @@ npm run test:it
 
 In **Stage Mode**, tests execute against a live worker deployed to Cloudflare. This verifies the actual deployment artifacts and Cloudflare environment behavior.
 
+The tests create a repository `test-repo-<branchname>` under the `da-admin-ci-it-org` located in the `aem-content-stage` bucket. The config is predefined for this org and defines permissions for the test users (see below).
+
 #### CI/CD Pipeline Flow
 
 The GitHub Actions workflow executes these tests in two phases:
