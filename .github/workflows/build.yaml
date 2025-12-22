@@ -65,8 +65,10 @@ jobs:
         run: npm run test:postdeploy
         env:
           IT_IMS_STAGE_ENDPOINT: ${{ secrets.IT_IMS_STAGE_ENDPOINT }}
-          IT_IMS_STAGE_CLIENT_ID: ${{ secrets.IT_IMS_STAGE_CLIENT_ID }}
-          IT_IMS_STAGE_CLIENT_SECRET: ${{ secrets.IT_IMS_STAGE_CLIENT_SECRET }}
+          IT_IMS_STAGE_CLIENT_ID_LIMITED_USER: ${{ secrets.IT_IMS_STAGE_CLIENT_ID_LIMITED_USER }}
+          IT_IMS_STAGE_CLIENT_SECRET_LIMITED_USER: ${{ secrets.IT_IMS_STAGE_CLIENT_SECRET_LIMITED_USER }}
+          IT_IMS_STAGE_CLIENT_ID_SUPER_USER: ${{ secrets.IT_IMS_STAGE_CLIENT_ID_SUPER_USER }}
+          IT_IMS_STAGE_CLIENT_SECRET_SUPER_USER: ${{ secrets.IT_IMS_STAGE_CLIENT_SECRET_SUPER_USER }}
           IT_IMS_STAGE_SCOPES: ${{ secrets.IT_IMS_STAGE_SCOPES }}
       - name: Semantic Release (Dry Run)
         run: npm run semantic-release-dry
