@@ -62,6 +62,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
 
     const body = await resp.json();
+    // check initial config is clean
     assert.strictEqual(body.total, 2, `Expected 2, got ${body.total}`);
     assert.strictEqual(body.data[0].path, 'CONFIG', `Expected CONFIG, got ${body.data[0].path}`);
     assert.strictEqual(body.data[0].groups, superUser.email, `Expected user email, got ${body.data[0].groups}`);
@@ -69,6 +70,8 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(body.data[1].path, '/+**', `Expected /+**, got ${body.data[1].path}`);
     assert.strictEqual(body.data[1].groups, superUser.email, `Expected user email, got ${body.data[1].groups}`);
     assert.strictEqual(body.data[1].actions, 'write', `Expected write, got ${body.data[1].actions}`);
+    assert.strictEqual(body[':type'], 'sheet', `Expected sheet, got ${body[':type']}`);
+    assert.strictEqual(body[':sheetname'], 'permissions', `Expected permissions, got ${body[':sheetname']}`);
   });
 
   it('[anonymous] cannot delete root folder', async () => {
@@ -334,6 +337,8 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       limit: newConfigData.length,
       offset: 0,
       data: newConfigData,
+      ':type': 'sheet',
+      ':sheetname': 'permissions',
     }));
     resp = await fetch(url, {
       method: 'POST',
@@ -354,6 +359,17 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
   });
 
+  it('[limited user] still cannot read page1', async () => {
+    const {
+      serverUrl, org, repo, limitedUser,
+    } = ctx;
+    const url = `${serverUrl}/source/${org}/${repo}/test-folder/page1.html`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${limitedUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 403, `Expected 403 Unauthorized, got ${resp.status} - user: ${limitedUser.email}`);
+  });
+
   it('[super user] should remove added entries to clean up the config', async () => {
     const {
       serverUrl, org, repo, superUser,
@@ -370,6 +386,8 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       limit: newConfigData.length,
       offset: 0,
       data: newConfigData,
+      ':type': 'sheet',
+      ':sheetname': 'permissions',
     }));
     resp = await fetch(url, {
       method: 'POST',
@@ -388,10 +406,11 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(body.data[1].path, '/+**', `Expected /+**, got ${body.data[1].path}`);
     assert.strictEqual(body.data[1].groups, superUser.email, `Expected user email, got ${body.data[1].groups}`);
     assert.strictEqual(body.data[1].actions, 'write', `Expected write, got ${body.data[1].actions}`);
+    assert.strictEqual(body[':type'], 'sheet', `Expected sheet, got ${body[':type']}`);
+    assert.strictEqual(body[':sheetname'], 'permissions', `Expected permissions, got ${body[':sheetname']}`);
   });
 
-  // TODO: currently the auth session is stored in memory, so the limited user can still read page2
-  it.skip('[limited user] cannot read page2 anymore', async () => {
+  it('[limited user] cannot read page2 anymore', async () => {
     const {
       serverUrl, org, repo, limitedUser,
     } = ctx;
