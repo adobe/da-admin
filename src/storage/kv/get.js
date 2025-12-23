@@ -12,6 +12,8 @@
 
 export default async function getKv(env, daCtx) {
   const body = await env.DA_CONFIG.get(daCtx.fullKey);
+  const object = body ? JSON.parse(body) : null;
+  console.log('read config via getKv', daCtx.fullKey, object?.permissions?.data);
   if (body) return { body, status: 200 };
   return { body: JSON.stringify({ error: 'not found' }), status: 404 };
 }

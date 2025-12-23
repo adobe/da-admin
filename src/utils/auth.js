@@ -226,6 +226,8 @@ export async function getAclCtx(env, org, users, key, api) {
 
   const props = await env.DA_CONFIG?.get(org, { type: 'json' });
 
+  console.log('read config via getAclCtx', org, props?.permissions?.data);
+
   if (props && props[':type'] === 'sheet' && props[':sheetname'] === 'permissions') {
     // It's a single-sheet, move the data to the right place
     props.permissions = { data: props.data };

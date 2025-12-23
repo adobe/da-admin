@@ -124,3 +124,10 @@ VERSION="0.0.0-it"
 DA_COLLAB = "http://localhost:4711"
 AEM_BUCKET_NAME = "aem-content-local"
 
+[observability]
+[observability.logs]
+enabled = false
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
