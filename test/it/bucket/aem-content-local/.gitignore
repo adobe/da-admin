@@ -1,0 +1,6 @@
+# Ignore all S3rver generated files during integration tests
+*
+# But keep this directory in git
+!.gitkeep
+!.gitignore
+

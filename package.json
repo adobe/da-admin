@@ -15,9 +15,9 @@
     "test": "c8 mocha --spec=test/**/*.test.js --ignore=test/it/**/*.test.js",
     "test:it": "mocha test/it/**/*.test.js",
     "test:all": "npm run test && npm run test:it",
-    "test:postdeploy": "echo 'todo'",
+    "test:postdeploy": "if [ -f .deployment-env ]; then . ./.deployment-env; fi && npm run test:it",
     "dev": "wrangler dev -e dev",
-    "deploy:ci": "node prepare-deploy.js && wrangler deploy -e ci  -c wrangler-versioned.toml",
+    "deploy:ci": "./deploy-ci-version.sh ci",
     "deploy:prod": "node prepare-deploy.js && wrangler deploy -e production -c wrangler-versioned.toml",
     "deploy:stage": "node prepare-deploy.js && wrangler deploy -e stage -c wrangler-versioned.toml",
     "start": "wrangler dev",
@@ -34,6 +34,7 @@
     "@semantic-release/git": "10.0.1",
     "aws-sdk-client-mock": "4.0.0",
     "c8": "10.0.0",
+    "dotenv": "17.2.3",
     "eslint": "9.4.0",
     "esmock": "2.7.3",
     "husky": "9.1.7",
@@ -44,7 +45,7 @@
     "semantic-release-slack-bot": "4.0.2",
     "sinon": "21.0.0",
     "tree-kill": "1.2.2",
-    "wrangler": "4.10.0"
+    "wrangler": "4.53.0"
   },
   "lint-staged": {
     "*.js": "eslint",
@@ -54,7 +55,7 @@
     "@adobe/helix-shared-process-queue": "3.1.3",
     "@aws-sdk/client-s3": "3.726.1",
     "@aws-sdk/s3-request-presigner": "^3.468.0",
-    "@cloudflare/workers-types": "4.20251126.0",
+    "@cloudflare/workers-types": "4.20251205.0",
     "@ssttevee/cfw-formdata-polyfill": "0.2.1",
     "jose": "6.0.10"
   }

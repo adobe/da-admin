@@ -10,60 +10,145 @@
  * governing permissions and limitations under the License.
  */
 /* eslint-disable prefer-arrow-callback, func-names */
-import assert from 'node:assert';
-import S3rver from 's3rver';
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import kill from 'tree-kill';
+import config from 'dotenv';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { createServer } from 'http';
+import S3rver from 's3rver';
+
+import itTests from './it-tests.js';
+
+config.config();
 
 const S3_PORT = 4569;
 const SERVER_PORT = 8788;
-const IMS_PORT = 9999;
-const SERVER_URL = `http://localhost:${SERVER_PORT}`;
+
+const LOCAL_SERVER_URL = `http://localhost:${SERVER_PORT}`;
+
+const IMS_LOCAL_PORT = 9999;
+const IMS_LOCAL_KID = 'ims';
+
+const IMS_STAGE = {
+  ENDPOINT: process.env.IT_IMS_STAGE_ENDPOINT,
+  CLIENT_ID_SUPER_USER: process.env.IT_IMS_STAGE_CLIENT_ID_SUPER_USER,
+  CLIENT_SECRET_SUPER_USER: process.env.IT_IMS_STAGE_CLIENT_SECRET_SUPER_USER,
+  CLIENT_ID_LIMITED_USER: process.env.IT_IMS_STAGE_CLIENT_ID_LIMITED_USER,
+  CLIENT_SECRET_LIMITED_USER: process.env.IT_IMS_STAGE_CLIENT_SECRET_LIMITED_USER,
+  SCOPES: process.env.IT_IMS_STAGE_SCOPES,
+};
+
 const S3_DIR = './test/it/bucket';
 
-const ORG = 'test-org';
-const REPO = 'test-repo';
+const IT_ORG = 'da-admin-ci-it-org';
+const IT_DEFAULT_REPO = 'test-repo';
 
 describe('Integration Tests: smoke tests', function () {
   let s3rver;
   let devServer;
   let imsServer;
-  let accessToken;
   let publicKeyJwk;
 
-  before(async function () {
-    // Increase timeout for server startup
-    this.timeout(30000);
+  const context = {
+    serverUrl: LOCAL_SERVER_URL,
+    org: IT_ORG,
+    repo: IT_DEFAULT_REPO,
+    accessToken: '',
+  };
 
-    // Clear wrangler state to start fresh - needed only for local testing
-    const fs = await import('fs');
+  const cleanupWranglerState = () => {
     const wranglerState = path.join(process.cwd(), '.wrangler/state');
     if (fs.existsSync(wranglerState)) {
       fs.rmSync(wranglerState, { recursive: true });
     }
+  };
 
-    // Generate JWT token for authentication
-    const kid = 'test-key-id';
-    const { publicKey, privateKey } = await generateKeyPair('RS256');
+  const getIMSProfile = async (accessToken) => {
+    const res = await fetch(`${IMS_STAGE.ENDPOINT}/ims/profile/v1`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return json;
+    }
+    throw new Error(`Failed to fetch IMS profile: ${res.status}`);
+  };
+
+  const connectToIMS = async (clientId, clientSecret) => {
+    const postData = {
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+      scope: IMS_STAGE.SCOPES,
+    };
+
+    const form = new FormData();
+    Object.entries(postData).forEach(([k, v]) => {
+      form.append(k, v);
+    });
+
+    let res;
+    try {
+      res = await fetch(`${IMS_STAGE.ENDPOINT}/ims/token/v3`, {
+        method: 'POST',
+        body: form,
+      });
+    } catch (e) {
+      throw new Error(`cannot send request to IMS: ${e.message}`);
+    }
+
+    if (res.ok) {
+      const json = await res.json();
+      const profile = await getIMSProfile(json.access_token);
+      return {
+        accessToken: json.access_token,
+        email: profile.email,
+        userId: profile.userId,
+      };
+    }
+    throw new Error(`error response from IMS with status: ${res.status} and body: ${await res.text()}`);
+  };
+
+  /* eslint-disable max-len */
+  const connectAsSuperUser = async () => connectToIMS(IMS_STAGE.CLIENT_ID_SUPER_USER, IMS_STAGE.CLIENT_SECRET_SUPER_USER);
+
+  /* eslint-disable max-len */
+  const connectAsLimitedUser = async () => connectToIMS(IMS_STAGE.CLIENT_ID_LIMITED_USER, IMS_STAGE.CLIENT_SECRET_LIMITED_USER);
+
+  const localTokenCache = {};
+  let IMSPrivateKey;
+
+  const setupIMSLocalKey = async () => {
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    IMSPrivateKey = privateKey;
     publicKeyJwk = await exportJWK(publicKey);
     publicKeyJwk.use = 'sig';
-    publicKeyJwk.kid = kid;
+    publicKeyJwk.kid = IMS_LOCAL_KID;
     publicKeyJwk.alg = 'RS256';
+  };
 
-    // Create JWT with timestamps in milliseconds (as IMS does)
-    const now = Date.now();
-    accessToken = await new SignJWT({
-      user_id: 'test_user',
+  const getIMSLocalToken = async (userId) => {
+    const email = `${userId}@example.com`;
+    const accessToken = await new SignJWT({
       type: 'access_token',
-      created_at: now, // milliseconds since epoch
-      expires_in: 3600000, // milliseconds (1 hour)
+      user_id: email,
+      created_at: String(Date.now() - 1000),
+      expires_in: '86400000',
     })
-      .setProtectedHeader({ alg: 'RS256', kid })
-      .sign(privateKey);
+      .setProtectedHeader({ alg: 'RS256', kid: IMS_LOCAL_KID })
+      .sign(IMSPrivateKey);
 
+    localTokenCache[accessToken] = {
+      accessToken,
+      email,
+      userId: email,
+    };
+    return localTokenCache[accessToken];
+  };
+
+  const setupIMSServer = async () => {
     // Start mock IMS server
     imsServer = createServer((req, res) => {
       res.setHeader('Content-Type', 'application/json');
@@ -80,10 +165,16 @@ describe('Integration Tests: smoke tests', function () {
         res.writeHead(200);
         res.end(JSON.stringify({ keys: [publicKeyJwk] }));
       } else if (req.url === '/ims/profile/v1') {
+        const cachedToken = localTokenCache[req.headers.authorization.split(' ').pop()];
+        if (!cachedToken) {
+          res.writeHead(401);
+          res.end(JSON.stringify({ error: 'Unauthorized' }));
+          return;
+        }
         res.writeHead(200);
         res.end(JSON.stringify({
-          email: 'test@example.com',
-          userId: 'test_user',
+          email: cachedToken.email,
+          userId: cachedToken.userId,
         }));
       } else if (req.url === '/ims/organizations/v5') {
         res.writeHead(200);
@@ -96,9 +187,11 @@ describe('Integration Tests: smoke tests', function () {
     });
 
     await new Promise((resolve) => {
-      imsServer.listen(IMS_PORT, '127.0.0.1', resolve);
+      imsServer.listen(IMS_LOCAL_PORT, '127.0.0.1', resolve);
     });
+  };
 
+  const setupS3rver = async () => {
     s3rver = new S3rver({
       port: S3_PORT,
       address: '127.0.0.1',
@@ -106,12 +199,14 @@ describe('Integration Tests: smoke tests', function () {
       silent: true,
     });
     await s3rver.run();
+  };
 
+  const setupDevServer = async () => {
     devServer = spawn('npx', [
       'wrangler', 'dev',
       '--port', SERVER_PORT.toString(),
       '--env', 'it',
-      '--log-level', 'debug',
+      // '--log-level', 'debug',
     ], {
       stdio: 'pipe', // Capture output for debugging
       detached: false, // Keep in same process group for easier cleanup
@@ -123,7 +218,7 @@ describe('Integration Tests: smoke tests', function () {
       devServer.stdout.on('data', (data) => {
         const str = data.toString();
         // Always log wrangler output including errors
-        console.log('[Wrangler]', str.trim());
+        // console.log('[Wrangler]', str.trim());
         if (str.includes('Ready on http://localhost') && !started) {
           started = true;
           resolve();
@@ -136,9 +231,50 @@ describe('Integration Tests: smoke tests', function () {
 
       devServer.on('error', reject);
     });
+  };
+
+  before(async function () {
+    // Increase timeout for server startup
+    this.timeout(30000);
+
+    if (process.env.WORKER_PREVIEW_URL) {
+      if (!IMS_STAGE.ENDPOINT
+        || !IMS_STAGE.CLIENT_ID_SUPER_USER
+        || !IMS_STAGE.CLIENT_SECRET_SUPER_USER
+        || !IMS_STAGE.CLIENT_ID_LIMITED_USER
+        || !IMS_STAGE.CLIENT_SECRET_LIMITED_USER
+        || !IMS_STAGE.SCOPES) {
+        throw new Error('IT_IMS_STAGE_ENDPOINT, IT_IMS_STAGE_CLIENT_ID_SUPER_USER, IT_IMS_STAGE_CLIENT_SECRET_SUPER_USER, IT_IMS_STAGE_CLIENT_ID_LIMITED_USER, IT_IMS_STAGE_CLIENT_SECRET_LIMITED_USER, and IT_IMS_STAGE_SCOPES must be set');
+      }
+      context.local = false;
+      context.serverUrl = process.env.WORKER_PREVIEW_URL;
+      const branch = process.env.WORKER_PREVIEW_BRANCH;
+      if (!branch) {
+        throw new Error('WORKER_PREVIEW_BRANCH must be set');
+      }
+      context.repo += `-${branch.toLowerCase().replace(/[ /_]/g, '-')}`;
+      context.superUser = await connectAsSuperUser();
+      context.limitedUser = await connectAsLimitedUser();
+    } else {
+      context.local = true;
+      await setupIMSLocalKey();
+      context.superUser = await getIMSLocalToken('super-user-id');
+      context.limitedUser = await getIMSLocalToken('limited-user-id');
+
+      cleanupWranglerState();
+      await setupIMSServer();
+      await setupS3rver();
+      await setupDevServer();
+    }
+
+    console.log('Running tests with context:', context);
   });
 
   after(async function () {
+    if (process.env.WORKER_PREVIEW_URL) {
+      return;
+    }
+
     this.timeout(10000);
     // Cleanup - forcefully kill processes
     if (devServer && devServer.pid) {
@@ -172,149 +308,5 @@ describe('Integration Tests: smoke tests', function () {
     }
   });
 
-  it('should get a object via HTTP request', async () => {
-    const pathname = 'test-folder/page1.html';
-
-    const url = `${SERVER_URL}/source/${ORG}/${REPO}/${pathname}`;
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    if (resp.status !== 200) {
-      const errorText = await resp.text();
-      console.error('Error response:', errorText);
-    }
-
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
-
-    const body = await resp.text();
-    assert.strictEqual(body, '<html><body><h1>Page 1</h1></body></html>');
-  });
-
-  it('should list objects via HTTP request', async () => {
-    const key = 'test-folder';
-
-    const url = `${SERVER_URL}/list/${ORG}/${REPO}/${key}`;
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
-
-    const body = await resp.json();
-
-    const fileNames = body.map((item) => item.name);
-    assert.ok(fileNames.includes('page1'), 'Should list page1');
-    assert.ok(fileNames.includes('page2'), 'Should list page2');
-  });
-
-  it('should post an object via HTTP request', async () => {
-    const key = 'test-folder/page3';
-    const ext = '.html';
-
-    // Create FormData with the HTML file
-    const formData = new FormData();
-    const htmlBlob = new Blob(['<html><body><h1>Page 3</h1></body></html>'], { type: 'text/html' });
-    const htmlFile = new File([htmlBlob], 'page3.html', { type: 'text/html' });
-    formData.append('data', htmlFile);
-
-    const url = `${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`;
-    let resp = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-      body: formData,
-    });
-
-    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
-
-    let body = await resp.json();
-    assert.strictEqual(body.source.editUrl, `https://da.live/edit#/${ORG}/${REPO}/${key}`);
-    assert.strictEqual(body.source.contentUrl, `https://content.da.live/${ORG}/${REPO}/${key}`);
-    assert.strictEqual(body.aem.previewUrl, `https://main--${REPO}--${ORG}.aem.page/${key}`);
-    assert.strictEqual(body.aem.liveUrl, `https://main--${REPO}--${ORG}.aem.live/${key}`);
-
-    // validate page is here (include extension in GET request)
-    resp = await fetch(`${SERVER_URL}/source/${ORG}/${REPO}/${key}${ext}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
-
-    body = await resp.text();
-    assert.strictEqual(body, '<html><body><h1>Page 3</h1></body></html>');
-  });
-
-  it('should logout via HTTP request', async () => {
-    const url = `${SERVER_URL}/logout`;
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
-  });
-
-  it('should list repos via HTTP request', async () => {
-    const url = `${SERVER_URL}/list/${ORG}`;
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
-
-    const body = await resp.json();
-    assert.strictEqual(body.length, 1, `Expected 1 repo, got ${body.length}`);
-    assert.strictEqual(body[0].name, REPO, `Expected ${REPO}, got ${body[0].name}`);
-  });
-
-  it('should deal with no config found via HTTP request', async () => {
-    const url = `${SERVER_URL}/config/${ORG}`;
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    assert.strictEqual(resp.status, 404, `Expected 404, got ${resp.status}`);
-  });
-
-  it('should post and get org config via HTTP request', async () => {
-    // First POST the config - must include CONFIG write permission
-    const configData = JSON.stringify({
-      total: 2,
-      limit: 2,
-      offset: 0,
-      data: [
-        { path: 'CONFIG', actions: 'write', groups: 'test@example.com' },
-        { key: 'admin.role.all', value: 'test-value' },
-      ],
-      ':type': 'sheet',
-      ':sheetname': 'permissions',
-    });
-
-    const formData = new FormData();
-    formData.append('config', configData);
-
-    let url = `${SERVER_URL}/config/${ORG}`;
-    let resp = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-      body: formData,
-    });
-
-    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status}`);
-
-    // Now GET the config
-    url = `${SERVER_URL}/config/${ORG}`;
-    resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status}`);
-
-    const body = await resp.json();
-    assert.strictEqual(body.total, 2, `Expected 2, got ${body.total}`);
-    assert.strictEqual(body.data[0].path, 'CONFIG', `Expected CONFIG, got ${body.data[0].path}`);
-    assert.strictEqual(body.data[0].actions, 'write', `Expected write, got ${body.data[0].actions}`);
-    assert.strictEqual(body.data[1].key, 'admin.role.all', `Expected admin.role.all, got ${body.data[1].key}`);
-    assert.strictEqual(body.data[1].value, 'test-value', `Expected test-value, got ${body.data[1].value}`);
-  });
+  itTests(context);
 });
