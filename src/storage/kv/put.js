@@ -39,8 +39,12 @@ async function save(env, key, string) {
     await env.DA_CONFIG.put(key, string);
     // Validate the content is there
     body = await env.DA_CONFIG.get(key);
-    const object = body ? JSON.parse(body) : null;
-    console.log('read config via save', key, object?.permissions?.data);
+    try {
+      const object = body ? JSON.parse(body) : null;
+      console.log('read config via save', key, object?.permissions?.data);
+    } catch (e) {
+      // ignore
+    }
     status = 201;
   } catch {
     body = JSON.stringify({ error: 'Couldn\'t parse or save config.' });
