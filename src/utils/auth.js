@@ -234,6 +234,7 @@ export async function getAclCtx(env, org, users, key, api) {
   }
 
   if (!props?.permissions?.data) {
+    console.log('no permissions data', pathLookup);
     return {
       pathLookup,
       actionSet: new Set(['read', 'write']),
@@ -313,6 +314,11 @@ export async function getAclCtx(env, org, users, key, api) {
   //   actionSet.add('read');
   //   actionTrace = pathActions.actionTrace;
   // }
+
+  console.log('getAclCtx', org, users);
+  console.log('actionSet', actionSet);
+  console.log('actionTrace', actionTrace);
+  console.log('pathLookup', pathLookup);
 
   return { pathLookup, actionSet, actionTrace };
 }
