@@ -226,12 +226,15 @@ export async function getAclCtx(env, org, users, key, api) {
 
   const props = await env.DA_CONFIG?.get(org, { type: 'json' });
 
+  console.log('read config via getAclCtx', org, props?.permissions?.data);
+
   if (props && props[':type'] === 'sheet' && props[':sheetname'] === 'permissions') {
     // It's a single-sheet, move the data to the right place
     props.permissions = { data: props.data };
   }
 
   if (!props?.permissions?.data) {
+    console.log('no permissions data', pathLookup);
     return {
       pathLookup,
       actionSet: new Set(['read', 'write']),
@@ -311,6 +314,11 @@ export async function getAclCtx(env, org, users, key, api) {
   //   actionSet.add('read');
   //   actionTrace = pathActions.actionTrace;
   // }
+
+  console.log('getAclCtx', org, users);
+  console.log('actionSet', actionSet);
+  console.log('actionTrace', actionTrace);
+  console.log('pathLookup', pathLookup);
 
   return { pathLookup, actionSet, actionTrace };
 }
