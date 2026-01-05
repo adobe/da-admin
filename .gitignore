@@ -31,6 +31,8 @@ coverage
 
 # Wrangler temp
 .wrangler
+wrangler-versioned.toml
+.deployment-env
 
 # Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
 .grunt

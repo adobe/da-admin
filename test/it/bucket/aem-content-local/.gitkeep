@@ -1,0 +1,2 @@
+# This file ensures the empty directory is tracked by git
+# S3rver will use this directory to store objects during integration tests
