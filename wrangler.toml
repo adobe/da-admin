@@ -79,7 +79,7 @@ AEM_BUCKET_NAME = "aem-content-stage"
 # ----------------------------------------------------------------------
 # dev environment (local)
 [env.dev]
-name = "da-admin-dev"
+name = "da-admin-local"
 services = [
   { binding = "dacollab", service = "da-collab-local" }
 ]
