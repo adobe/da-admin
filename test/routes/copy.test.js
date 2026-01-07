@@ -69,4 +69,30 @@ describe('Copy Route', () => {
     assert.strictEqual('my/dest2.html', copyCalled[0].d.destination);
     assert.strictEqual(false, copyCalled[0].m);
   });
+
+  it('Test copyHandler - no destination provided', async () => {
+    const copyCalled = [];
+    const copyObject = (e, c, d, m) => {
+      copyCalled.push({
+        e, c, d, m,
+      });
+      return { status: 200 };
+    };
+
+    const copyHandler = await esmock('../../src/routes/copy.js', {
+      '../../src/storage/object/copy.js': {
+        default: copyObject,
+      },
+      '../../src/utils/auth.js': { hasPermission: () => true },
+    });
+
+    const formdata = new Map();
+    const req = {
+      formData: () => formdata,
+    };
+
+    const resp = await copyHandler({ req, env: {}, daCtx: { key: 'my/src.html' } });
+    assert.strictEqual(400, resp.status);
+    assert.strictEqual(copyCalled.length, 0);
+  });
 });
