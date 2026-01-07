@@ -1,3 +1,10 @@
+## [1.0.6](https://github.com/adobe/da-admin/compare/v1.0.5...v1.0.6) (2026-01-07)
+
+
+### Bug Fixes
+
+* no exception if no destination provided ([#231](https://github.com/adobe/da-admin/issues/231)) ([df0939f](https://github.com/adobe/da-admin/commit/df0939fad9a969b904e2877c2e94855281f27719))
+
 ## [1.0.5](https://github.com/adobe/da-admin/compare/v1.0.4...v1.0.5) (2025-12-18)
 
 
