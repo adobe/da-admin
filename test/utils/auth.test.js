@@ -389,6 +389,33 @@ describe('DA auth', () => {
       assert(aclCtx.actionSet.has('read'));
       assert(!aclCtx.actionSet.has('write'));
     });
+
+    it('test DA_OPS_IMS_ORG permissions', async () => {
+      const opsOrg = 'MyOpsOrg';
+      const envOps = {
+        ...env2,
+        DA_OPS_IMS_ORG: opsOrg,
+      };
+
+      // User in the OPS ORG
+      const users = [{ orgs: [{ orgIdent: opsOrg }] }];
+      const aclCtx = await getAclCtx(envOps, 'test', users, '/', 'config');
+
+      // Should have write permission on CONFIG because of DA_OPS_IMS_ORG injection
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, 'CONFIG', 'write', true));
+
+      // Should have write permission on / because of DA_OPS_IMS_ORG injection (path: '/ + **')
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '/', 'write'));
+
+      // Should have write permission on path because of DA_OPS_IMS_ORG injection (path: '/ + **')
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '/some/deep/path', 'write'));
+    });
   });
 
   describe('persmissions single sheet', () => {

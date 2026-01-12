@@ -19,6 +19,7 @@ export interface Env {
   AEM_BUCKET_NAME: string;
   // shared secret used as authorization when invoking the collab service (eg for syncadmin)
   COLLAB_SHARED_SECRET: string;
+  DA_OPS_IMS_ORG: string;
 
   DA_AUTH: KVNamespace,
   DA_CONFIG: KVNamespace,

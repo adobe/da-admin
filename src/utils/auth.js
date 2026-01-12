@@ -238,6 +238,19 @@ export async function getAclCtx(env, org, users, key, api) {
     };
   }
 
+  if (env.DA_OPS_IMS_ORG) {
+    props.permissions.data.push({
+      path: 'CONFIG',
+      groups: env.DA_OPS_IMS_ORG,
+      actions: 'write',
+    });
+    props.permissions.data.push({
+      path: '/ + **',
+      groups: env.DA_OPS_IMS_ORG,
+      actions: 'write',
+    });
+  }
+
   const aclTrace = [];
   props.permissions.data.forEach(({ path, groups, actions }) => {
     if (!path || !groups) return;
