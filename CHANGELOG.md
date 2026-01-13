@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/adobe/da-admin/compare/v1.0.5...v1.1.0) (2026-01-13)
+
+
+### Bug Fixes
+
+* no exception if no destination provided ([#231](https://github.com/adobe/da-admin/issues/231)) ([df0939f](https://github.com/adobe/da-admin/commit/df0939fad9a969b904e2877c2e94855281f27719))
+
+
+### Features
+
+* add special IMS org with full access ([#233](https://github.com/adobe/da-admin/issues/233)) ([8e35211](https://github.com/adobe/da-admin/commit/8e35211c475e5ac9112ef9915166fe0b41a58ac8))
+
 ## [1.0.6](https://github.com/adobe/da-admin/compare/v1.0.5...v1.0.6) (2026-01-07)
 
 
