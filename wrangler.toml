@@ -91,14 +91,14 @@ kv_namespaces = [
 ]
 
 r2_buckets = [
-  { binding = "AEM_CONTENT", bucket_name = "aem-content-dev" }
+  { binding = "AEM_CONTENT", bucket_name = "aem-content-stage" }
 ]
 
 [env.dev.vars]
 ENVIRONMENT = "dev"
 VERSION="0.0.0-dev"
 DA_COLLAB = "http://localhost:4711"
-AEM_BUCKET_NAME = "aem-content-dev"
+AEM_BUCKET_NAME = "aem-content-stage"
 
 # ----------------------------------------------------------------------
 # integration test environment (local)
