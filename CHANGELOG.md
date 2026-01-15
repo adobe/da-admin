@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/adobe/da-admin/compare/v1.1.0...v1.1.1) (2026-01-15)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-process-queue to v3.1.5 ([#230](https://github.com/adobe/da-admin/issues/230)) ([f4b7861](https://github.com/adobe/da-admin/commit/f4b7861520aad0dab153381ee8ff4bca4c6930c5))
+
 # [1.1.0](https://github.com/adobe/da-admin/compare/v1.0.5...v1.1.0) (2026-01-13)
 
 
