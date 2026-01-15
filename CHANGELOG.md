@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/adobe/da-admin/compare/v1.1.1...v1.1.2) (2026-01-15)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([#218](https://github.com/adobe/da-admin/issues/218)) ([1bfca22](https://github.com/adobe/da-admin/commit/1bfca22987232fe6dc2247eeb9656a1e94c63ec8))
+
 ## [1.1.1](https://github.com/adobe/da-admin/compare/v1.1.0...v1.1.1) (2026-01-15)
 
 
