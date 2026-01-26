@@ -85,20 +85,20 @@ services = [
 ]
 
 kv_namespaces = [
-  { binding = "DA_AUTH", id = "f5cc4d0150ac48d5b56948b5d147c77e" },
-  { binding = "DA_CONFIG", id = "3f6f6db5c27348fabee7c2a8ed39be17" },
-  { binding = "DA_JOBS", id = "66265e68cb2b422d8dc7a34b9fe2b0c9" }
+  { binding = "DA_AUTH", id = "f154699ac82094328a8f93f8ec2d51324" },
+  { binding = "DA_CONFIG", id = "0ed7f43dd0dc428d86b031731d765f03", remote=true },
+  { binding = "DA_JOBS", id = "0304a00b4cd64df8bd121e072b7bd0d8" }
 ]
 
 r2_buckets = [
-  { binding = "AEM_CONTENT", bucket_name = "aem-content-stage" }
+  { binding = "AEM_CONTENT", bucket_name = "aem-content" }
 ]
 
 [env.dev.vars]
 ENVIRONMENT = "dev"
 VERSION="0.0.0-dev"
 DA_COLLAB = "http://localhost:4711"
-AEM_BUCKET_NAME = "aem-content-stage"
+AEM_BUCKET_NAME = "aem-content"
 
 # ----------------------------------------------------------------------
 # integration test environment (local)
