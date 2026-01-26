@@ -58,6 +58,6 @@
     "@cloudflare/workers-types": "4.20260101.0",
     "@ssttevee/cfw-formdata-polyfill": "0.2.1",
     "jose": "6.1.3",
-    "web-fragments": "catalog:"
+    "web-fragments": "latest"
   }
 }

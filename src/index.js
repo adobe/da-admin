@@ -39,6 +39,8 @@ async function proxyToDaLive(req) {
   const url = new URL(req.url);
   const targetUrl = `${DA_LIVE_LOCAL}${url.pathname}${url.search}`;
   
+  console.log(`[PROXY] Proxying ${req.method} ${url.pathname} → ${targetUrl}`);
+  
   const proxyReq = new Request(targetUrl, {
     method: req.method,
     headers: req.headers,
@@ -74,15 +76,19 @@ export default {
     const url = new URL(req.url);
     const isLocalDev = true;
     
+    console.log(`[FETCH] Incoming: ${req.method} ${url.pathname}`);
+    
     // In local dev, proxy non-API requests to da-live (through the middleware first)
 
 
     // Define next() - handles DA Admin API or proxies to da-live
     const next = async () => {
+      console.log(`[NEXT] next() called for ${url.pathname}`);
       // In local dev, proxy non-API requests to da-live
       if (isLocalDev && !isDaApiRequest(url.pathname)) {
         return proxyToDaLive(req);
       }
+      console.log(`[NEXT] Handling as DA API: ${url.pathname}`);
 
       if (req.method === 'OPTIONS') {
         return daResp({ status: 204 });

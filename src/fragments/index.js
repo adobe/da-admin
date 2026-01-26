@@ -22,14 +22,14 @@ const gateway = new FragmentGateway();
  * This allows the chat assistant to be embedded across DA applications
  */
 gateway.registerFragment({
-  fragmentId: 'da-ai-assistant',
+  fragmentId: 'da-ai-chat',
   routePatterns: [
-    // URL pattern for fetching fragment assets
-    '/__fragments/da-ai-assistant/:_*',
-    // URL pattern for navigating
+    // URL pattern for fetching fragment assets (no routable pattern - popup only)
+    '/__fragments/da-ai-chat/:_*',
     '/',
   ],
   endpoint: 'https://da-ai-assistant.anfibiacreativa.workers.dev',
+  piercing: false, // Disable SSR piercing - fragment loads client-side only
   onSsrFetchError: () => ({
     response: new Response('<p>AI Assistant not available</p>', {
       headers: { 'content-type': 'text/html' },
