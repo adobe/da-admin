@@ -22,7 +22,7 @@ const gateway = new FragmentGateway();
  * This allows the chat assistant to be embedded across DA applications
  */
 gateway.registerFragment({
-  fragmentId: 'da-ai-chat',
+  fragmentId: 'da-ai-assistant',
   routePatterns: [
     // URL pattern for fetching fragment assets (no routable pattern - popup only)
     '/__fragments/da-ai-chat/:_*',
