@@ -268,17 +268,24 @@ export async function getAclCtx(env, org, users, key, api) {
 
     groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
       if (!pathLookup.has(group)) pathLookup.set(group, []);
-      pathLookup
-        .get(group)
-        .push({
+      const groupEntries = pathLookup.get(group);
+      const effectiveActions = actions
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+        .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : [entry]));
+
+      const existingEntry = groupEntries.find((e) => e.path === effectivePath);
+      if (existingEntry) {
+        const merged = new Set([...existingEntry.actions, ...effectiveActions]);
+        existingEntry.actions = [...merged];
+      } else {
+        groupEntries.push({
           group,
           path: effectivePath,
-          actions: actions
-            .split(',')
-            .map((entry) => entry.trim())
-            .filter((entry) => entry.length > 0)
-            .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : [entry])),
+          actions: effectiveActions,
         });
+      }
     });
   });
   pathLookup.forEach((value) => value.sort(pathSorter));
@@ -390,7 +397,8 @@ export function hasPermission(daCtx, path, action, keywordPath = false) {
     return true;
   }
 
-  const p = !path.startsWith('/') && !keywordPath ? `/${path}` : path;
+  const isKeyword = keywordPath || path === 'CONFIG';
+  const p = !path.startsWith('/') && !isKeyword ? `/${path}` : path;
   const k = daCtx.key.startsWith('/') ? daCtx.key : `/${daCtx.key}`;
 
   // is it the path from the context? then return the cached value
@@ -407,7 +415,7 @@ export function hasPermission(daCtx, path, action, keywordPath = false) {
 
   const permission = daCtx.users
     .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, p).actions.has(action));
-  if (!permission && !keywordPath) {
+  if (!permission && !isKeyword) {
     // eslint-disable-next-line no-console
     console.warn(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);
   }
