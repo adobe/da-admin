@@ -452,6 +452,46 @@ describe('DA auth', () => {
             groups: '2345B0EA551D747/4711',
             actions: 'write',
           },
+          {
+            path: 'CONFIG',
+            groups: 'read-first@bloggs.org',
+            actions: 'read',
+          },
+          {
+            path: 'CONFIG',
+            groups: 'read-first@bloggs.org',
+            actions: 'write',
+          },
+          {
+            path: '/test',
+            groups: 'read-first@bloggs.org',
+            actions: 'read',
+          },
+          {
+            path: '/test',
+            groups: 'read-first@bloggs.org',
+            actions: 'write',
+          },
+          {
+            path: 'CONFIG',
+            groups: 'write-first@bloggs.org',
+            actions: 'write',
+          },
+          {
+            path: 'CONFIG',
+            groups: 'write-first@bloggs.org',
+            actions: 'read',
+          },
+          {
+            path: '/test',
+            groups: 'write-first@bloggs.org',
+            actions: 'write',
+          },
+          {
+            path: '/test',
+            groups: 'write-first@bloggs.org',
+            actions: 'read',
+          },
         ],
         ':type': 'sheet',
         ':sheetname': 'permissions',
@@ -511,6 +551,44 @@ describe('DA auth', () => {
       assert(hasPermission({
         users, org: 'test', aclCtx, key,
       }, '/furb', 'write'));
+    });
+
+    it('test hasPermissions if read and write user', async () => {
+      const key = '';
+      const users = [{ email: 'read-first@bloggs.org' }];
+      const aclCtx = await getAclCtx(env, 'test', users, key);
+
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key,
+      }, 'CONFIG', 'read'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key,
+      }, 'CONFIG', 'write'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key,
+      }, '/test', 'read'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key,
+      }, '/test', 'write'));
+    });
+
+    it('test hasPermissions if write and read user', async () => {
+      const key = '';
+      const users = [{ email: 'write-first@bloggs.org' }];
+      const aclCtx = await getAclCtx(env, 'test', users, key);
+
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key,
+      }, 'CONFIG', 'read'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key,
+      }, 'CONFIG', 'write'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key,
+      }, '/test', 'read'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key,
+      }, '/test', 'write'));
     });
   });
 
