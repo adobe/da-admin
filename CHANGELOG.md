@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/adobe/da-admin/compare/v1.1.2...v1.1.3) (2026-01-28)
+
+
+### Bug Fixes
+
+* do not lose permissions if read and write on config ([#240](https://github.com/adobe/da-admin/issues/240)) ([ac0971e](https://github.com/adobe/da-admin/commit/ac0971e4aa8ba9d0bca221703394015dcddc2d62))
+
 ## [1.1.2](https://github.com/adobe/da-admin/compare/v1.1.1...v1.1.2) (2026-01-15)
 
 
