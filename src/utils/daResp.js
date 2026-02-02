@@ -33,7 +33,7 @@ export default function daResp({
   headers.append('Access-Control-Allow-Origin', '*');
   headers.append('Access-Control-Allow-Methods', 'HEAD, GET, PUT, POST, DELETE');
   headers.append('Access-Control-Allow-Headers', '*');
-  headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, X-da-continuation-token, ETag');
+  headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag');
   headers.append('Content-Type', contentType);
   if (contentLength) {
     headers.append('Content-Length', contentLength);
@@ -50,7 +50,7 @@ export default function daResp({
     headers.append('ETag', etag);
   }
   if (continuationToken) {
-    headers.append('X-da-continuation-token', continuationToken);
+    headers.append('da-continuation-token', continuationToken);
   }
 
   if (ctx?.aclCtx && status < 500) {

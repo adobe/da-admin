@@ -9,7 +9,7 @@ location:
   schema:
     type: string
 
-xDaContinuationToken:
+daContinuationToken:
   description: Continuation token for fetching the next page of list results.
   schema:
     type: string

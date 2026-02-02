@@ -113,7 +113,7 @@ describe('fetch', () => {
 
     const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/list/org/repo/path' }, {});
     assert.strictEqual(resp.status, 200);
-    assert.strictEqual(resp.headers.get('X-da-continuation-token'), 'next-token');
+    assert.strictEqual(resp.headers.get('da-continuation-token'), 'next-token');
   });
 });
 

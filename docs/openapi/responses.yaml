@@ -36,8 +36,8 @@ list:
   '200':
     description: The list of sources
     headers:
-      X-da-continuation-token:
-        $ref: "./headers.yaml#/xDaContinuationToken"
+      da-continuation-token:
+        $ref: "./headers.yaml#/daContinuationToken"
     content:
       application/json:
         schema:
