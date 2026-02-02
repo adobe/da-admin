@@ -8,3 +8,8 @@ location:
   description: The redirect location
   schema:
     type: string
+
+xDaContinuationToken:
+  description: Continuation token for fetching the next page of list results.
+  schema:
+    type: string

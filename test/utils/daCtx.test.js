@@ -217,4 +217,28 @@ describe('DA context', () => {
       assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, null);
     });
   });
+
+  describe('Continuation token', async () => {
+    it('should extract continuation-token query param', async () => {
+      const req = {
+        url: 'http://localhost:8787/list/org/site/path?continuation-token=token123',
+        headers: {
+          get: () => null,
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.continuationToken, 'token123');
+    });
+
+    it('should default continuation token to null', async () => {
+      const req = {
+        url: 'http://localhost:8787/list/org/site/path',
+        headers: {
+          get: () => null,
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.continuationToken, null);
+    });
+  });
 });

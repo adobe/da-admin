@@ -26,6 +26,13 @@ pathParam:
   required: true
   schema:
     type: string
+continuationTokenParam:
+  name: continuation-token
+  in: query
+  description: Continuation token for paginated list results.
+  required: false
+  schema:
+    type: string
 guidParam:
   name: guid
   in: path

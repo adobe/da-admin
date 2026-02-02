@@ -27,6 +27,7 @@ export default function daResp({
   contentLength,
   metadata,
   etag,
+  continuationToken,
 }, ctx = null) {
   const headers = new Headers();
   headers.append('Access-Control-Allow-Origin', '*');
@@ -47,6 +48,9 @@ export default function daResp({
 
   if (etag) {
     headers.append('ETag', etag);
+  }
+  if (continuationToken) {
+    headers.append('X-da-continuation-token', continuationToken);
   }
 
   if (ctx?.aclCtx && status < 500) {

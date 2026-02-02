@@ -56,4 +56,28 @@ describe('List Objects', () => {
     const data = JSON.parse(resp.body);
     assert.strictEqual(data.length, 2, 'Should only return 2 items');
   });
+
+  it('passes continuation token and returns next token', async () => {
+    s3Mock.on(ListObjectsV2Command, {
+      Bucket: 'rt-bkt',
+      Prefix: 'acme/wknd/',
+      Delimiter: '/',
+      ContinuationToken: 'prev-token',
+    }).resolves({
+      $metadata: { httpStatusCode: 200 },
+      Contents: [Contents[0]],
+      NextContinuationToken: 'next-token',
+    });
+
+    const daCtx = {
+      bucket: 'rt-bkt',
+      org: 'acme',
+      key: 'wknd',
+      continuationToken: 'prev-token',
+    };
+    const resp = await listObjects({}, daCtx);
+    const data = JSON.parse(resp.body);
+    assert.strictEqual(data.length, 1, 'Should only return 1 item');
+    assert.strictEqual(resp.continuationToken, 'next-token');
+  });
 });

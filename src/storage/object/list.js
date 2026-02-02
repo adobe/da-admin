@@ -18,7 +18,7 @@ import getS3Config from '../utils/config.js';
 import formatList from '../utils/list.js';
 
 function buildInput({
-  bucket, org, key, maxKeys,
+  bucket, org, key, maxKeys, continuationToken,
 }) {
   const input = {
     Bucket: bucket,
@@ -26,6 +26,7 @@ function buildInput({
     Delimiter: '/',
   };
   if (maxKeys) input.MaxKeys = maxKeys;
+  if (continuationToken) input.ContinuationToken = continuationToken;
   return input;
 }
 
@@ -33,7 +34,11 @@ export default async function listObjects(env, daCtx, maxKeys) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
-  const input = buildInput({ ...daCtx, maxKeys });
+  const input = buildInput({
+    ...daCtx,
+    maxKeys,
+    continuationToken: daCtx.continuationToken,
+  });
   const command = new ListObjectsV2Command(input);
   try {
     const resp = await client.send(command);
@@ -43,6 +48,7 @@ export default async function listObjects(env, daCtx, maxKeys) {
       body: JSON.stringify(body),
       status: resp.$metadata.httpStatusCode,
       contentType: resp.ContentType,
+      continuationToken: resp.NextContinuationToken,
     };
   } catch (e) {
     return { body: '', status: 404 };

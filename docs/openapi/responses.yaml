@@ -35,6 +35,9 @@ source:
 list:
   '200':
     description: The list of sources
+    headers:
+      X-da-continuation-token:
+        $ref: "./headers.yaml#/xDaContinuationToken"
     content:
       application/json:
         schema:
