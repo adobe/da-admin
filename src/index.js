@@ -17,8 +17,6 @@ import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
 
-import { getFragmentsMiddleware } from './fragments/index.js';
-
 // DA Admin API path prefixes
 const DA_API_PATHS = ['/source/', '/list/', '/config/', '/copy/', '/move/', '/delete/', '/versionsource/'];
 
@@ -38,16 +36,16 @@ function isDaApiRequest(pathname) {
 async function proxyToDaLive(req) {
   const url = new URL(req.url);
   const targetUrl = `${DA_LIVE_LOCAL}${url.pathname}${url.search}`;
-  
+
   console.log(`[PROXY] Proxying ${req.method} ${url.pathname} → ${targetUrl}`);
-  
+
   const proxyReq = new Request(targetUrl, {
     method: req.method,
     headers: req.headers,
     body: req.body,
     redirect: 'manual',
   });
-  
+
   try {
     const response = await fetch(proxyReq);
     // Return response with CORS headers for local dev
@@ -64,8 +62,6 @@ async function proxyToDaLive(req) {
   }
 }
 
-const middleware = getFragmentsMiddleware('development');
-
 export default {
   /**
    * @param {Request} req
@@ -75,11 +71,8 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     const isLocalDev = true;
-    
-    console.log(`[FETCH] Incoming: ${req.method} ${url.pathname}`);
-    
-    // In local dev, proxy non-API requests to da-live (through the middleware first)
 
+    console.log(`[FETCH] Incoming: ${req.method} ${url.pathname}`);
 
     // Define next() - handles DA Admin API or proxies to da-live
     const next = async () => {
@@ -143,7 +136,7 @@ export default {
       return daResp(respObj, daCtx);
     };
 
-    // Run the middleware - it will intercept fragment requests
-    return await middleware(req, next);
+    // Handle the request directly
+    return next();
   },
 };
