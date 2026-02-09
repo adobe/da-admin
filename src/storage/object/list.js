@@ -43,11 +43,16 @@ export default async function listObjects(env, daCtx, maxKeys) {
     const resp = await client.send(command);
     // console.log(resp);
     const body = formatList(resp);
+    const nextContinuationToken = resp.IsTruncated
+      && resp.NextContinuationToken
+      && resp.NextContinuationToken !== daCtx.continuationToken
+      ? resp.NextContinuationToken
+      : undefined;
     return {
       body: JSON.stringify(body),
       status: resp.$metadata.httpStatusCode,
       contentType: resp.ContentType,
-      continuationToken: resp.NextContinuationToken,
+      continuationToken: nextContinuationToken,
     };
   } catch (e) {
     return { body: '', status: 404 };
