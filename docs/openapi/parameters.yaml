@@ -27,9 +27,9 @@ pathParam:
   schema:
     type: string
 continuationTokenParam:
-  name: continuation-token
-  in: query
-  description: Continuation token for paginated list results.
+  name: da-continuation-token
+  in: header
+  description: Continuation token from the previous list response header.
   required: false
   schema:
     type: string
