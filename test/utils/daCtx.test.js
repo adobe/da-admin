@@ -219,7 +219,35 @@ describe('DA context', () => {
   });
 
   describe('Continuation token', async () => {
-    it('should extract continuation-token query param', async () => {
+    it('should extract da-continuation-token header', async () => {
+      const req = {
+        url: 'http://localhost:8787/list/org/site/path',
+        headers: {
+          get: (name) => {
+            if (name === 'da-continuation-token') return 'header-token';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.continuationToken, 'header-token');
+    });
+
+    it('should ignore continuation-token query param when header is present', async () => {
+      const req = {
+        url: 'http://localhost:8787/list/org/site/path?continuation-token=query-token',
+        headers: {
+          get: (name) => {
+            if (name === 'da-continuation-token') return 'header-token';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.continuationToken, 'header-token');
+    });
+
+    it('should ignore continuation-token query param', async () => {
       const req = {
         url: 'http://localhost:8787/list/org/site/path?continuation-token=token123',
         headers: {
@@ -227,7 +255,7 @@ describe('DA context', () => {
         },
       };
       const daCtx = await getDaCtx(req, env);
-      assert.strictEqual(daCtx.continuationToken, 'token123');
+      assert.strictEqual(daCtx.continuationToken, null);
     });
 
     it('should default continuation token to null', async () => {

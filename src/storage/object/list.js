@@ -37,7 +37,6 @@ export default async function listObjects(env, daCtx, maxKeys) {
   const input = buildInput({
     ...daCtx,
     maxKeys,
-    continuationToken: daCtx.continuationToken,
   });
   const command = new ListObjectsV2Command(input);
   try {

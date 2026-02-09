@@ -39,8 +39,9 @@ export default async function getDaCtx(req, env) {
   // Extract conditional headers
   const ifMatch = req.headers?.get('if-match') || null;
   const ifNoneMatch = req.headers?.get('if-none-match') || null;
-  const continuationToken = url.searchParams.get('continuation-token')
-    || url.searchParams.get('continuationToken')
+  const continuationToken = req.headers?.get('da-continuation-token')
+    || req.headers?.get('continuation-token')
+    || req.headers?.get('continuationToken')
     || null;
 
   // Set base details
