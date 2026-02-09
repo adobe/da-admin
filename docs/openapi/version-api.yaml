@@ -4,7 +4,11 @@ get:
     tags:
       - Version
     summary: Get source version
-    description: Returns version of a given source.
+    description: |
+      Returns version of a given source.
+      
+      **Important:** The `guid` parameter must include the file extension (e.g., `version-123.html`, `v2.json`).
+      Example: `/versionsource/{org}/{repo}/version-123.html`
     parameters:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
@@ -24,7 +28,11 @@ post:
     tags:
       - Version
     summary: Create source version
-    description: Create a version of a given source.
+    description: |
+      Create a version of a given source.
+      
+      **Important:** The `path` parameter must include the file extension (e.g., `myfile.html`, `data.json`).
+      Example: `/versionsource/{org}/{repo}/myfile.html`
     parameters:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
@@ -44,7 +52,11 @@ list:
     tags:
       - Version
     summary: List source versions
-    description: Returns a list of versions for a given source.
+    description: |
+      Returns a list of versions for a given source.
+      
+      **Important:** The `path` parameter must include the file extension (e.g., `myfile.html`, `data.json`).
+      Example: `/versionlist/{org}/{repo}/myfile.html`
     parameters:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"

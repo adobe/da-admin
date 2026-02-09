@@ -6,6 +6,13 @@ source:
     summary: Move source content
     description: |
       Move a content source within an organization.
+      
+      **Important:** The `path` parameter works as follows:
+      - For files: Include the extension in the path (e.g., `myfile.html`)
+      - For folders: Omit the extension (e.g., `myfolder`)
+      Examples:
+      - Move file: `/move/{org}/{repo}/myfile.html`
+      - Move folder: `/move/{org}/{repo}/myfolder`
     parameters:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"

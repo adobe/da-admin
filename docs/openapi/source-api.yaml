@@ -4,7 +4,11 @@ source:
     tags:
       - Source
     summary: Get source content
-    description: Get a content **source** from an organization.
+    description: |
+      Get a content **source** from an organization.
+      
+      **Important:** For files, the `path` parameter must include the file extension (e.g., `myfile.html`, `data.json`).
+      The full URL would be: `/source/{org}/{repo}/myfile.html`
     parameters:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
@@ -28,6 +32,12 @@ source:
     summary: Create source content
     description: |
       Create a content **source** within an organization.
+      
+      **Important:** For files, the `path` parameter must include the file extension (e.g., `myfile.html`, `data.json`).
+      For folders, omit the extension (e.g., `myfolder`).
+      Examples:
+      - File: `/source/{org}/{repo}/myfile.html`
+      - Folder: `/source/{org}/{repo}/myfolder`
     parameters:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
@@ -55,7 +65,15 @@ source:
     tags:
       - Source
     summary: Delete source content
-    description: Delete the content **source** or **directory**.
+    description: |
+      Delete the content **source** or **directory**.
+      
+      **Important:** The `path` parameter works as follows:
+      - For files: Include the extension in the path (e.g., `myfile.html`)
+      - For folders: Omit the extension (e.g., `myfolder`)
+      Examples:
+      - Delete file: `/source/{org}/{repo}/myfile.html`
+      - Delete folder: `/source/{org}/{repo}/myfolder`
     parameters:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
