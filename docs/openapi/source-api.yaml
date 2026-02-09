@@ -13,7 +13,6 @@ source:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
-      - $ref: "./parameters.yaml#/extReqParam"
     responses:
       '200':
         $ref: "./responses.yaml#/source/200"
@@ -42,7 +41,6 @@ source:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
-      - $ref: "./parameters.yaml#/extReqParam"
     requestBody:
       content:
         multipart/form-data:
@@ -78,7 +76,6 @@ source:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
-      - $ref: "./parameters.yaml#/extParam"
     responses:
       '204':
         $ref: "./responses.yaml#/204"

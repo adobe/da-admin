@@ -17,7 +17,6 @@ source:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
-      - $ref: "./parameters.yaml#/extParam"
     requestBody:
       content:
         multipart/form-data:

@@ -13,7 +13,6 @@ get:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/guidParam"
-      - $ref: "./parameters.yaml#/extReqParam"
     responses:
       '200':
         $ref: "./responses.yaml#/source/200"
@@ -37,7 +36,6 @@ post:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
-      - $ref: "./parameters.yaml#/extReqParam"
     responses:
       '200':
         $ref: "./responses.yaml#/200-list"
@@ -61,7 +59,6 @@ list:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
-      - $ref: "./parameters.yaml#/extReqParam"
     responses:
       '200':
         $ref: "./responses.yaml#/version-list/200"
