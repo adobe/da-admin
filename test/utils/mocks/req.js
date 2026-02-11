@@ -53,6 +53,7 @@ const reqs = {
   file: new Request('https://da.live/source/cq/Geometrixx/NFT/Outreach.html', optsWithEmptyBearer),
   media: new Request('https://da.live/source/cq/Geometrixx/NFT/blockchain.png', optsWithForceFail),
   siteMulti: new Request('https://da.live/source/cq/Geometrixx', optsWithMultiAuthAnon),
+  logout: new Request('https://da.live/logout', optsWithAuth),
   endpoint: new Request('https://da.live/endpoint/', optsWithEmptyHead),
   endpointNoTrail: new Request('https://da.live/endpoint', optsWithEmptyHead),
 };

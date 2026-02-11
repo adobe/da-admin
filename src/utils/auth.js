@@ -153,8 +153,12 @@ export async function getUsers(req, env) {
     // Find the user in recent sessions
     let user = await env.DA_AUTH.get(userId);
 
-    // If not found, add them to recent sessions
+    // If not found, add them to recent sessions, unless the request is a logout request
     if (!user) {
+      if (req.url.endsWith('/logout')) {
+        return { email: 'anonymous' };
+      }
+
       const headers = new Headers(req.headers);
       headers.delete('authorization');
       headers.set('authorization', `Bearer ${token}`);

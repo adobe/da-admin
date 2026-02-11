@@ -79,6 +79,11 @@ describe('DA auth', () => {
       const users = await getUsers(reqs.media, env);
       assert.strictEqual(users[0].email, 'anonymous');
     });
+
+    it('anonymous when calling /logout with valid token but unknown user', async () => {
+      const users = await getUsers(reqs.logout, env);
+      assert.strictEqual(users[0].email, 'anonymous');
+    });
   });
 
   describe('set user', async () => {
