@@ -1,3 +1,10 @@
+## [1.1.4](https://github.com/adobe/da-admin/compare/v1.1.3...v1.1.4) (2026-02-10)
+
+
+### Bug Fixes
+
+* api docs by clarifying file extension requirements in API paths ([#242](https://github.com/adobe/da-admin/issues/242)) ([7164ffe](https://github.com/adobe/da-admin/commit/7164ffe7f4500c2090da5388f5bcbeb21d81a3a9)), closes [#129](https://github.com/adobe/da-admin/issues/129)
+
 ## [1.1.3](https://github.com/adobe/da-admin/compare/v1.1.2...v1.1.3) (2026-01-28)
 
 

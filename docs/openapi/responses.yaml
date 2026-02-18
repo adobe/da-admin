@@ -21,16 +21,19 @@ source:
             - $ref: "./schemas.yaml#/aemSheet"
       image/png:
         schema:
-          type: binary
+          type: string
+          format: binary
       image/jpg:
         schema:
-          type: binary
+          type: string
+          format: binary
       application/pdf:
         schema:
-          type: binary
+          type: string
+          format: binary
       image/svg+xml:
         schema:
-          type: xml
+          type: string
 
 list:
   '200':
@@ -88,13 +91,24 @@ version-list:
             source:
               editUrl: "https://da.live/edit#/adobecom/blog/my-cool-post"
               contentUrl: "https://content.da.live/adobecom/blog/my-cool-post"
-              status: 201
               props:
                 readyForLoc: true
                 lastRollout: Wed, 29 Nov 2023 01:20:40 GMT
             aem: 
               previewUrl: "https://main--blog--adobecom.aem.page/my-cool-post"
               liveUrl: "https://main--blog--adobecom.aem.live/my-cool-post"
+'200':
+  description: Success - returns config data.
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas.yaml#/aemSheet"
+'200-list':
+  description: Success - returns version list.
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas.yaml#/version-list"
 '204':
   description: The request was completed successfully.
 
