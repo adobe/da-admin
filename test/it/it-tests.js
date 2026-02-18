@@ -15,6 +15,7 @@ import assert from 'node:assert';
 export default (ctx) => describe('Integration Tests: it tests', function () {
   // Enable bail to stop on first failure - tests are interdependent
   this.bail(true);
+  this.timeout(10000);
 
   it('[super user] should set org config', async function shouldSetOrgConfig() {
     if (!ctx.local) {
