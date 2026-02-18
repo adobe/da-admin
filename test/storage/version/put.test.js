@@ -300,7 +300,6 @@ describe('Version Put', () => {
           contentType: 'text/html',
           metadata: {
             id: 'q123-456',
-            preparsingstore: Date.now(),
             version: 'ver123',
           },
           status: 201,
@@ -363,7 +362,6 @@ describe('Version Put', () => {
     assert.equal('[{"email":"foo@acme.org"},{"email":"bar@acme.org"}]', s3Sent[0].input.Metadata.Users);
     assert.notEqual('aaa-bbb', s3Sent[0].input.Metadata.Version);
     assert(s3Sent[0].input.Metadata.Timestamp > 0);
-    assert((s3Sent[0].input.Metadata.Preparsingstore - s3Sent[0].input.Metadata.Timestamp) < 100);
   });
 
   it('Put First Object With Version', async () => {
@@ -556,7 +554,6 @@ describe('Version Put', () => {
         path: '/q',
         timestamp: 123,
         users: '[{"email":"anonymous"}]',
-        preparsingstore: 12345,
       };
       return { body: '', metadata, contentLength: 616 };
     };
@@ -884,6 +881,71 @@ describe('Version Put', () => {
     assert.strictEqual(putCommand.input.ContentType, 'text/html');
     assert.strictEqual(putCommand.input.Body, 'test body');
     assert.strictEqual(putCommand.input.ContentLength, 9);
+  });
+
+  it('Test version stores body when body parameter is provided', async () => {
+    const sentCommands = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sentCommands.push(cmd);
+        return {
+          $metadata: { httpStatusCode: 200 },
+        };
+      },
+    };
+
+    const mockGetObject = async () => ({
+      status: 200,
+      body: '<html><body>Old content</body></html>',
+      contentLength: 36,
+      contentType: 'text/html',
+      etag: 'existing-etag',
+      metadata: {
+        id: 'doc-abc',
+        version: 'v4',
+        timestamp: '1234567890',
+        users: '[{"email":"user@example.com"}]',
+        path: 'docs/page4.html',
+      },
+    });
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject,
+      },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: () => mockS3Client,
+        ifNoneMatch: () => mockS3Client,
+      },
+    });
+
+    const env = {};
+    const daCtx = {
+      org: 'test-org',
+      bucket: 'test-bucket',
+      key: 'docs/page4.html',
+      ext: 'html',
+      method: 'PUT',
+      users: [{ email: 'user@example.com' }],
+    };
+
+    // Call WITH body parameter
+    await putObjectWithVersion(env, daCtx, {
+      bucket: 'test-bucket',
+      org: 'test-org',
+      key: 'docs/page4.html',
+      body: '<html><body>New content</body></html>',
+      type: 'text/html',
+    }, true); // body parameter is true
+
+    // Should have 2 commands: putVersion + putObject
+    assert.strictEqual(sentCommands.length, 2);
+
+    // First command should be putVersion with the OLD body content
+    const versionCommand = sentCommands[0];
+    assert.strictEqual(versionCommand.input.Key, 'test-org/.da-versions/doc-abc/v4.html');
+    assert.strictEqual(versionCommand.input.Body, '<html><body>Old content</body></html>');
+    assert.strictEqual(versionCommand.input.ContentLength, 36);
   });
 
   it('Test putVersion with JPEG binary content', async () => {

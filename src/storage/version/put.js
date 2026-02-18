@@ -179,10 +179,8 @@ export async function putObjectWithVersion(
     }
   }
 
-  const pps = current.metadata?.preparsingstore || '0';
-  let storeBody = !body && pps === '0';
-  let Preparsingstore = storeBody ? Timestamp : pps;
-  let Label = storeBody ? 'Collab Parse' : update.label;
+  let storeBody = false;
+  let Label = update.label;
 
   if (createVersion) {
     if (daCtx.method === 'PUT'
@@ -196,7 +194,6 @@ export async function putObjectWithVersion(
       console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
       storeBody = true;
       Label = 'Restore Point';
-      Preparsingstore = Timestamp;
     }
 
     const versionResp = await putVersion(config, {
@@ -222,8 +219,9 @@ export async function putObjectWithVersion(
   }
 
   const metadata = {
-    ID, Users, Timestamp, Path, Preparsingstore,
+    ID, Users, Timestamp, Path,
   };
+
   // Only include Version metadata for files that support versioning
   if (createVersion) {
     metadata.Version = crypto.randomUUID();
