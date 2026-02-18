@@ -90,6 +90,31 @@ describe('fetch', () => {
     const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/source/org/repo/file.html' }, {});
     assert.strictEqual(resp.status, 500);
   });
+
+  it('should expose continuation token header for list responses', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/list/org/repo/path',
+          key: 'repo/path',
+        }),
+      },
+      '../src/handlers/get.js': {
+        default: async () => ({
+          status: 200,
+          body: '[]',
+          contentType: 'application/json',
+          continuationToken: 'next-token',
+        }),
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/list/org/repo/path' }, {});
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(resp.headers.get('da-continuation-token'), 'next-token');
+  });
 });
 
 describe('invalid routes', () => {

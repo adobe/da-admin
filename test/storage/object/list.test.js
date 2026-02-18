@@ -56,4 +56,75 @@ describe('List Objects', () => {
     const data = JSON.parse(resp.body);
     assert.strictEqual(data.length, 2, 'Should only return 2 items');
   });
+
+  it('passes continuation token and returns next token', async () => {
+    s3Mock.on(ListObjectsV2Command, {
+      Bucket: 'rt-bkt',
+      Prefix: 'acme/wknd/',
+      Delimiter: '/',
+      ContinuationToken: 'prev-token',
+    }).resolves({
+      $metadata: { httpStatusCode: 200 },
+      Contents: [Contents[0]],
+      IsTruncated: true,
+      NextContinuationToken: 'next-token',
+    });
+
+    const daCtx = {
+      bucket: 'rt-bkt',
+      org: 'acme',
+      key: 'wknd',
+      continuationToken: 'prev-token',
+    };
+    const resp = await listObjects({}, daCtx);
+    const data = JSON.parse(resp.body);
+    assert.strictEqual(data.length, 1, 'Should only return 1 item');
+    assert.strictEqual(resp.continuationToken, 'next-token');
+  });
+
+  it('does not return continuation token on terminal page', async () => {
+    s3Mock.on(ListObjectsV2Command, {
+      Bucket: 'rt-bkt',
+      Prefix: 'acme/wknd/',
+      Delimiter: '/',
+      ContinuationToken: 'prev-token',
+    }).resolves({
+      $metadata: { httpStatusCode: 200 },
+      Contents: [Contents[1]],
+      IsTruncated: false,
+      NextContinuationToken: 'should-not-be-returned',
+    });
+
+    const daCtx = {
+      bucket: 'rt-bkt',
+      org: 'acme',
+      key: 'wknd',
+      continuationToken: 'prev-token',
+    };
+    const resp = await listObjects({}, daCtx);
+    assert.strictEqual(resp.continuationToken, undefined);
+  });
+
+  it('does not return same continuation token again', async () => {
+    s3Mock.on(ListObjectsV2Command, {
+      Bucket: 'rt-bkt',
+      Prefix: 'acme/wknd/',
+      Delimiter: '/',
+      ContinuationToken: 'prev-token',
+    }).resolves({
+      $metadata: { httpStatusCode: 200 },
+      Contents: [Contents[2]],
+      IsTruncated: true,
+      NextContinuationToken: 'prev-token',
+    });
+
+    const daCtx = {
+      bucket: 'rt-bkt',
+      org: 'acme',
+      key: 'wknd',
+      continuationToken: 'prev-token',
+    };
+    const resp = await listObjects({}, daCtx);
+    assert.strictEqual(resp.continuationToken, undefined);
+  });
 });

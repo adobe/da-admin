@@ -9,6 +9,7 @@ list:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
+      - $ref: "./parameters.yaml#/continuationTokenParam"
     responses:
       '200':
         $ref: "./responses.yaml#/list/200"

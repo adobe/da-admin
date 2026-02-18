@@ -18,7 +18,8 @@ import { getAclCtx, getUsers } from './auth.js';
  * @returns {DaCtx} The Dark Alley Context.
  */
 export default async function getDaCtx(req, env) {
-  let { pathname } = new URL(req.url);
+  const url = new URL(req.url);
+  let { pathname } = url;
   // Remove proxied api route
   if (pathname.startsWith('/api')) pathname = pathname.replace('/api', '');
 
@@ -38,6 +39,7 @@ export default async function getDaCtx(req, env) {
   // Extract conditional headers
   const ifMatch = req.headers?.get('if-match') || null;
   const ifNoneMatch = req.headers?.get('if-none-match') || null;
+  const continuationToken = req.headers?.get('da-continuation-token') || null;
 
   // Set base details
   const daCtx = {
@@ -53,6 +55,7 @@ export default async function getDaCtx(req, env) {
       ifMatch,
       ifNoneMatch,
     },
+    continuationToken,
   };
 
   // Sanitize the remaining path parts
