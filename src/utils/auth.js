@@ -224,6 +224,13 @@ export function pathSorter({ path: path1 }, { path: path2 }) {
 export async function getAclCtx(env, org, users, key, api) {
   const pathLookup = new Map();
 
+  if (api === 'logout') {
+    return {
+      pathLookup,
+      actionSet: new Set(['read']),
+    };
+  }
+
   const props = await env.DA_CONFIG?.get(org, { type: 'json' });
 
   if (props && props[':type'] === 'sheet' && props[':sheetname'] === 'permissions') {
