@@ -14,6 +14,8 @@ import getList from '../routes/list.js';
 import logout from '../routes/logout.js';
 import { getConfig } from '../routes/config.js';
 import { getVersionSource, getVersionList } from '../routes/version.js';
+import getJobStatus from '../routes/job.js';
+import getCount from '../routes/count.js';
 
 function get404() {
   return { body: '', status: 404 };
@@ -30,6 +32,8 @@ export default async function getHandler({ env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
+  if (path.startsWith('/job')) return getJobStatus({ env, daCtx });
+  if (path.startsWith('/count')) return getCount({ env, daCtx });
   if (path.startsWith('/source')) return getSource({ env, daCtx });
   if (path.startsWith('/list')) return getList({ env, daCtx });
   if (path.startsWith('/config')) return getConfig({ env, daCtx });

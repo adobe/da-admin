@@ -82,6 +82,32 @@ function buildInput(bucket, org, key) {
   };
 }
 
+export async function listAllKeys(daCtx, s3client) {
+  if (daCtx.ext) return [daCtx.key];
+
+  const sourceKeys = [daCtx.key, `${daCtx.key}.props`];
+  let ContinuationToken;
+
+  do {
+    const command = new ListObjectsV2Command({
+      Bucket: daCtx.bucket,
+      Prefix: `${daCtx.org}/${daCtx.key}/`,
+      MaxKeys: 1000,
+      ContinuationToken,
+    });
+    // eslint-disable-next-line no-await-in-loop
+    const resp = await s3client.send(command);
+    const { Contents = [], NextContinuationToken } = resp;
+    sourceKeys.push(
+      ...Contents.map(({ Key }) => Key.replace(`${daCtx.org}/`, ''))
+        .filter((k) => k && !k.includes('//')),
+    );
+    ContinuationToken = NextContinuationToken;
+  } while (ContinuationToken);
+
+  return sourceKeys;
+}
+
 /**
  * Lists a files in a bucket under the specified key.
  * @param {DaCtx} daCtx the DA Context

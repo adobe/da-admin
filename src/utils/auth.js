@@ -324,7 +324,7 @@ export async function getAclCtx(env, org, users, key, api) {
   // Expose the action trace or not?
   actionTrace = users.every((u) => aclTrace.includes(u.email)) ? actionTrace : undefined;
 
-  if (k === 'CONFIG' || api === 'versionsource') {
+  if (k === 'CONFIG' || api === 'versionsource' || api === 'job') {
     actionSet.add('read');
   }
 

@@ -144,24 +144,34 @@ describe('Source Route', () => {
     assert.deepStrictEqual(called, ['getObject']);
   });
 
-  it('Test getSource with 204', async () => {
-    const env = {};
-    const daCtx = { key: '/test.html', aclCtx: { pathLookup: new Map() } };
-
-    const deleteResp = async (e, c) => {
-      if (e === env && c === daCtx) {
-        return { status: 204 };
-      }
-    };
-
+  it('Test deleteSource single file returns 204', async () => {
     const { deleteSource } = await esmock('../../src/routes/source.js', {
       '../../src/storage/object/delete.js': {
-        default: deleteResp,
+        deleteObject: () => ({ status: 204 }),
       },
+      '../../src/storage/utils/config.js': { default: () => ({}) },
     });
 
-    const resp = await deleteSource({ env, daCtx });
+    const daCtx = {
+      key: '/test.html', ext: 'html', aclCtx: { pathLookup: new Map() },
+    };
+    const resp = await deleteSource({ env: {}, daCtx });
     assert.equal(204, resp.status);
+  });
+
+  it('Test deleteSource single file returns 500 on Error', async () => {
+    const { deleteSource } = await esmock('../../src/routes/source.js', {
+      '../../src/storage/object/delete.js': {
+        deleteObject: () => new Error('fail'),
+      },
+      '../../src/storage/utils/config.js': { default: () => ({}) },
+    });
+
+    const daCtx = {
+      key: '/test.html', ext: 'html', aclCtx: { pathLookup: new Map() },
+    };
+    const resp = await deleteSource({ env: {}, daCtx });
+    assert.equal(500, resp.status);
   });
 
   it('Test getSource with permissions', async () => {
@@ -242,11 +252,8 @@ describe('Source Route', () => {
 
   it('Test deleteSource with permissions', async () => {
     const deleteCalled = [];
-    const deleteCall = (e, c, d) => {
-      deleteCalled.push({ e, c, d });
-    };
 
-    const ctx = { key: '/a/b/c.html' };
+    const ctx = { key: '/a/b/c.html', ext: 'html' };
     const hasPermission = (c, k, a) => {
       if (k === '/a/b/c.html' && a === 'write') {
         return false;
@@ -256,20 +263,23 @@ describe('Source Route', () => {
 
     const { deleteSource } = await esmock('../../src/routes/source.js', {
       '../../src/storage/object/delete.js': {
-        default: deleteCall,
+        deleteObject: (client, daCtx, key) => {
+          deleteCalled.push({ key });
+          return { status: 204 };
+        },
       },
       '../../src/utils/auth.js': {
         hasPermission,
       },
+      '../../src/storage/utils/config.js': { default: () => ({}) },
     });
 
-    const resp = await deleteSource({ req: {}, env: {}, daCtx: ctx });
+    const resp = await deleteSource({ env: {}, daCtx: ctx });
     assert.strictEqual(403, resp.status);
     assert.strictEqual(deleteCalled.length, 0);
 
-    await deleteSource({ req: {}, env: {}, daCtx: { key: 'foobar.html' } });
+    await deleteSource({ env: {}, daCtx: { key: 'foobar.html', ext: 'html' } });
     assert.strictEqual(deleteCalled.length, 1);
-    assert.strictEqual(deleteCalled[0].c.key, 'foobar.html');
   });
 
   it('Test postSource with permissions', async () => {

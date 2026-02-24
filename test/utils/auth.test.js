@@ -390,6 +390,18 @@ describe('DA auth', () => {
       assert(!aclCtx.actionSet.has('write'));
     });
 
+    it('test job api always has read permission', async () => {
+      const users = [{ email: 'blah@foo.org' }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/', 'job');
+      assert(aclCtx.actionSet.has('read'));
+    });
+
+    it('test job api grants read permission even without explicit permissions', async () => {
+      const users = [{ email: 'unauthorized@example.com' }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/restricted/some-uuid', 'job');
+      assert(aclCtx.actionSet.has('read'));
+    });
+
     it('test DA_OPS_IMS_ORG permissions', async () => {
       const opsOrg = 'MyOpsOrg';
       const envOps = {

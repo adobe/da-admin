@@ -13,58 +13,138 @@ import assert from 'node:assert';
 import esmock from 'esmock';
 
 describe('Move Route', () => {
-  it('Test moveRoute with permissions', async () => {
-    const moCalled = [];
-    const moveObject = (e, c, d) => {
-      moCalled.push({ e, c, d });
-    };
-
-    const hasPermission = (c, k, a) => {
-      if (k === 'abc.html' && a === 'write') {
-        return false;
-      }
-      if (k === 'somedest' && a === 'write') {
-        return false;
-      }
-      return true;
-    };
+  it('returns 403 without write permission on source', async () => {
+    const hasPermission = (c, k, a) => !(k === 'abc.html' && a === 'write');
 
     const moveRoute = await esmock('../../src/routes/move.js', {
-      '../../src/storage/object/move.js': {
-        default: moveObject,
-      },
-      '../../src/utils/auth.js': {
-        hasPermission,
-      },
+      '../../src/utils/auth.js': { hasPermission },
+      '../../src/storage/object/copy.js': { copyFile: () => {} },
+      '../../src/storage/object/delete.js': { deleteObject: () => {} },
+      '../../src/storage/utils/config.js': { default: () => ({}) },
+      '../../src/storage/utils/list.js': { listAllKeys: () => [] },
+      '../../src/storage/queue/jobs.js': { createJob: () => {}, enqueueKeys: () => {} },
     });
 
     const formdata = new Map();
     formdata.set('destination', '/someorg/somedest/');
-    const req = {
-      formData: () => formdata,
-    };
+    const req = { formData: () => formdata };
 
     const resp = await moveRoute({ req, env: {}, daCtx: { key: 'abc.html' } });
-    assert.strictEqual(403, resp.status);
-    assert.strictEqual(0, moCalled.length);
+    assert.strictEqual(resp.status, 403);
+  });
 
-    const resp2 = await moveRoute({ req, env: {}, daCtx: { key: 'zzz.html' } });
-    assert.strictEqual(403, resp2.status);
-    assert.strictEqual(0, moCalled.length);
+  it('returns 403 without write permission on destination', async () => {
+    const hasPermission = (c, k, a) => !(k === 'somedest' && a === 'write');
 
-    const formdata2 = new Map();
-    formdata2.set('destination', '/someorg/someotherdest/');
-    const req2 = {
-      formData: () => formdata2,
-    };
+    const moveRoute = await esmock('../../src/routes/move.js', {
+      '../../src/utils/auth.js': { hasPermission },
+      '../../src/storage/object/copy.js': { copyFile: () => {} },
+      '../../src/storage/object/delete.js': { deleteObject: () => {} },
+      '../../src/storage/utils/config.js': { default: () => ({}) },
+      '../../src/storage/utils/list.js': { listAllKeys: () => [] },
+      '../../src/storage/queue/jobs.js': { createJob: () => {}, enqueueKeys: () => {} },
+    });
 
-    const resp3 = await moveRoute({ req: req2, env: {}, daCtx: { key: 'abc.html' } });
-    assert.strictEqual(403, resp3.status);
-    assert.strictEqual(0, moCalled.length);
+    const formdata = new Map();
+    formdata.set('destination', '/someorg/somedest/');
+    const req = { formData: () => formdata };
 
-    await moveRoute({ req: req2, env: {}, daCtx: { key: 'zzz.html' } });
-    assert.strictEqual(1, moCalled.length);
-    assert.strictEqual('zzz.html', moCalled[0].d.source);
-    assert.strictEqual('someotherdest', moCalled[0].d.destination);
+    const resp = await moveRoute({ req, env: {}, daCtx: { key: 'zzz.html' } });
+    assert.strictEqual(resp.status, 403);
+  });
+
+  it('single file (ext) moves synchronously with copy then delete', async () => {
+    const copyCalled = [];
+    const deleteCalled = [];
+
+    const moveRoute = await esmock('../../src/routes/move.js', {
+      '../../src/utils/auth.js': { hasPermission: () => true },
+      '../../src/storage/object/copy.js': {
+        copyFile: (config, env, daCtx, key) => {
+          copyCalled.push(key);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      },
+      '../../src/storage/object/delete.js': {
+        deleteObject: (client, daCtx, key) => {
+          deleteCalled.push(key);
+          return { status: 204 };
+        },
+      },
+      '../../src/storage/utils/config.js': { default: () => ({}) },
+      '../../src/storage/utils/list.js': { listAllKeys: () => [] },
+      '../../src/storage/queue/jobs.js': { createJob: () => {}, enqueueKeys: () => {} },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/someorg/someotherdest/');
+    const req = { formData: () => formdata };
+
+    const resp = await moveRoute({
+      req,
+      env: {},
+      daCtx: { key: 'zzz.html', ext: 'html' },
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(JSON.parse(resp.body).total, 1);
+    assert.deepStrictEqual(copyCalled, ['zzz.html']);
+    assert.deepStrictEqual(deleteCalled, ['zzz.html']);
+  });
+
+  it('single file skips delete when copy returns non-200', async () => {
+    const deleteCalled = [];
+
+    const moveRoute = await esmock('../../src/routes/move.js', {
+      '../../src/utils/auth.js': { hasPermission: () => true },
+      '../../src/storage/object/copy.js': {
+        copyFile: () => ({ $metadata: { httpStatusCode: 404 } }),
+      },
+      '../../src/storage/object/delete.js': {
+        deleteObject: (client, daCtx, key) => {
+          deleteCalled.push(key);
+          return { status: 204 };
+        },
+      },
+      '../../src/storage/utils/config.js': { default: () => ({}) },
+      '../../src/storage/utils/list.js': { listAllKeys: () => [] },
+      '../../src/storage/queue/jobs.js': { createJob: () => {}, enqueueKeys: () => {} },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/someorg/dest/');
+    const req = { formData: () => formdata };
+
+    await moveRoute({ req, env: {}, daCtx: { key: 'x.html', ext: 'html' } });
+    assert.strictEqual(deleteCalled.length, 0);
+  });
+
+  it('folder with COPY_QUEUE returns 202', async () => {
+    let createdJob = null;
+
+    const moveRoute = await esmock('../../src/routes/move.js', {
+      '../../src/utils/auth.js': { hasPermission: () => true },
+      '../../src/storage/object/copy.js': { copyFile: () => {} },
+      '../../src/storage/object/delete.js': { deleteObject: () => {} },
+      '../../src/storage/utils/config.js': { default: () => ({}) },
+      '../../src/storage/utils/list.js': { listAllKeys: () => ['f', 'f.props'] },
+      '../../src/storage/queue/jobs.js': {
+        createJob: (env, opts) => { createdJob = opts; },
+        enqueueKeys: () => {},
+      },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/someorg/dest/');
+    const req = { formData: () => formdata };
+    const COPY_QUEUE = {};
+    const DA_JOBS = { put: () => {}, delete: () => {} };
+
+    const resp = await moveRoute({
+      req,
+      env: { COPY_QUEUE, DA_JOBS },
+      daCtx: { key: 'f', users: [{ email: 'a@b.c' }] },
+    });
+    assert.strictEqual(resp.status, 202);
+    assert.strictEqual(createdJob.type, 'move');
   });
 });

@@ -9,12 +9,24 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { deleteSource } from '../routes/source.js';
+import { getJob } from '../storage/queue/jobs.js';
 
-export default async function deleteHandler({ env, daCtx }) {
-  const { path } = daCtx;
+export default async function getJobStatus({ env, daCtx }) {
+  const jobId = daCtx.name;
+  const job = await getJob(env, jobId);
+  if (!job) return { status: 404 };
 
-  if (path.startsWith('/source')) return deleteSource({ env, daCtx });
+  const callerEmail = daCtx.users?.[0]?.email;
+  if (job.createdBy !== callerEmail) return { status: 403 };
 
-  return undefined;
+  return {
+    body: JSON.stringify({
+      state: job.state,
+      total: job.total,
+      completed: job.completed,
+      failed: job.failed,
+      errors: job.errors,
+    }),
+    status: 200,
+  };
 }

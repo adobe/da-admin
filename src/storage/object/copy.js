@@ -15,16 +15,16 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getObject from './get.js';
-import getS3Config from '../utils/config.js';
 import { notifyCollab } from '../utils/object.js';
 import { putObjectWithVersion } from '../version/put.js';
 import { getUsersForMetadata } from '../utils/version.js';
-import { listCommand } from '../utils/list.js';
 import { hasPermission } from '../../utils/auth.js';
 
-const MAX_KEYS = 900;
-
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
+  if (!sourceKey || sourceKey.includes('//')) {
+    return { $metadata: { httpStatusCode: 400 } };
+  }
+
   const Key = sourceKey.replace(details.source, details.destination);
 
   if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) {
@@ -117,51 +117,12 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
     throw e;
   } finally {
     if (Key.endsWith('.html')) {
-      // Reset the collab cached state for the copied object
-      await notifyCollab('syncadmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+      try {
+        await notifyCollab('syncadmin', `${daCtx.origin}/source/${daCtx.org}/${Key}`, env);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to notify collab', e);
+      }
     }
   }
 };
-
-export default async function copyObject(env, daCtx, details, isRename) {
-  if (details.source === details.destination) return { body: '', status: 409 };
-
-  const config = getS3Config(env);
-  const client = new S3Client(config);
-
-  let sourceKeys;
-  let remainingKeys = [];
-  let continuationToken;
-
-  try {
-    if (details.continuationToken) {
-      continuationToken = details.continuationToken;
-      remainingKeys = await env.DA_JOBS.get(continuationToken, { type: 'json' });
-      sourceKeys = remainingKeys.splice(0, MAX_KEYS);
-    } else {
-      let resp = await listCommand(daCtx, details, client);
-      sourceKeys = resp.sourceKeys;
-      if (resp.continuationToken) {
-        continuationToken = `copy-${daCtx.org}-${details.source}-${details.destination}-${crypto.randomUUID()}`;
-        while (resp.continuationToken) {
-          // eslint-disable-next-line no-await-in-loop
-          resp = await listCommand(daCtx, { continuationToken: resp.continuationToken }, client);
-          remainingKeys.push(...resp.sourceKeys);
-        }
-      }
-    }
-    await Promise.all(sourceKeys.map(async (key) => {
-      await copyFile(config, env, daCtx, key, details, isRename);
-    }));
-
-    if (remainingKeys.length) {
-      await env.DA_JOBS.put(continuationToken, JSON.stringify(remainingKeys));
-      return { body: JSON.stringify({ continuationToken }), status: 206 };
-    } else if (continuationToken) {
-      await env.DA_JOBS.delete(continuationToken);
-    }
-    return { status: 204 };
-  } catch (e) {
-    return { body: '', status: 404 };
-  }
-}

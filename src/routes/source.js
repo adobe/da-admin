@@ -9,19 +9,50 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { S3Client } from '@aws-sdk/client-s3';
+import processQueue from '@adobe/helix-shared-process-queue';
 import getObject from '../storage/object/get.js';
 import putObject from '../storage/object/put.js';
-import deleteObjects from '../storage/object/delete.js';
+import { deleteObject } from '../storage/object/delete.js';
 import { notifyCollab } from '../storage/utils/object.js';
 
 import putHelper from '../helpers/source.js';
-import deleteHelper from '../helpers/delete.js';
 import { hasPermission } from '../utils/auth.js';
+import getS3Config from '../storage/utils/config.js';
+import { listAllKeys } from '../storage/utils/list.js';
+import { createJob, deleteJob, enqueueKeys } from '../storage/queue/jobs.js';
 
-export async function deleteSource({ req, env, daCtx }) {
+export async function deleteSource({ env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
-  const details = await deleteHelper(req);
-  return /* await */ deleteObjects(env, daCtx, details);
+
+  if (daCtx.ext) {
+    const config = getS3Config(env);
+    const client = new S3Client(config);
+    const resp = await deleteObject(client, daCtx, daCtx.key, env);
+    if (resp instanceof Error) return { status: 500 };
+    return { status: resp?.status ?? 204 };
+  }
+
+  const config = getS3Config(env);
+  const client = new S3Client(config);
+  const allKeys = await listAllKeys(daCtx, client);
+
+  if (!env.COPY_QUEUE) {
+    await processQueue(allKeys, (key) => deleteObject(client, daCtx, key, env), 20);
+    return { status: 204 };
+  }
+
+  const jobId = crypto.randomUUID();
+  await createJob(env, {
+    id: jobId, type: 'delete', total: allKeys.length, daCtx, details: {},
+  });
+  try {
+    await enqueueKeys(env, jobId, allKeys);
+  } catch (e) {
+    await deleteJob(env, jobId);
+    return { body: JSON.stringify({ error: 'Failed to enqueue' }), status: 500 };
+  }
+  return { body: JSON.stringify({ jobId, total: allKeys.length }), status: 202 };
 }
 
 export async function postSource({ req, env, daCtx }) {

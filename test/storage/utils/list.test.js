@@ -13,7 +13,7 @@
 import assert from 'node:assert';
 import sinon from 'sinon';
 
-import formatList, { listCommand } from '../../../src/storage/utils/list.js';
+import formatList, { listCommand, listAllKeys } from '../../../src/storage/utils/list.js';
 
 const MOCK = {
   CommonPrefixes: [
@@ -301,5 +301,109 @@ describe('listCommand', () => {
       sourceKeys: [testDaCtx.key, `${testDaCtx.key}.props`, 'test/file1.html'],
       continuationToken: undefined,
     });
+  });
+});
+
+describe('listAllKeys', () => {
+  let mockS3Client;
+  let testDaCtx;
+
+  beforeEach(() => {
+    mockS3Client = {
+      send: sinon.stub(),
+    };
+
+    testDaCtx = {
+      bucket: 'test-bucket',
+      org: 'adobecom',
+      key: 'folder',
+      ext: undefined,
+    };
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  it('should return single key when item has extension', async () => {
+    const daCtxWithExt = { ...testDaCtx, ext: 'html', key: 'folder/file.html' };
+    const result = await listAllKeys(daCtxWithExt, mockS3Client);
+    assert.deepStrictEqual(result, ['folder/file.html']);
+    assert.strictEqual(mockS3Client.send.callCount, 0);
+  });
+
+  it('should return folder key, props, and contents with org prefix stripped', async () => {
+    const mockResponse = {
+      Contents: [
+        { Key: 'adobecom/folder/file1.html' },
+        { Key: 'adobecom/folder/file2.html' },
+      ],
+    };
+
+    mockS3Client.send.resolves(mockResponse);
+
+    const result = await listAllKeys(testDaCtx, mockS3Client);
+
+    assert.strictEqual(mockS3Client.send.callCount, 1);
+    assert.deepStrictEqual(result, [
+      'folder',
+      'folder.props',
+      'folder/file1.html',
+      'folder/file2.html',
+    ]);
+  });
+
+  it('should filter out keys containing //', async () => {
+    const mockResponse = {
+      Contents: [
+        { Key: 'adobecom/folder/file1.html' },
+        { Key: 'adobecom/folder/bad//key.html' },
+        { Key: 'adobecom/folder/file2.html' },
+      ],
+    };
+
+    mockS3Client.send.resolves(mockResponse);
+
+    const result = await listAllKeys(testDaCtx, mockS3Client);
+
+    assert.deepStrictEqual(result, [
+      'folder',
+      'folder.props',
+      'folder/file1.html',
+      'folder/file2.html',
+    ]);
+  });
+
+  it('should paginate with ContinuationToken', async () => {
+    mockS3Client.send
+      .onFirstCall()
+      .resolves({
+        Contents: [{ Key: 'adobecom/folder/page1.html' }],
+        NextContinuationToken: 'token-1',
+      })
+      .onSecondCall()
+      .resolves({
+        Contents: [{ Key: 'adobecom/folder/page2.html' }],
+      });
+
+    const result = await listAllKeys(testDaCtx, mockS3Client);
+
+    assert.strictEqual(mockS3Client.send.callCount, 2);
+    assert.strictEqual(mockS3Client.send.firstCall.args[0].input.ContinuationToken, undefined);
+    assert.strictEqual(mockS3Client.send.secondCall.args[0].input.ContinuationToken, 'token-1');
+    assert.deepStrictEqual(result, [
+      'folder',
+      'folder.props',
+      'folder/page1.html',
+      'folder/page2.html',
+    ]);
+  });
+
+  it('should use MaxKeys 1000', async () => {
+    mockS3Client.send.resolves({ Contents: [] });
+
+    await listAllKeys(testDaCtx, mockS3Client);
+
+    assert.strictEqual(mockS3Client.send.firstCall.args[0].input.MaxKeys, 1000);
   });
 });

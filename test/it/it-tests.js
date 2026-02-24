@@ -9,7 +9,37 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+/* eslint-disable no-await-in-loop */
 import assert from 'node:assert';
+
+async function pollJobUntilComplete(serverUrl, org, repo, jobId, superUser, timeoutMs = 10000) {
+  const jobUrl = `${serverUrl}/job/${org}/${repo}/${jobId}`;
+  const deadline = Date.now() + timeoutMs;
+  let jobBody;
+  do {
+    // eslint-disable-next-line no-promise-executor-return
+    await new Promise((r) => setTimeout(r, 300));
+    const jobResp = await fetch(jobUrl, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(jobResp.status, 200, `Job lookup failed: ${jobResp.status}`);
+    jobBody = await jobResp.json();
+  } while (jobBody.state !== 'complete' && jobBody.state !== 'failed' && Date.now() < deadline);
+  assert.strictEqual(jobBody.state, 'complete', `Job did not complete: ${JSON.stringify(jobBody)}`);
+}
+
+async function deleteFolderOrWaitForJob(serverUrl, org, repo, superUser, url) {
+  const resp = await fetch(url, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${superUser.accessToken}` },
+  });
+  if (resp.status === 202) {
+    const { jobId } = await resp.json();
+    await pollJobUntilComplete(serverUrl, org, repo, jobId, superUser);
+  } else {
+    assert.strictEqual(resp.status, 204, `Expected 204 or 202, got ${resp.status}`);
+  }
+}
 
 // eslint-disable-next-line func-names
 export default (ctx) => describe('Integration Tests: it tests', function () {
@@ -103,11 +133,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       serverUrl, org, repo, superUser,
     } = ctx;
     const url = `${serverUrl}/source/${org}/${repo}`;
-    const resp = await fetch(url, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${superUser.accessToken}` },
-    });
-    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status} - user: ${superUser.email}`);
+    await deleteFolderOrWaitForJob(serverUrl, org, repo, superUser, url);
 
     // validate bucket is empty
     const listResp = await fetch(`${serverUrl}/list/${org}/${repo}`, {
@@ -451,6 +477,88 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.ok(fileNames.includes('page2'), 'Should list page2');
   });
 
+  it('[super user] folder copy via queue returns 202 and job completes', async function folderCopyViaQueue() {
+    this.timeout(15000);
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+
+    const formData = new FormData();
+    formData.append('destination', `/${org}/${repo}/copied-folder`);
+
+    const copyUrl = `${serverUrl}/copy/${org}/${repo}/test-folder`;
+    const copyResp = await fetch(copyUrl, {
+      method: 'POST',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+
+    if (copyResp.status === 204) {
+      // No COPY_QUEUE: sync fallback; verify copy happened anyway
+      const listResp = await fetch(`${serverUrl}/list/${org}/${repo}/copied-folder`, {
+        headers: { Authorization: `Bearer ${superUser.accessToken}` },
+      });
+      assert.strictEqual(listResp.status, 200, 'Copied folder should exist');
+      const listBody = await listResp.json();
+      const names = listBody.map((item) => item.name);
+      assert.ok(names.includes('page1'), 'Should have page1');
+      assert.ok(names.includes('page2'), 'Should have page2');
+      return;
+    }
+
+    assert.strictEqual(copyResp.status, 202, `Expected 202, got ${copyResp.status}`);
+    const { jobId } = await copyResp.json();
+    assert.ok(jobId, 'Expected jobId in response');
+
+    await pollJobUntilComplete(serverUrl, org, repo, jobId, superUser);
+
+    const listResp = await fetch(`${serverUrl}/list/${org}/${repo}/copied-folder`, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(listResp.status, 200, 'Copied folder should exist');
+    const listBody = await listResp.json();
+    const names = listBody.map((item) => item.name);
+    assert.ok(names.includes('page1'), 'Should have page1');
+    assert.ok(names.includes('page2'), 'Should have page2');
+  });
+
+  it('[super user] folder move via queue returns 202 and job completes', async function folderMoveViaQueue() {
+    this.timeout(15000);
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+
+    const formData = new FormData();
+    formData.append('destination', `/${org}/${repo}/moved-folder`);
+
+    const moveUrl = `${serverUrl}/move/${org}/${repo}/copied-folder`;
+    const moveResp = await fetch(moveUrl, {
+      method: 'POST',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+
+    if (moveResp.status === 204) {
+      // No COPY_QUEUE: sync fallback
+      const listResp = await fetch(`${serverUrl}/list/${org}/${repo}/moved-folder`, {
+        headers: { Authorization: `Bearer ${superUser.accessToken}` },
+      });
+      assert.strictEqual(listResp.status, 200, 'Moved folder should exist');
+      return;
+    }
+
+    assert.strictEqual(moveResp.status, 202, `Expected 202, got ${moveResp.status}`);
+    const { jobId } = await moveResp.json();
+    assert.ok(jobId, 'Expected jobId in response');
+
+    await pollJobUntilComplete(serverUrl, org, repo, jobId, superUser);
+
+    const listResp = await fetch(`${serverUrl}/list/${org}/${repo}/moved-folder`, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(listResp.status, 200, 'Moved folder should exist');
+  });
+
   it('[anonymous] cannot delete an object', async () => {
     const {
       serverUrl, org, repo, key,
@@ -488,11 +596,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
       serverUrl, org, repo, superUser,
     } = ctx;
     const url = `${serverUrl}/source/${org}/${repo}`;
-    const resp = await fetch(url, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${superUser.accessToken}` },
-    });
-    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status} - user: ${superUser.email}`);
+    await deleteFolderOrWaitForJob(serverUrl, org, repo, superUser, url);
   });
 
   it('[limited user] should logout', async () => {

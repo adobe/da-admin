@@ -12,16 +12,8 @@
 /* eslint-disable consistent-return */
 import assert from 'node:assert';
 import esmock from 'esmock';
-import { mockClient } from 'aws-sdk-client-mock';
-import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
-
-const s3Mock = mockClient(S3Client);
 
 describe('Object delete', () => {
-  beforeEach(() => {
-    s3Mock.reset();
-  });
-
   describe('single context', () => {
     it('Delete a file', async () => {
       const collabCalled = [];
@@ -220,116 +212,6 @@ describe('Object delete', () => {
       } finally {
         globalThis.fetch = savedFetch;
       }
-    });
-  });
-
-  describe('multiple files context', () => {
-    it('Handles no continuation', async () => {
-      const daCtx = {
-        org: 'testorg',
-        key: 'foo/bar.html',
-        aclCtx: { pathLookup: new Map() },
-      };
-      const env = {
-        dacollab: {
-          fetch: () => ({ body: { cancel: () => {} } }),
-        },
-      };
-      const mockPostObjectVersion = async () => ({ status: 201 });
-      const mockSignedUrl = async () => 'http://localhost:8080/test/';
-      const deleteObjects = await esmock(
-        '../../../src/storage/object/delete.js',
-        {
-          '../../../src/storage/version/put.js': {
-            postObjectVersionWithLabel: mockPostObjectVersion,
-          },
-          '@aws-sdk/s3-request-presigner': {
-            getSignedUrl: mockSignedUrl,
-          },
-        },
-      );
-      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }] });
-      const resp = await deleteObjects(env, daCtx, {});
-      assert.strictEqual(resp.status, 204);
-    });
-
-    it('Handles continuation', async () => {
-      const daCtx = {
-        org: 'testorg',
-        key: 'foo/bar.html',
-        aclCtx: { pathLookup: new Map() },
-      };
-      const env = {
-        dacollab: {
-          fetch: () => ({ body: { cancel: () => {} } }),
-        },
-      };
-      const mockPostObjectVersion = async () => ({ status: 201 });
-      const mockSignedUrl = async () => 'http://localhost:8080/test/';
-      const deleteObjects = await esmock(
-        '../../../src/storage/object/delete.js',
-        {
-          '../../../src/storage/version/put.js': {
-            postObjectVersionWithLabel: mockPostObjectVersion,
-          },
-          '@aws-sdk/s3-request-presigner': {
-            getSignedUrl: mockSignedUrl,
-          },
-        },
-      );
-      s3Mock.on(ListObjectsV2Command).resolves({ Contents: [{ Key: 'foo/bar.html' }], NextContinuationToken: 'token' });
-      const resp = await deleteObjects(env, daCtx, {});
-      assert.strictEqual(resp.status, 206);
-    });
-
-    it('Delete permissions', async () => {
-      const listCommand = () => ({
-        sourceKeys: ['a', 'b', 'c'],
-      });
-      const getSignedUrl = (c, dc) => {
-        assert.strictEqual(dc.input.Bucket, 'testbucket');
-        return dc.input.Key;
-      };
-      const mockS3Client = class {};
-
-      const deleteObjects = await esmock('../../../src/storage/object/delete.js', {
-        '../../../src/storage/utils/list.js': {
-          listCommand,
-        },
-        '@aws-sdk/client-s3': {
-          S3Client: mockS3Client,
-        },
-        '@aws-sdk/s3-request-presigner': {
-          getSignedUrl,
-        },
-      });
-
-      const pathLookup = new Map();
-      pathLookup.set('harry@foo.org', [
-        { path: '/a', actions: [] },
-        { path: '/b', actions: ['read'] },
-        { path: '/c', actions: ['read', 'write'] },
-      ]);
-      const aclCtx = { pathLookup };
-      const users = [{ email: 'harry@foo.org' }];
-      const ctx = {
-        bucket: 'testbucket', org: 'myorg', aclCtx, users, key: 'notused',
-      };
-
-      const fetchURLs = [];
-      const savedFetch = globalThis.fetch;
-      try {
-        globalThis.fetch = async (url) => {
-          fetchURLs.push(url);
-          return { status: 200 };
-        };
-
-        const resp = await deleteObjects({}, ctx, {});
-        assert.strictEqual(resp.status, 204);
-      } finally {
-        globalThis.fetch = savedFetch;
-      }
-      assert.deepStrictEqual(['myorg/c'], fetchURLs);
     });
   });
 });

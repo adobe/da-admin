@@ -16,8 +16,15 @@ import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
+import { handleQueueBatch } from './storage/queue/consumer.js';
+
+export { JobState } from './storage/queue/job-state-do.js';
 
 export default {
+  async queue(batch, env) {
+    await handleQueueBatch(batch, env);
+  },
+
   /**
    * @param {Request} req
    * @param {Env} env
@@ -52,24 +59,29 @@ export default {
     }
 
     let respObj;
-    switch (req.method) {
-      case 'HEAD':
-        respObj = await headHandler({ env, daCtx });
-        break;
-      case 'GET':
-        respObj = await getHandler({ env, daCtx });
-        break;
-      case 'PUT':
-        respObj = await postHandler({ req, env, daCtx });
-        break;
-      case 'POST':
-        respObj = await postHandler({ req, env, daCtx });
-        break;
-      case 'DELETE':
-        respObj = await deleteHandler({ req, env, daCtx });
-        break;
-      default:
-        respObj = { status: 405 };
+    try {
+      switch (req.method) {
+        case 'HEAD':
+          respObj = await headHandler({ env, daCtx });
+          break;
+        case 'GET':
+          respObj = await getHandler({ env, daCtx });
+          break;
+        case 'PUT':
+          respObj = await postHandler({ req, env, daCtx });
+          break;
+        case 'POST':
+          respObj = await postHandler({ req, env, daCtx });
+          break;
+        case 'DELETE':
+          respObj = await deleteHandler({ env, daCtx });
+          break;
+        default:
+          respObj = { status: 405 };
+      }
+    } catch (e) {
+      console.error('Handler error', e);
+      return daResp({ status: 500 });
     }
 
     if (!respObj) return daResp({ status: 404 });
