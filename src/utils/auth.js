@@ -186,7 +186,7 @@ function getIdents(user) {
     }
   }
 
-  return idents;
+  return idents.map((ident) => ident?.toLowerCase());
 }
 
 export function getUserActions(pathLookup, user, target) {
@@ -273,7 +273,8 @@ export async function getAclCtx(env, org, users, key, api) {
       effectivePath = effectivePath.slice(0, -1);
     }
 
-    groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
+    groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((g) => {
+      const group = g.toLowerCase();
       if (!pathLookup.has(group)) pathLookup.set(group, []);
       const groupEntries = pathLookup.get(group);
       const effectiveActions = actions
@@ -322,7 +323,9 @@ export async function getAclCtx(env, org, users, key, api) {
   }
 
   // Expose the action trace or not?
-  actionTrace = users.every((u) => aclTrace.includes(u.email)) ? actionTrace : undefined;
+  actionTrace = users.every((u) => aclTrace.includes(u.email?.toLowerCase()))
+    ? actionTrace
+    : undefined;
 
   if (k === 'CONFIG' || api === 'versionsource') {
     actionSet.add('read');
