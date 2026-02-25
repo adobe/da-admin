@@ -1,3 +1,10 @@
+## [1.1.6](https://github.com/adobe/da-admin/compare/v1.1.5...v1.1.6) (2026-02-25)
+
+
+### Bug Fixes
+
+* **auth:** make user identifier comparison case-insensitive ([#246](https://github.com/adobe/da-admin/issues/246)) ([aac2136](https://github.com/adobe/da-admin/commit/aac21366c856cf5cf3c59502768609bfaea6601b))
+
 ## [1.1.5](https://github.com/adobe/da-admin/compare/v1.1.4...v1.1.5) (2026-02-18)
 
 
