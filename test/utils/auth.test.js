@@ -130,12 +130,12 @@ describe('DA auth', () => {
           data: [
             {
               path: '/x',
-              groups: '2345B0EA551D747/4711,123,joe@bloggs.org',
+              groups: '2345B0EA551D747/4711,123,joe@bloggs.org,MEL@bloggs.org',
               actions: 'write',
             },
             {
               path: '/**',
-              groups: '2345B0EA551D747/4711,123,joe@bloggs.org',
+              groups: '2345B0EA551D747/4711,123,joe@bloggs.org,MEL@bloggs.org',
               actions: 'read',
             },
             {
@@ -174,8 +174,13 @@ describe('DA auth', () => {
               actions: 'write',
             },
             {
+              path: '/tar/abc',
+              groups: '2345B0ea551D747/4711',
+              actions: 'write',
+            },
+            {
               path: 'ACLTRACE',
-              groups: 'joe@bloggs.org',
+              groups: 'joe@bloggs.org,MEL@bloggs.org',
               actions: 'read',
             },
             {
@@ -198,14 +203,14 @@ describe('DA auth', () => {
     it('test path sorting', async () => {
       const users = [{ groups: [{ orgIdent: '2345B0EA551D747', groupName: 4711 }] }];
       const aclCtx = await getAclCtx(env2, 'test', users, '/mykey');
-      const paths = aclCtx.pathLookup.get('2345B0EA551D747/4711').map((x) => x.path);
+      const paths = aclCtx.pathLookup.get('2345b0ea551d747/4711').map((x) => x.path);
 
-      assert.strictEqual(8, paths.length);
-      assert.strictEqual('/bar/q', paths[0], 'q should be counted as shorter than +**');
-      assert.strictEqual('/bar/+**', paths[1], 'bar/+** should be longer than bar/');
-      assert(paths[3] === '/bar' || paths[4] === '/bar', 'Within the same length there is no order');
-      assert.strictEqual('/x', paths[5]);
-      assert(paths[6] === '/**' || paths[7] === '/**', '/** should be counted as longer than /x');
+      assert.strictEqual(9, paths.length);
+      assert.strictEqual('/bar/q', paths[1], 'q should be counted as longer than +**');
+      assert.strictEqual('/bar/+**', paths[2], 'bar/+** should be longer than bar/');
+      assert(paths[4] === '/bar' || paths[5] === '/bar', 'Within the same length there is no order');
+      assert.strictEqual('/x', paths[6]);
+      assert(paths[7] === '/**' || paths[8] === '/**', '/** should be counted as shorter than /x');
     });
 
     it('test hasPermission returns false when path is null or undefined', async () => {
@@ -289,6 +294,30 @@ describe('DA auth', () => {
       }, 'test', 'read'));
     });
 
+    it('test hasPermissions2a', async () => {
+      const users = [{ orgs: [{ orgIdent: '2345B0ea551D747', groups: [{ groupName: '8080' }] }] }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({
+        users, org: 'test', key: '/test', aclCtx,
+      }, '/test', 'write'));
+      assert(hasPermission({
+        users, org: 'test', key: '/test', aclCtx,
+      }, '/test', 'read'));
+    });
+
+    it('test hasPermissions2b', async () => {
+      const users = [{ orgs: [{ orgIdent: '2345B0EA551D747', groups: [{ groupName: '8080' }] }] }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({
+        users, org: 'test', key: '/test', aclCtx,
+      }, '/tar/abc', 'write'));
+      assert(hasPermission({
+        users, org: 'test', key: '/test', aclCtx,
+      }, '/tar/abc', 'read'));
+    });
+
     it('test hasPermissions3', async () => {
       const key = '/test';
       const users = [{ orgs: [{ orgIdent: '2345B0EA551D747', groups: [{ groupName: '4711' }, { groupName: '8080' }] }] }];
@@ -343,6 +372,54 @@ describe('DA auth', () => {
       }, '/test', 'write'));
     });
 
+    it('test hasPermissions7', async () => {
+      const users = [{ email: 'JOE@BLOGGS.ORG', orgs: [] }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '/test', 'read'));
+      assert(!hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '/test', 'write'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '/test',
+      }, '/test', 'read'));
+      assert(!hasPermission({
+        users, org: 'test', aclCtx, key: '/test',
+      }, '/test', 'write'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '/test',
+      }, '/x', 'read'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '/test',
+      }, '/x', 'write'));
+    });
+
+    it('test hasPermissions8', async () => {
+      const users = [{ email: 'mel@bloggs.org', orgs: [] }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/test');
+
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '/test', 'read'));
+      assert(!hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '/test', 'write'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '/test',
+      }, '/test', 'read'));
+      assert(!hasPermission({
+        users, org: 'test', aclCtx, key: '/test',
+      }, '/test', 'write'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '/test',
+      }, '/x', 'read'));
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '/test',
+      }, '/x', 'write'));
+    });
+
     it('test trace information', async () => {
       const users = [{ email: 'joe@bloggs.org', orgs: [{ orgIdent: '2345B0EA551D747', groups: [{ groupName: '4711' }] }] }];
       const aclCtx = await getAclCtx(env2, 'test', users, '/bar/blah.html');
@@ -353,10 +430,18 @@ describe('DA auth', () => {
       const groupTraceIdx = 1 - emailTraceIdx;
       assert.deepStrictEqual({ group: 'joe@bloggs.org', path: '/**', actions: ['read'] }, trace[emailTraceIdx]);
       assert.deepStrictEqual({
-        group: '2345B0EA551D747/4711',
+        group: '2345b0ea551d747/4711',
         path: '/bar/+**',
         actions: ['read', 'write'],
       }, trace[groupTraceIdx]);
+    });
+
+    it('test trace information2', async () => {
+      const users = [{ email: 'MEL@BLOGGS.ORG', orgs: [{ orgIdent: 'abcd', groups: [{ groupName: '1234' }] }] }];
+      const aclCtx = await getAclCtx(env2, 'test', users, '/bar/blah.html');
+      const trace = aclCtx.actionTrace;
+
+      assert.deepStrictEqual([{ group: 'mel@bloggs.org', path: '/**', actions: ['read'] }], trace);
     });
 
     it('test CONFIG api', async () => {
@@ -752,7 +837,7 @@ describe('DA auth', () => {
       { path: '/da-aem-boilerplate/authtest/**', actions: ['read', 'write'] },
       { path: '/**', actions: [] },
     ];
-    pathlookup.set('ABCDEFG/grp1', patharr2);
+    pathlookup.set('abcdefg/grp1', patharr2);
 
     const user = {
       email: 'joe@acme.com',
@@ -838,16 +923,16 @@ describe('DA auth', () => {
       }],
     };
     const pathLookup = new Map();
-    pathLookup.set('ABCDEFG', [{ ident: 'ABCDEFG', path: '/xyz', actions: ['read'] }]);
-    pathLookup.set('ABCDEFG/grp1', [{ ident: 'ABCDEFG/grp1', path: '/xyz', actions: ['read'] }]);
-    pathLookup.set('ABCDEFG/111', [{ ident: 'ABCDEFG/111', path: '/xyz', actions: ['read'] }]);
-    pathLookup.set('ABCDEFG/foo@bar.org', [{ ident: 'ABCDEFG/foo@bar.org', path: '/xyz', actions: ['read'] }]);
+    pathLookup.set('abcdefg', [{ ident: 'abcdefg', path: '/xyz', actions: ['read'] }]);
+    pathLookup.set('abcdefg/grp1', [{ ident: 'abcdefg/grp1', path: '/xyz', actions: ['read'] }]);
+    pathLookup.set('abcdefg/111', [{ ident: 'abcdefg/111', path: '/xyz', actions: ['read'] }]);
+    pathLookup.set('abcdefg/foo@bar.org', [{ ident: 'abcdefg/foo@bar.org', path: '/xyz', actions: ['read'] }]);
     pathLookup.set('org1/grp1', [{ ident: 'org1/grp1', path: '/xyz', actions: ['read'] }]);
     pathLookup.set('org1/111', [{ ident: 'org1/111', path: '/xyz', actions: ['read'] }]);
-    pathLookup.set('HIJKLMN', [{ ident: 'HIJKLMN', path: '/xyz', actions: ['read'] }]);
-    pathLookup.set('HIJKLMN/grp2', [{ ident: 'HIJKLMN/grp2', path: '/xyz', actions: ['read'] }]);
-    pathLookup.set('HIJKLMN/222', [{ ident: 'HIJKLMN/222', path: '/xyz', actions: ['read'] }]);
-    pathLookup.set('HIJKLMN/foo@bar.org', [{ ident: 'HIJKLMN/foo@bar.org', path: '/xyz', actions: ['read'] }]);
+    pathLookup.set('hijklmn', [{ ident: 'hijklmn', path: '/xyz', actions: ['read'] }]);
+    pathLookup.set('hijklmn/grp2', [{ ident: 'hijklmn/grp2', path: '/xyz', actions: ['read'] }]);
+    pathLookup.set('hijklmn/222', [{ ident: 'hijklmn/222', path: '/xyz', actions: ['read'] }]);
+    pathLookup.set('hijklmn/foo@bar.org', [{ ident: 'hijklmn/foo@bar.org', path: '/xyz', actions: ['read'] }]);
     pathLookup.set('org2/grp2', [{ ident: 'org2/grp2', path: '/xyz', actions: ['read'] }]);
     pathLookup.set('org2/222', [{ ident: 'org2/222', path: '/xyz', actions: ['read'] }]);
     pathLookup.set('foo@bar.org', [{ ident: 'foo@bar.org', path: '/xyz', actions: ['read'] }]);
@@ -856,12 +941,12 @@ describe('DA auth', () => {
 
     const matchedIds = res.trace.map((r) => r.ident);
     assert.strictEqual(7, matchedIds.length);
-    assert(matchedIds.includes('ABCDEFG'));
-    assert(matchedIds.includes('ABCDEFG/grp1'));
-    assert(matchedIds.includes('ABCDEFG/foo@bar.org'));
-    assert(matchedIds.includes('HIJKLMN'));
-    assert(matchedIds.includes('HIJKLMN/grp2'));
-    assert(matchedIds.includes('HIJKLMN/foo@bar.org'));
+    assert(matchedIds.includes('abcdefg'));
+    assert(matchedIds.includes('abcdefg/grp1'));
+    assert(matchedIds.includes('abcdefg/foo@bar.org'));
+    assert(matchedIds.includes('hijklmn'));
+    assert(matchedIds.includes('hijklmn/grp2'));
+    assert(matchedIds.includes('hijklmn/foo@bar.org'));
     assert(matchedIds.includes('foo@bar.org'));
   });
 
@@ -877,7 +962,7 @@ describe('DA auth', () => {
       { path: '/blah/hoho/hihi', actions: ['read'] },
       { path: '/hello/+**', actions: ['read', 'write'] },
     ]);
-    pathLookup.set('ABCDEF', [
+    pathLookup.set('abcdef', [
       { path: '/blah/hohoho', actions: ['read'] },
       { path: '/blah/+**', actions: ['read'] },
       { path: '/hello/+**', actions: ['read'] },
