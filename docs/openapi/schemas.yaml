@@ -4,7 +4,8 @@ source:
   properties:
     data:
       description: The content to store at the specified location.
-      type: blob
+      type: string
+      format: binary
 
 copy:
   source:
@@ -64,15 +65,14 @@ sourceInfo:
       allOf:
         - required:
             - editUrl
-            - viewUrl
-            - status
+            - contentUrl
         - properties:
             editUrl:
               description: The edit URL of the resource.
               type: string
               format: url
-            viewUrl:
-              description: The view URL of the resource. For a site, used in AEM fstab.yaml.
+            contentUrl:
+              description: The content URL of the resource.
               type: string
               format: url
             status:
@@ -110,8 +110,6 @@ sourceList:
             type: object
 
 version-list:
-  required:
-    - versions
   description: List of audits and sources.
   type: array
   items:

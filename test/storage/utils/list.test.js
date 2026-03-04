@@ -1,8 +1,18 @@
+/*
+ * Copyright 2025 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
 /* eslint-env mocha */
-import assert from 'assert';
+import assert from 'node:assert';
 import sinon from 'sinon';
 
-import getDaCtx from '../../../src/utils/daCtx.js';
 import formatList, { listCommand } from '../../../src/storage/utils/list.js';
 
 const MOCK = {
@@ -24,7 +34,7 @@ const MOCK = {
       LastModified: new Date('2025-01-01'),
     },
     {
-      Key: 'folder-only.props', 
+      Key: 'folder-only.props',
       LastModified: new Date('2025-01-01'),
     },
     {
@@ -46,23 +56,19 @@ const MOCK = {
     {
       Key: 'empty-folder-with-sibling-file.html',
       LastModified: new Date('2025-01-01'),
-    }
+    },
   ],
 };
 
-const req = new Request('https://example.com/source/adobecom');
-
-const daCtx = getDaCtx(req, {});
-
 describe('Format object list', () => {
-  const list = formatList(MOCK, daCtx);
+  const list = formatList(MOCK);
 
   it('should return a true folder / common prefix', () => {
     assert.strictEqual(list[0].name, 'blog');
   });
 
   it('should return a contents-based folder', () => {
-    const folderOnly = list.find((item) => { return item.name === 'folder-only' });
+    const folderOnly = list.find((item) => item.name === 'folder-only');
     assert.strictEqual(folderOnly.name, 'folder-only');
   });
 
@@ -70,38 +76,38 @@ describe('Format object list', () => {
     const found = list.reduce((acc, item) => {
       if (item.name === 'blog') acc.push(item);
       return acc;
-    },[]);
+    }, []);
 
     assert.strictEqual(found.length, 1);
   });
 
   it('should not have a filename props file in the list', () => {
-    const propsSidecar = list.find((item) => { return item.name === 'dark-alley.jpg.props' });
+    const propsSidecar = list.find((item) => item.name === 'dark-alley.jpg.props');
     assert.strictEqual(propsSidecar, undefined);
   });
 
   it('should handle empty folders with sibling file names of same name', () => {
-    const filtered = list.filter((item) => { return item.name === 'empty-folder-with-sibling-file' });
+    const filtered = list.filter((item) => item.name === 'empty-folder-with-sibling-file');
     assert.strictEqual(filtered.length, 2);
   });
 
   it('should handle empty CommonPrefixes', () => {
     const emptyMock = { Contents: MOCK.Contents };
-    const result = formatList(emptyMock, daCtx);
+    const result = formatList(emptyMock);
     assert(Array.isArray(result));
     assert(result.length > 0);
   });
 
   it('should handle empty Contents', () => {
     const emptyMock = { CommonPrefixes: MOCK.CommonPrefixes };
-    const result = formatList(emptyMock, daCtx);
+    const result = formatList(emptyMock);
     assert(Array.isArray(result));
     assert(result.length > 0);
   });
 
   it('should handle both empty CommonPrefixes and Contents', () => {
     const emptyMock = {};
-    const result = formatList(emptyMock, daCtx);
+    const result = formatList(emptyMock);
     assert(Array.isArray(result));
     assert.strictEqual(result.length, 0);
   });
@@ -110,13 +116,13 @@ describe('Format object list', () => {
     const mockWithExtensionFolder = {
       CommonPrefixes: [
         { Prefix: 'file.jpg/' },
-        { Prefix: 'normal-folder/' }
-      ]
+        { Prefix: 'normal-folder/' },
+      ],
     };
-    const result = formatList(mockWithExtensionFolder, daCtx);
-    const extensionFolder = result.find(item => item.name === 'file.jpg');
+    const result = formatList(mockWithExtensionFolder);
+    const extensionFolder = result.find((item) => item.name === 'file.jpg');
     assert.strictEqual(extensionFolder, undefined);
-    const normalFolder = result.find(item => item.name === 'normal-folder');
+    const normalFolder = result.find((item) => item.name === 'normal-folder');
     assert(normalFolder);
   });
 
@@ -126,10 +132,10 @@ describe('Format object list', () => {
         {
           Key: 'file.name.with.multiple.dots',
           LastModified: new Date('2025-01-01'),
-        }
-      ]
+        },
+      ],
     };
-    const result = formatList(mockWithComplexFile, daCtx);
+    const result = formatList(mockWithComplexFile);
     assert.strictEqual(result.length, 0);
   });
 
@@ -139,10 +145,10 @@ describe('Format object list', () => {
         {
           Key: '.hidden-file',
           LastModified: new Date('2025-01-01'),
-        }
-      ]
+        },
+      ],
     };
-    const result = formatList(mockWithHiddenFile, daCtx);
+    const result = formatList(mockWithHiddenFile);
     assert.strictEqual(result.length, 0);
   });
 
@@ -152,11 +158,11 @@ describe('Format object list', () => {
         {
           Key: 'test.props',
           LastModified: new Date('2025-01-01'),
-        }
-      ]
+        },
+      ],
     };
-    const result = formatList(mockWithProps, daCtx);
-    const propsItem = result.find(item => item.name === 'test');
+    const result = formatList(mockWithProps);
+    const propsItem = result.find((item) => item.name === 'test');
     assert(propsItem);
     assert.strictEqual(propsItem.ext, undefined);
     assert.strictEqual(propsItem.lastModified, undefined);
@@ -169,11 +175,11 @@ describe('Format object list', () => {
         {
           Key: 'test.props',
           LastModified: new Date('2025-01-01'),
-        }
-      ]
+        },
+      ],
     };
-    const result = formatList(mockWithBoth, daCtx);
-    const testItems = result.filter(item => item.name === 'test');
+    const result = formatList(mockWithBoth);
+    const testItems = result.filter((item) => item.name === 'test');
     assert.strictEqual(testItems.length, 1);
   });
 
@@ -182,10 +188,10 @@ describe('Format object list', () => {
       Contents: [
         { Key: 'zebra.html', LastModified: new Date('2025-01-01') },
         { Key: 'alpha.html', LastModified: new Date('2025-01-01') },
-        { Key: 'beta.html', LastModified: new Date('2025-01-01') }
-      ]
+        { Key: 'beta.html', LastModified: new Date('2025-01-01') },
+      ],
     };
-    const result = formatList(mockForSorting, daCtx);
+    const result = formatList(mockForSorting);
     assert.strictEqual(result[0].name, 'alpha');
     assert.strictEqual(result[1].name, 'beta');
     assert.strictEqual(result[2].name, 'zebra');
@@ -198,15 +204,15 @@ describe('listCommand', () => {
 
   beforeEach(() => {
     mockS3Client = {
-      send: sinon.stub()
+      send: sinon.stub(),
     };
-    
+
     // Create a proper daCtx object for testing
     testDaCtx = {
       bucket: 'test-bucket',
       org: 'adobecom',
       key: 'test',
-      ext: undefined
+      ext: undefined,
     };
   });
 
@@ -217,7 +223,7 @@ describe('listCommand', () => {
   it('should return sourceKeys array when item has extension', async () => {
     const daCtxWithExt = { ...testDaCtx, ext: 'html' };
     const result = await listCommand(daCtxWithExt, {}, mockS3Client);
-    
+
     assert.deepStrictEqual(result, { sourceKeys: [testDaCtx.key] });
     assert.strictEqual(mockS3Client.send.callCount, 0);
   });
@@ -226,34 +232,34 @@ describe('listCommand', () => {
     const mockResponse = {
       Contents: [
         { Key: 'adobecom/test/file1.html' },
-        { Key: 'adobecom/test/file2.html' }
+        { Key: 'adobecom/test/file2.html' },
       ],
-      NextContinuationToken: 'next-token'
+      NextContinuationToken: 'next-token',
     };
-    
+
     mockS3Client.send.resolves(mockResponse);
-    
+
     const result = await listCommand(testDaCtx, {}, mockS3Client);
-    
+
     assert.strictEqual(mockS3Client.send.callCount, 1);
     assert.deepStrictEqual(result, {
       sourceKeys: [testDaCtx.key, `${testDaCtx.key}.props`, 'test/file1.html', 'test/file2.html'],
-      continuationToken: 'next-token'
+      continuationToken: 'next-token',
     });
   });
 
   it('should handle continuation token', async () => {
     const mockResponse = {
       Contents: [
-        { Key: 'adobecom/test/file3.html' }
-      ]
+        { Key: 'adobecom/test/file3.html' },
+      ],
     };
-    
+
     mockS3Client.send.resolves(mockResponse);
-    
+
     const details = { continuationToken: 'prev-token' };
     const result = await listCommand(testDaCtx, details, mockS3Client);
-    
+
     assert.strictEqual(mockS3Client.send.callCount, 1);
     const callArgs = mockS3Client.send.firstCall.args[0];
     console.log('Call args:', JSON.stringify(callArgs, null, 2));
@@ -261,39 +267,39 @@ describe('listCommand', () => {
     assert.strictEqual(callArgs.input.ContinuationToken, 'prev-token');
     assert.deepStrictEqual(result, {
       sourceKeys: ['test/file3.html'],
-      continuationToken: undefined
+      continuationToken: undefined,
     });
   });
 
   it('should handle empty Contents response', async () => {
     const mockResponse = {
-      Contents: []
+      Contents: [],
     };
-    
+
     mockS3Client.send.resolves(mockResponse);
-    
+
     const result = await listCommand(testDaCtx, {}, mockS3Client);
-    
+
     assert.deepStrictEqual(result, {
       sourceKeys: [testDaCtx.key, `${testDaCtx.key}.props`],
-      continuationToken: undefined
+      continuationToken: undefined,
     });
   });
 
   it('should handle response without NextContinuationToken', async () => {
     const mockResponse = {
       Contents: [
-        { Key: 'test/file1.html' }
-      ]
+        { Key: 'test/file1.html' },
+      ],
     };
-    
+
     mockS3Client.send.resolves(mockResponse);
-    
+
     const result = await listCommand(testDaCtx, {}, mockS3Client);
-    
+
     assert.deepStrictEqual(result, {
       sourceKeys: [testDaCtx.key, `${testDaCtx.key}.props`, 'test/file1.html'],
-      continuationToken: undefined
+      continuationToken: undefined,
     });
   });
 });

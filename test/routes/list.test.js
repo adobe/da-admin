@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
+import assert from 'node:assert';
 import esmock from 'esmock';
 
 describe('List Route', () => {
@@ -18,7 +18,7 @@ describe('List Route', () => {
     const listObjects = (e, c) => {
       loCalled.push({ e, c });
       return {};
-    }
+    };
 
     const ctx = { org: 'foo', key: 'q/q/q' };
     const hasPermission = (c, k, a) => {
@@ -26,28 +26,31 @@ describe('List Route', () => {
         return false;
       }
       return true;
-    }
+    };
 
-    const getList = await esmock(
-      '../../src/routes/list.js', {
-        '../../src/storage/object/list.js': {
-          default: listObjects
-        },
-        '../../src/utils/auth.js': {
-          hasPermission
-        }
-      }
-    );
+    const getList = await esmock('../../src/routes/list.js', {
+      '../../src/storage/object/list.js': {
+        default: listObjects,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission,
+      },
+    });
     const resp = await getList({ env: {}, daCtx: ctx, aclCtx: {} });
     assert.strictEqual(403, resp.status);
     assert.strictEqual(0, loCalled.length);
 
     const aclCtx = { pathLookup: new Map() };
-    await getList({ env: {}, daCtx: { org: 'bar', key: 'q/q', users: [], aclCtx }});
+    await getList({
+      env: {},
+      daCtx: {
+        org: 'bar', key: 'q/q', users: [], aclCtx,
+      },
+    });
     assert.strictEqual(1, loCalled.length);
     assert.strictEqual('q/q', loCalled[0].c.key);
 
-    const childRules = aclCtx.childRules;
+    const { childRules } = aclCtx;
     assert.strictEqual(1, childRules.length);
     assert(childRules[0].startsWith('/q/q/**='), 'Should have defined some child rule');
   });

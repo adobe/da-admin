@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -11,6 +11,6 @@
  */
 import getObject from '../object/get.js';
 
-export async function getObjectVersion(env, { bucket, org, key }, head) {
-  return getObject(env, { bucket, org, key: `.da-versions/${key}` }, head);
+export async function getObjectVersion(env, { bucket, org, key }, head, conditionalHeaders) {
+  return getObject(env, { bucket, org, key: `.da-versions/${key}` }, head, conditionalHeaders);
 }

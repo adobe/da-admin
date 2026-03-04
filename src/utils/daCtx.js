@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -18,7 +18,8 @@ import { getAclCtx, getUsers } from './auth.js';
  * @returns {DaCtx} The Dark Alley Context.
  */
 export default async function getDaCtx(req, env) {
-  let { pathname } = new URL(req.url);
+  const url = new URL(req.url);
+  let { pathname } = url;
   // Remove proxied api route
   if (pathname.startsWith('/api')) pathname = pathname.replace('/api', '');
 
@@ -35,6 +36,11 @@ export default async function getDaCtx(req, env) {
   const [org, ...parts] = split;
   const bucket = env.AEM_BUCKET_NAME;
 
+  // Extract conditional headers
+  const ifMatch = req.headers?.get('if-match') || null;
+  const ifNoneMatch = req.headers?.get('if-none-match') || null;
+  const continuationToken = req.headers?.get('da-continuation-token') || null;
+
   // Set base details
   const daCtx = {
     path: pathname,
@@ -45,11 +51,30 @@ export default async function getDaCtx(req, env) {
     fullKey,
     origin: new URL(req.url).origin,
     method: req.method,
+    conditionalHeaders: {
+      ifMatch,
+      ifNoneMatch,
+    },
+    continuationToken,
   };
 
   // Sanitize the remaining path parts
   const path = parts.filter((part) => part !== '');
   const keyBase = path.join('/');
+
+  // Compare incoming pathname and intent we understand from it
+  const pnlc = pathname.toLocaleLowerCase();
+  let validPath = '';
+  if (api) validPath += `/${api}`;
+  if (org) validPath += `/${org}`;
+  if (keyBase) validPath += `/${keyBase}`;
+
+  // Normalize paths by removing trailing slashes before comparison
+  const normalize = (p) => p.replace(/\/+$/, '');
+  if (normalize(pnlc) !== normalize(validPath)) {
+    // if intent is not what is requested (+/- trailing slash), declare invalid
+    throw new Error('Invalid path');
+  }
 
   // Get the final source name
   daCtx.filename = path.pop() || '';

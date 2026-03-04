@@ -23,7 +23,7 @@ describe('Post Route', () => {
     const env = { DA_AUTH };
     const daCtx = {
       path: '/logout',
-      users: [ { ident: 'foo@bar.org'}, { ident: 'blah@blah.org' }]
+      users: [{ ident: 'foo@bar.org' }, { ident: 'blah@blah.org' }],
     };
 
     const resp = await postHandler({ env, daCtx });
@@ -54,7 +54,7 @@ describe('Post Route', () => {
     };
 
     const resp = await postHandlerWithMock.default({ req, env, daCtx });
-    
+
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(mediaCalled.length, 1);
     assert.strictEqual(mediaCalled[0].req, req);
@@ -71,7 +71,7 @@ describe('Post Route', () => {
     };
 
     const resp = await postHandler({ req, env, daCtx });
-    
+
     assert.strictEqual(resp, undefined);
   });
 });

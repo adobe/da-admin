@@ -6,6 +6,8 @@ source:
     summary: Config
     description: Get a config for an org, repo, or source.
     parameters:
+      - $ref: "./parameters.yaml#/orgParam"
+      - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
     responses:
       '200':
@@ -23,6 +25,8 @@ source:
       Create a config for an org, repo, or source.
 
     parameters:
+      - $ref: "./parameters.yaml#/orgParam"
+      - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
     requestBody:
       content:

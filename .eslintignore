@@ -1,5 +1,0 @@
-.vscode/*
-coverage/*
-dist/*
-!.releaserc.js
-test/*

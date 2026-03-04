@@ -7,6 +7,6 @@ putSourceJson:
       lastRollout: 'Wed, 29 Nov 2023 01:20:40 GMT'
       timesAskedWhyNoNesting: 492
 copySourceForm:
-  summary:
+  summary: Copy source form data example
   value: |
     destination: '/aemsites/geometrixx/path/to/file.html'

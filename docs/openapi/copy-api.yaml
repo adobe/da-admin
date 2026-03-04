@@ -6,11 +6,17 @@ source:
     summary: Copy source content
     description: |
       Copy a content source within an organization.
+      
+      **Important:** The `path` parameter works as follows:
+      - For files: Include the extension in the path (e.g., `myfile.html`)
+      - For folders: Omit the extension (e.g., `myfolder`)
+      Examples:
+      - Copy file: `/copy/{org}/{repo}/myfile.html`
+      - Copy folder: `/copy/{org}/{repo}/myfolder`
     parameters:
       - $ref: "./parameters.yaml#/orgParam"
       - $ref: "./parameters.yaml#/repoParam"
       - $ref: "./parameters.yaml#/pathParam"
-      - $ref: "./parameters.yaml#/extParam"
     requestBody:
       content:
         multipart/form-data:

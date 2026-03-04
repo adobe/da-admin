@@ -1,5 +1,16 @@
+/*
+ * Copyright 2025 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
 /* eslint-env mocha */
-import assert from 'assert';
+import assert from 'node:assert';
 import { strict as esmock } from 'esmock';
 
 // Mocks
@@ -7,9 +18,7 @@ import reqs from './mocks/req.js';
 import env from './mocks/env.js';
 import auth from './mocks/auth.js';
 
-const getDaCtx = await esmock(
-  '../../src/utils/daCtx.js', { '../../src/utils/auth.js': auth },
-);
+const getDaCtx = await esmock('../../src/utils/daCtx.js', { '../../src/utils/auth.js': auth });
 
 describe('DA context', () => {
   describe('API context', async () => {
@@ -24,19 +33,38 @@ describe('DA context', () => {
     });
   });
 
+  describe('Endpoint context', async () => {
+    let daCtx;
+    let daCtxNoTrail;
+
+    before(async () => {
+      daCtx = await getDaCtx(reqs.endpoint, env);
+      daCtxNoTrail = await getDaCtx(reqs.endpointNoTrail, env);
+    });
+
+    it('should support endpoint paths', () => {
+      assert.strictEqual(daCtx.api, 'endpoint');
+      assert.strictEqual(daCtxNoTrail.api, 'endpoint');
+    });
+  });
+
   describe('Org context', async () => {
     let daCtx;
+    let daCtxNoTrail;
 
     before(async () => {
       daCtx = await getDaCtx(reqs.org, env);
+      daCtxNoTrail = await getDaCtx(reqs.orgNoTrail, env);
     });
 
     it('should return an undefined site', () => {
       assert.strictEqual(daCtx.site, undefined);
+      assert.strictEqual(daCtxNoTrail.site, undefined);
     });
 
     it('should return a blank filename', () => {
       assert.strictEqual(daCtx.filename, '');
+      assert.strictEqual(daCtxNoTrail.filename, '');
     });
   });
 
@@ -127,6 +155,118 @@ describe('DA context', () => {
     it('should return a props key', () => {
       assert.strictEqual(daCtx.pathname, '/geometrixx/nft/blockchain.png');
       assert.strictEqual(daCtx.aemPathname, '/nft/blockchain.png');
+    });
+  });
+
+  describe('Conditional headers', async () => {
+    it('should extract If-Match header', async () => {
+      const req = {
+        url: 'http://localhost:8787/source/org/site/file.html',
+        headers: {
+          get: (name) => {
+            if (name === 'if-match') return '"etag123"';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.conditionalHeaders.ifMatch, '"etag123"');
+      assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, null);
+    });
+
+    it('should extract If-None-Match header', async () => {
+      const req = {
+        url: 'http://localhost:8787/source/org/site/file.html',
+        headers: {
+          get: (name) => {
+            if (name === 'if-none-match') return '*';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, '*');
+      assert.strictEqual(daCtx.conditionalHeaders.ifMatch, null);
+    });
+
+    it('should handle both headers', async () => {
+      const req = {
+        url: 'http://localhost:8787/source/org/site/file.html',
+        headers: {
+          get: (name) => {
+            if (name === 'if-match') return '"abc"';
+            if (name === 'if-none-match') return '"xyz"';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.conditionalHeaders.ifMatch, '"abc"');
+      assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, '"xyz"');
+    });
+
+    it('should handle missing headers', async () => {
+      const req = {
+        url: 'http://localhost:8787/source/org/site/file.html',
+        headers: {
+          get: () => null,
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.conditionalHeaders.ifMatch, null);
+      assert.strictEqual(daCtx.conditionalHeaders.ifNoneMatch, null);
+    });
+  });
+
+  describe('Continuation token', async () => {
+    it('should extract da-continuation-token header', async () => {
+      const req = {
+        url: 'http://localhost:8787/list/org/site/path',
+        headers: {
+          get: (name) => {
+            if (name === 'da-continuation-token') return 'header-token';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.continuationToken, 'header-token');
+    });
+
+    it('should ignore continuation-token query param when header is present', async () => {
+      const req = {
+        url: 'http://localhost:8787/list/org/site/path?continuation-token=query-token',
+        headers: {
+          get: (name) => {
+            if (name === 'da-continuation-token') return 'header-token';
+            return null;
+          },
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.continuationToken, 'header-token');
+    });
+
+    it('should ignore continuation-token query param', async () => {
+      const req = {
+        url: 'http://localhost:8787/list/org/site/path?continuation-token=token123',
+        headers: {
+          get: () => null,
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.continuationToken, null);
+    });
+
+    it('should default continuation token to null', async () => {
+      const req = {
+        url: 'http://localhost:8787/list/org/site/path',
+        headers: {
+          get: () => null,
+        },
+      };
+      const daCtx = await getDaCtx(req, env);
+      assert.strictEqual(daCtx.continuationToken, null);
     });
   });
 });

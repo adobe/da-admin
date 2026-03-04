@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -186,7 +186,7 @@ function getIdents(user) {
     }
   }
 
-  return idents;
+  return idents.map((ident) => ident?.toLowerCase());
 }
 
 export function getUserActions(pathLookup, user, target) {
@@ -224,6 +224,13 @@ export function pathSorter({ path: path1 }, { path: path2 }) {
 export async function getAclCtx(env, org, users, key, api) {
   const pathLookup = new Map();
 
+  if (api === 'logout') {
+    return {
+      pathLookup,
+      actionSet: new Set(['read']),
+    };
+  }
+
   const props = await env.DA_CONFIG?.get(org, { type: 'json' });
 
   if (props && props[':type'] === 'sheet' && props[':sheetname'] === 'permissions') {
@@ -236,6 +243,19 @@ export async function getAclCtx(env, org, users, key, api) {
       pathLookup,
       actionSet: new Set(['read', 'write']),
     };
+  }
+
+  if (env.DA_OPS_IMS_ORG) {
+    props.permissions.data.push({
+      path: 'CONFIG',
+      groups: env.DA_OPS_IMS_ORG,
+      actions: 'write',
+    });
+    props.permissions.data.push({
+      path: '/ + **',
+      groups: env.DA_OPS_IMS_ORG,
+      actions: 'write',
+    });
   }
 
   const aclTrace = [];
@@ -253,19 +273,27 @@ export async function getAclCtx(env, org, users, key, api) {
       effectivePath = effectivePath.slice(0, -1);
     }
 
-    groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((group) => {
+    groups.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0).forEach((g) => {
+      const group = g.toLowerCase();
       if (!pathLookup.has(group)) pathLookup.set(group, []);
-      pathLookup
-        .get(group)
-        .push({
+      const groupEntries = pathLookup.get(group);
+      const effectiveActions = actions
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+        .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : [entry]));
+
+      const existingEntry = groupEntries.find((e) => e.path === effectivePath);
+      if (existingEntry) {
+        const merged = new Set([...existingEntry.actions, ...effectiveActions]);
+        existingEntry.actions = [...merged];
+      } else {
+        groupEntries.push({
           group,
           path: effectivePath,
-          actions: actions
-            .split(',')
-            .map((entry) => entry.trim())
-            .filter((entry) => entry.length > 0)
-            .flatMap((entry) => (entry === 'write' ? ['read', 'write'] : [entry])),
+          actions: effectiveActions,
         });
+      }
     });
   });
   pathLookup.forEach((value) => value.sort(pathSorter));
@@ -295,9 +323,11 @@ export async function getAclCtx(env, org, users, key, api) {
   }
 
   // Expose the action trace or not?
-  actionTrace = users.every((u) => aclTrace.includes(u.email)) ? actionTrace : undefined;
+  actionTrace = users.every((u) => aclTrace.includes(u.email?.toLowerCase()))
+    ? actionTrace
+    : undefined;
 
-  if (k === 'CONFIG') {
+  if (k === 'CONFIG' || api === 'versionsource') {
     actionSet.add('read');
   }
 
@@ -372,11 +402,13 @@ export function getChildRules(daCtx) {
 }
 
 export function hasPermission(daCtx, path, action, keywordPath = false) {
+  if (path === null || path === undefined) return false;
   if (daCtx.aclCtx.pathLookup.size === 0) {
     return true;
   }
 
-  const p = !path.startsWith('/') && !keywordPath ? `/${path}` : path;
+  const isKeyword = keywordPath || path === 'CONFIG';
+  const p = !path.startsWith('/') && !isKeyword ? `/${path}` : path;
   const k = daCtx.key.startsWith('/') ? daCtx.key : `/${daCtx.key}`;
 
   // is it the path from the context? then return the cached value
@@ -393,7 +425,7 @@ export function hasPermission(daCtx, path, action, keywordPath = false) {
 
   const permission = daCtx.users
     .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, p).actions.has(action));
-  if (!permission && !keywordPath) {
+  if (!permission && !isKeyword) {
     // eslint-disable-next-line no-console
     console.warn(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);
   }

@@ -1,4 +1,15 @@
-import assert from 'assert';
+/*
+ * Copyright 2025 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
+import assert from 'node:assert';
 import esmock from 'esmock';
 import handler from '../src/index.js';
 
@@ -13,38 +24,151 @@ describe('fetch', () => {
   });
 
   it('should return a response object for unknown', async () => {
-    const resp = await handler.fetch({ url: 'https://www.example.com', method: 'BLAH' }, {});
-    assert.strictEqual(resp.status, 501);
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({ authorized: true, users: [{ email: 'test@example.com' }], path: '/endpoint/repo/path/file.html' }),
+      },
+    });
+
+    const resp = await hnd.fetch({ url: 'https://www.example.com/endpoint/repo/path/file.html', method: 'BLAH' }, {});
+    assert.strictEqual(resp.status, 405);
   });
 
-  it('should return 401 when not authorized and not logged in', async () => {
-    const hnd = await esmock(
-      '../src/index.js', {
-        '../src/utils/daCtx.js': {
-          default: async () => ({ authorized: false, users: [{ email: 'anonymous' }] })
-        }
-      }
-    )
+  it('should return 401 when user is anonymous', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({ authorized: false, users: [{ email: 'anonymous' }] }),
+      },
+    });
 
     const resp = await hnd.fetch({ method: 'GET' }, {});
     assert.strictEqual(resp.status, 401);
   });
 
+  it('should return 401 when not authorized and not logged in', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({ authorized: false, users: [{ email: 'test@example.com' }] }),
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET' }, {});
+    assert.strictEqual(resp.status, 403);
+  });
+
   it('should return 403 when logged in but not authorized', async () => {
-    const hnd = await esmock(
-      '../src/index.js', {
-        '../src/utils/daCtx.js': {
-          default: async () => ({ authorized: false, users: [{ email: 'joe@bloggs.org' }] })
-        }
-      }
-    )
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({ authorized: false, users: [{ email: 'joe@bloggs.org' }] }),
+      },
+    });
 
     const resp = await hnd.fetch({ method: 'GET' }, {});
     assert.strictEqual(resp.status, 403);
   });
 
   it('return 404 for unknown get route', async () => {
-    const resp = await handler.fetch({ method: 'GET', url: 'http://www.example.com/' }, {});
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({ authorized: true, users: [{ email: 'test@example.com' }], path: '/' }),
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/' }, {});
     assert.strictEqual(resp.status, 404);
+  });
+
+  it('should return 500 when getDaCtx throws unexpected error', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => {
+          throw new Error('Unexpected ctx error');
+        },
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/source/org/repo/file.html' }, {});
+    assert.strictEqual(resp.status, 500);
+  });
+
+  it('should expose continuation token header for list responses', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/list/org/repo/path',
+          key: 'repo/path',
+        }),
+      },
+      '../src/handlers/get.js': {
+        default: async () => ({
+          status: 200,
+          body: '[]',
+          contentType: 'application/json',
+          continuationToken: 'next-token',
+        }),
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/list/org/repo/path' }, {});
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(resp.headers.get('da-continuation-token'), 'next-token');
+  });
+});
+
+describe('invalid routes', () => {
+  let hnd;
+
+  before(async () => {
+    hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async (req) => {
+          const { pathname } = new URL(req.url);
+          // For invalid paths, throw the error that getDaCtx would throw
+          if (pathname.includes('//')) {
+            throw new Error('Invalid path');
+          }
+          return {
+            authorized: true,
+            users: [{ email: 'test@example.com' }],
+            path: pathname,
+            api: 'source',
+            org: 'owner',
+            key: 'repo/path/file.html',
+          };
+        },
+      },
+    });
+  });
+
+  const fetchStatus = async (path, method) => {
+    const resp = await hnd.fetch({ method, url: `http://www.sample.com${path}` }, {});
+    return resp.status;
+  };
+
+  const test = async (path, status) => {
+    const methods = ['GET', 'POST', 'PUT', 'DELETE'];
+    for (const method of methods) {
+      // eslint-disable-next-line no-await-in-loop
+      const s = await fetchStatus(path, method);
+      assert.strictEqual(s, status);
+    }
+  };
+
+  it('return 400 for invalid paths', async () => {
+    await test('/source//org/repo/path/file.html', 400);
+    await test('/source/org//repo/path/file.html', 400);
+    await test('/source/org/repo//path/file.html', 400);
+    await test('/source/org/repo/path//file.html', 400);
+  });
+
+  it('return 404 for unknown paths', async () => {
+    await test('/unknown/owner/repo/path/file.html', 404);
+  });
+
+  it('return 405 for unknown methods', async () => {
+    const status = await fetchStatus('/source/owner/repo/path/file.html', 'BLAH');
+    assert.strictEqual(status, 405);
   });
 });

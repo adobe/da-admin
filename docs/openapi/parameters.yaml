@@ -26,6 +26,13 @@ pathParam:
   required: true
   schema:
     type: string
+continuationTokenParam:
+  name: da-continuation-token
+  in: header
+  description: Continuation token from the previous list response header.
+  required: false
+  schema:
+    type: string
 guidParam:
   name: guid
   in: path

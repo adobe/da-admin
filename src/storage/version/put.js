@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adobe. All rights reserved.
+ * Copyright 2025 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -56,6 +56,13 @@ export async function putVersion(config, {
   }
 }
 
+function shouldCreateVersion(contentType) {
+  // Only create versions for HTML and JSON files
+  if (!contentType) return false;
+  const type = contentType.toLowerCase();
+  return type.startsWith('text/html') || type.startsWith('application/json');
+}
+
 function buildInput({
   bucket, org, key, body, type, contentLength,
 }) {
@@ -67,7 +74,14 @@ function buildInput({
   };
 }
 
-export async function putObjectWithVersion(env, daCtx, update, body, guid) {
+export async function putObjectWithVersion(
+  env,
+  daCtx,
+  update,
+  body,
+  guid,
+  clientConditionals = null,
+) {
   const config = getS3Config(env);
   // While we are automatically storing the body once for the 'Collab Parse' changes, we never
   // do a HEAD, because we may need the content. Once we don't need to do this automatic store
@@ -81,29 +95,82 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
     return { status: 409, metadata: { id: ID } };
   }
 
+  // Only create versions for HTML and JSON files
+  const contentType = update.type || current.contentType;
+  const createVersion = shouldCreateVersion(contentType);
+
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
   const input = buildInput(update);
   const Timestamp = `${Date.now()}`;
   const Path = update.key;
 
+  // Validate conflicting conditionals - both headers present is unusual for PUT
+  let effectiveConditionals = clientConditionals;
+  if (clientConditionals?.ifMatch && clientConditionals?.ifNoneMatch) {
+    // Per RFC 7232, If-Match should be evaluated first for PUT/POST
+    // If-None-Match for PUT is less common (create-only semantics)
+    // eslint-disable-next-line no-console
+    console.warn('Both If-Match and If-None-Match provided, prioritizing If-Match per RFC 7232');
+    // Clear If-None-Match to prevent confusion
+    effectiveConditionals = { ifMatch: clientConditionals.ifMatch };
+  }
+
+  // Handle client-provided If-Match: * (requires resource to exist)
+  if (effectiveConditionals?.ifMatch === '*') {
+    if (current.status === 404) {
+      return { status: 412, metadata: { id: ID } };
+    }
+    // Resource exists, proceed with update using actual ETag
+    // Fall through to update logic below with current.etag
+  }
+
+  // Handle client-provided If-None-Match: * (requires resource NOT to exist)
+  if (effectiveConditionals?.ifNoneMatch === '*') {
+    if (current.status !== 404) {
+      return { status: 412, metadata: { id: ID } };
+    }
+    // Resource doesn't exist, proceed with create
+    // Fall through to create logic below
+  }
+
   if (current.status === 404) {
-    const client = ifNoneMatch(config);
+    const metadata = {
+      ID, Users, Timestamp, Path,
+    };
+    // Only include Version metadata for files that support versioning
+    if (createVersion) {
+      metadata.Version = Version;
+    }
+    // Use client conditional if provided, otherwise use internal If-None-Match: *
+    const client = effectiveConditionals?.ifNoneMatch
+      ? ifNoneMatch(config, effectiveConditionals.ifNoneMatch)
+      : ifNoneMatch(config);
     const command = new PutObjectCommand({
       ...input,
-      Metadata: {
-        ID, Version, Users, Timestamp, Path,
-      },
+      Metadata: metadata,
     });
     try {
       const resp = await client.send(command);
       return resp.$metadata.httpStatusCode === 200
-        ? { status: 201, metadata: { id: ID } }
-        : { status: resp.$metadata.httpStatusCode, metadata: { id: ID } };
+        ? { status: 201, metadata: { id: ID }, etag: resp.ETag }
+        : { status: resp.$metadata.httpStatusCode, metadata: { id: ID }, etag: resp.ETag };
     } catch (e) {
       const status = e.$metadata?.httpStatusCode || 500;
       if (status === 412) {
-        return putObjectWithVersion(env, daCtx, update, body);
+        // Only retry if no client conditionals (internal operation) and under retry limit
+        if (!effectiveConditionals?.ifNoneMatch) {
+          return putObjectWithVersion(
+            env,
+            daCtx,
+            update,
+            body,
+            guid,
+            clientConditionals,
+          );
+        }
+        // Client conditional failed or max retries exceeded, return 412
+        return { status: 412, metadata: { id: ID } };
       }
 
       // eslint-disable-next-line no-console
@@ -113,61 +180,92 @@ export async function putObjectWithVersion(env, daCtx, update, body, guid) {
   }
 
   const pps = current.metadata?.preparsingstore || '0';
-
-  // Store the body if preparsingstore is not defined, so a once-off store
   let storeBody = !body && pps === '0';
-  const Preparsingstore = storeBody ? Timestamp : pps;
+  let Preparsingstore = storeBody ? Timestamp : pps;
   let Label = storeBody ? 'Collab Parse' : update.label;
 
-  if (daCtx.method === 'PUT'
-    && daCtx.ext === 'html'
-    && current.contentLength > EMPTY_DOC_SIZE
-    && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
-    // we are about to empty the document body
-    // this should almost never happen but it does in some unexpectedcases
-    // we want then to store a version of the full document as a Restore Point
-    // eslint-disable-next-line no-console
-    console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
-    storeBody = true;
-    Label = 'Restore Point';
+  if (createVersion) {
+    if (daCtx.method === 'PUT'
+      && daCtx.ext === 'html'
+      && current.contentLength > EMPTY_DOC_SIZE
+      && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
+      // we are about to empty the document body
+      // this should almost never happen but it does in some unexpectedcases
+      // we want then to store a version of the full document as a Restore Point
+      // eslint-disable-next-line no-console
+      console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
+      storeBody = true;
+      Label = 'Restore Point';
+      Preparsingstore = Timestamp;
+    }
+
+    const versionResp = await putVersion(config, {
+      Bucket: input.Bucket,
+      Org: daCtx.org,
+      Body: (body || storeBody ? current.body : ''),
+      ContentLength: (body || storeBody ? current.contentLength : undefined),
+      ContentType: current.contentType,
+      ID,
+      Version,
+      Ext: daCtx.ext,
+      Metadata: {
+        Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
+        Timestamp: current.metadata?.timestamp || Timestamp,
+        Path: current.metadata?.path || Path,
+        Label,
+      },
+    });
+
+    if (versionResp.status !== 200 && versionResp.status !== 412) {
+      return { status: versionResp.status, metadata: { id: ID } };
+    }
   }
 
-  const versionResp = await putVersion(config, {
-    Bucket: input.Bucket,
-    Org: daCtx.org,
-    Body: (body || storeBody ? current.body : ''),
-    ContentLength: (body || storeBody ? current.contentLength : undefined),
-    ContentType: current.contentType,
-    ID,
-    Version,
-    Ext: daCtx.ext,
-    Metadata: {
-      Users: current.metadata?.users || JSON.stringify([{ email: 'anonymous' }]),
-      Timestamp: current.metadata?.timestamp || Timestamp,
-      Path: current.metadata?.path || Path,
-      Label,
-    },
-  });
-
-  if (versionResp.status !== 200 && versionResp.status !== 412) {
-    return { status: versionResp.status, metadata: { id: ID } };
+  const metadata = {
+    ID, Users, Timestamp, Path, Preparsingstore,
+  };
+  // Only include Version metadata for files that support versioning
+  if (createVersion) {
+    metadata.Version = crypto.randomUUID();
   }
-
-  const client = ifMatch(config, `${current.etag}`);
+  // Use client-provided If-Match if available, otherwise use current ETag
+  // Special case: If client sent If-Match:*, we already validated existence above,
+  // so now use the actual ETag for proper version control
+  let matchValue;
+  if (effectiveConditionals?.ifMatch === '*') {
+    matchValue = `${current.etag}`;
+  } else {
+    matchValue = effectiveConditionals?.ifMatch || `${current.etag}`;
+  }
+  const client = ifMatch(config, matchValue);
   const command = new PutObjectCommand({
     ...input,
-    Metadata: {
-      ID, Version: crypto.randomUUID(), Users, Timestamp, Path, Preparsingstore,
-    },
+    Metadata: metadata,
   });
   try {
     const resp = await client.send(command);
 
-    return { status: resp.$metadata.httpStatusCode, metadata: { id: ID } };
+    return {
+      status: resp.$metadata.httpStatusCode,
+      metadata: { id: ID },
+      etag: resp.ETag,
+    };
   } catch (e) {
     const status = e.$metadata?.httpStatusCode || 500;
     if (status === 412) {
-      return putObjectWithVersion(env, daCtx, update, body);
+      // Only retry if no client conditionals (internal operation) and under retry limit
+      if (!effectiveConditionals?.ifMatch) {
+        return putObjectWithVersion(
+          env,
+          daCtx,
+          update,
+          body,
+          guid,
+          clientConditionals,
+        );
+      }
+      // Client conditional failed or max retries exceeded, return 412
+      return { status: 412, metadata: { id: ID } };
     }
 
     // eslint-disable-next-line no-console
