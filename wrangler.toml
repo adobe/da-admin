@@ -51,7 +51,7 @@ ENVIRONMENT = "stage"
 VERSION = "@@VERSION@@-stage"
 DA_COLLAB = "https://collab.da.page"
 AEM_BUCKET_NAME = "aem-content-stage"
-AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 
 # ----------------------------------------------------------------------
 # ci environment (using stage content)
@@ -76,7 +76,7 @@ ENVIRONMENT = "ci"
 VERSION = "@@VERSION@@-stage"
 DA_COLLAB = "https://collab.da.page"
 AEM_BUCKET_NAME = "aem-content-stage"
-AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 
 
 # ----------------------------------------------------------------------
@@ -102,7 +102,7 @@ ENVIRONMENT = "dev"
 VERSION="0.0.0-dev"
 DA_COLLAB = "http://localhost:4711"
 AEM_BUCKET_NAME = "aem-content-stage"
-AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 
 # ----------------------------------------------------------------------
 # integration test environment (local)
@@ -127,5 +127,5 @@ ENVIRONMENT = "it"
 VERSION="0.0.0-it"
 DA_COLLAB = "http://localhost:4711"
 AEM_BUCKET_NAME = "aem-content-local"
-AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 
