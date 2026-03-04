@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import assert from 'assert';
+import assert from 'node:assert';
 import esmock from 'esmock';
 
 describe('Media Route', () => {
@@ -86,9 +86,9 @@ describe('Media Route', () => {
         AEM_ADMIN_MEDIA_API: 'https://api.example.com/media',
         AEM_ADMIN_MEDIA_API_KEY: 'test-api-key',
       };
-      const daCtx = { 
+      const daCtx = {
         key: '/test/image.jpg',
-        fullKey: 'org/test/image.jpg'
+        fullKey: 'org/test/image.jpg',
       };
 
       const resp = await postMedia.default({ req, env, daCtx });
@@ -141,9 +141,9 @@ describe('Media Route', () => {
         AEM_ADMIN_MEDIA_API: 'https://api.example.com/media',
         AEM_ADMIN_MEDIA_API_KEY: 'test-api-key',
       };
-      const daCtx = { 
+      const daCtx = {
         key: '/test/image.png',
-        fullKey: 'org/test/image.png'
+        fullKey: 'org/test/image.png',
       };
 
       const resp = await postMedia.default({ req, env, daCtx });
@@ -180,9 +180,9 @@ describe('Media Route', () => {
         AEM_ADMIN_MEDIA_API: 'https://api.example.com/media',
         AEM_ADMIN_MEDIA_API_KEY: 'test-key',
       };
-      const daCtx = { 
+      const daCtx = {
         key: '/test/video.mp4',
-        fullKey: 'org/test/video.mp4'
+        fullKey: 'org/test/video.mp4',
       };
 
       const resp = await postMedia.default({ req, env, daCtx });
@@ -194,7 +194,7 @@ describe('Media Route', () => {
 
   it('handles different supported image formats', async () => {
     const supportedTypes = ['image/jpeg', 'image/gif', 'image/png', 'image/svg+xml', 'image/webp'];
-    
+
     for (const contentType of supportedTypes) {
       const hasPermission = () => true;
       const putHelper = async () => ({ data: { type: contentType } });
@@ -207,6 +207,7 @@ describe('Media Route', () => {
       });
 
       try {
+        // eslint-disable-next-line no-await-in-loop
         const postMedia = await esmock('../../src/routes/media.js', {
           '../../src/utils/auth.js': {
             hasPermission,
@@ -222,11 +223,12 @@ describe('Media Route', () => {
           AEM_ADMIN_MEDIA_API: 'https://api.example.com/media',
           AEM_ADMIN_MEDIA_API_KEY: 'test-key',
         };
-        const daCtx = { 
+        const daCtx = {
           key: `/test/image.${contentType.split('/')[1]}`,
-          fullKey: `org/test/image.${contentType.split('/')[1]}`
+          fullKey: `org/test/image.${contentType.split('/')[1]}`,
         };
 
+        // eslint-disable-next-line no-await-in-loop
         const resp = await postMedia.default({ req, env, daCtx });
         assert.strictEqual(resp.status, 200, `Failed for content type: ${contentType}`);
       } finally {

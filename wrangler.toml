@@ -3,8 +3,6 @@ main = "src/index.js"
 compatibility_date = "2024-11-11"
 keep_vars = true
 
-vars = { DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "aem-content", AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media" }
-
 # ----------------------------------------------------------------------
 # production environment
 [env.production]
@@ -23,13 +21,12 @@ r2_buckets = [
   { binding = "AEM_CONTENT", bucket_name = "aem-content" }
 ]
 
-[env.stage]
-vars = { ENVIRONMENT = "stage", DA_COLLAB = "https://collab.da.page", AEM_BUCKET_NAME = "aem-content-stage", AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media" }
 [env.production.vars]
 ENVIRONMENT = "production"
 VERSION = "@@VERSION@@"
 DA_COLLAB = "https://collab.da.page"
 AEM_BUCKET_NAME = "aem-content"
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 
 # ----------------------------------------------------------------------
 # stage environment
@@ -49,13 +46,12 @@ r2_buckets = [
   { binding = "AEM_CONTENT", bucket_name = "aem-content-stage" }
 ]
 
-[env.dev]
-vars = { ENVIRONMENT = "dev", DA_COLLAB = "http://localhost:4711", AEM_BUCKET_NAME = "aem-content-dev", AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media" }
 [env.stage.vars]
 ENVIRONMENT = "stage"
 VERSION = "@@VERSION@@-stage"
 DA_COLLAB = "https://collab.da.page"
 AEM_BUCKET_NAME = "aem-content-stage"
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media
 
 # ----------------------------------------------------------------------
 # ci environment (using stage content)
@@ -80,6 +76,7 @@ ENVIRONMENT = "ci"
 VERSION = "@@VERSION@@-stage"
 DA_COLLAB = "https://collab.da.page"
 AEM_BUCKET_NAME = "aem-content-stage"
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media
 
 
 # ----------------------------------------------------------------------
@@ -105,6 +102,7 @@ ENVIRONMENT = "dev"
 VERSION="0.0.0-dev"
 DA_COLLAB = "http://localhost:4711"
 AEM_BUCKET_NAME = "aem-content-stage"
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media
 
 # ----------------------------------------------------------------------
 # integration test environment (local)
@@ -129,4 +127,5 @@ ENVIRONMENT = "it"
 VERSION="0.0.0-it"
 DA_COLLAB = "http://localhost:4711"
 AEM_BUCKET_NAME = "aem-content-local"
+AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media
 

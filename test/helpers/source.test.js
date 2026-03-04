@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import assert from 'assert';
+import assert from 'node:assert';
 import putHelper from '../../src/helpers/source.js';
 
 import env from '../utils/mocks/env.js';
