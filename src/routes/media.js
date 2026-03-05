@@ -35,6 +35,9 @@ export default async function postMedia({ req, env, daCtx }) {
   });
 
   if (!resp.ok) {
+    if (resp.status === 404) {
+      return { status: 404, body: JSON.stringify({ error: 'Project not found in AEM - cannot upload media' }) };
+    }
     return { status: resp.status, headers: resp.headers };
   }
   const data = await resp.json();

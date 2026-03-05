@@ -157,6 +157,93 @@ describe('Media Route', () => {
     }
   });
 
+  it('returns 404 with error body when project not found in AEM', async () => {
+    const hasPermission = () => true;
+    const putHelper = async () => ({ data: { type: 'image/jpeg' } });
+    const getFileBody = async (data) => ({ body: 'jpeg-data', type: data.type });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 404,
+    });
+
+    try {
+      const postMedia = await esmock('../../src/routes/media.js', {
+        '../../src/utils/auth.js': {
+          hasPermission,
+        },
+        '../../src/helpers/source.js': {
+          putHelper,
+          getFileBody,
+        },
+      });
+
+      const req = {};
+      const env = {
+        AEM_ADMIN_MEDIA_API: 'https://api.example.com/media',
+        AEM_ADMIN_MEDIA_API_KEY: 'test-api-key',
+      };
+      const daCtx = {
+        key: '/test/image.jpg',
+        org: 'org',
+        site: 'test',
+        aemPathname: '/image.jpg',
+      };
+
+      const resp = await postMedia.default({ req, env, daCtx });
+      assert.strictEqual(resp.status, 404);
+      const body = JSON.parse(resp.body);
+      assert.strictEqual(body.error, 'Project not found in AEM - cannot upload media');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('forwards status and headers for non-404 API errors', async () => {
+    const hasPermission = () => true;
+    const putHelper = async () => ({ data: { type: 'image/png' } });
+    const getFileBody = async (data) => ({ body: 'png-data', type: data.type });
+
+    const mockHeaders = new Headers({ 'Retry-After': '60', 'X-Request-Id': 'req-456' });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 503,
+      headers: mockHeaders,
+    });
+
+    try {
+      const postMedia = await esmock('../../src/routes/media.js', {
+        '../../src/utils/auth.js': {
+          hasPermission,
+        },
+        '../../src/helpers/source.js': {
+          putHelper,
+          getFileBody,
+        },
+      });
+
+      const req = {};
+      const env = {
+        AEM_ADMIN_MEDIA_API: 'https://api.example.com/media',
+        AEM_ADMIN_MEDIA_API_KEY: 'test-api-key',
+      };
+      const daCtx = {
+        key: '/test/image.png',
+        org: 'org',
+        site: 'test',
+        aemPathname: '/image.png',
+      };
+
+      const resp = await postMedia.default({ req, env, daCtx });
+      assert.strictEqual(resp.status, 503);
+      assert.strictEqual(resp.headers, mockHeaders);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('supports all defined media types', async () => {
     const hasPermission = () => true;
     const putHelper = async () => ({ data: { type: 'video/mp4' } });
