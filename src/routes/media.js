@@ -23,7 +23,7 @@ export default async function postMedia({ req, env, daCtx }) {
   if (!MEDIA_TYPES.includes(contentType)) return { status: 400 };
 
   const adminMediaAPI = env.AEM_ADMIN_MEDIA_API;
-  const url = `${adminMediaAPI}/${daCtx.fullKey}/main`;
+  const url = `${adminMediaAPI}/${daCtx.org}/${daCtx.site}/main${daCtx.aemPathname}`;
 
   const resp = await fetch(url, {
     method: 'POST',
@@ -34,7 +34,9 @@ export default async function postMedia({ req, env, daCtx }) {
     body,
   });
 
-  if (!resp.ok) return { status: resp.status };
+  if (!resp.ok) {
+    return { status: resp.status, headers: resp.headers };
+  }
   const data = await resp.json();
   return { status: 200, body: JSON.stringify(data), contentType: 'application/json' };
 }

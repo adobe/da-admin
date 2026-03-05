@@ -88,7 +88,9 @@ describe('Media Route', () => {
       };
       const daCtx = {
         key: '/test/image.jpg',
-        fullKey: 'org/test/image.jpg',
+        org: 'org',
+        site: 'test',
+        aemPathname: '/image.jpg',
       };
 
       const resp = await postMedia.default({ req, env, daCtx });
@@ -103,7 +105,7 @@ describe('Media Route', () => {
       // Verify API call
       assert.strictEqual(fetchCalls.length, 1);
       const call = fetchCalls[0];
-      assert.strictEqual(call.url, 'https://api.example.com/media/org/test/image.jpg/main');
+      assert.strictEqual(call.url, 'https://api.example.com/media/org/test/main/image.jpg');
       assert.strictEqual(call.options.method, 'POST');
       assert.strictEqual(call.options.headers['Content-Type'], 'image/jpeg');
       assert.strictEqual(call.options.headers.Authorization, 'token test-api-key');
@@ -143,7 +145,9 @@ describe('Media Route', () => {
       };
       const daCtx = {
         key: '/test/image.png',
-        fullKey: 'org/test/image.png',
+        org: 'org',
+        site: 'test',
+        aemPathname: '/image.png',
       };
 
       const resp = await postMedia.default({ req, env, daCtx });
