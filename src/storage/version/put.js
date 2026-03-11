@@ -52,9 +52,6 @@ export async function putVersion(config, {
     const status = e.$metadata?.httpStatusCode || 500;
     // eslint-disable-next-line no-console
     if (status >= 500) console.error('Fail to put version', e);
-    // Cancel the body stream if it wasn't consumed (e.g. R2 rejected via 100-continue on 412).
-    // Without this, Cloudflare Workers logs "non-retryable streaming request" warnings.
-    if (Body?.cancel) Body.cancel();
     return { status };
   }
 }
@@ -184,7 +181,6 @@ export async function putObjectWithVersion(
 
   const pps = current.metadata?.preparsingstore || '0';
   let storeBody = !body && pps === '0';
-  let versionCreated = false;
   let Preparsingstore = storeBody ? Timestamp : pps;
   let Label = storeBody ? 'Collab Parse' : update.label;
 
@@ -223,7 +219,6 @@ export async function putObjectWithVersion(
     if (versionResp.status !== 200 && versionResp.status !== 412) {
       return { status: versionResp.status, metadata: { id: ID } };
     }
-    versionCreated = versionResp.status === 200;
   }
 
   const metadata = {
@@ -254,7 +249,6 @@ export async function putObjectWithVersion(
       status: resp.$metadata.httpStatusCode,
       metadata: { id: ID },
       etag: resp.ETag,
-      versionCreated,
     };
   } catch (e) {
     const status = e.$metadata?.httpStatusCode || 500;
@@ -288,9 +282,7 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
     bucket, org, key, body, contentLength, type: contentType, label,
   }, true);
 
-  if (resp.status !== 200) return { status: resp.status };
-  if (!resp.versionCreated) return { status: 500 };
-  return { status: 201 };
+  return { status: resp.status === 200 ? 201 : resp.status };
 }
 
 export async function postObjectVersion(req, env, daCtx) {
