@@ -1,3 +1,10 @@
+## [1.1.7](https://github.com/adobe/da-admin/compare/v1.1.6...v1.1.7) (2026-03-12)
+
+
+### Bug Fixes
+
+* **versionsource:** surface version creation failures and fix streaming warning ([#250](https://github.com/adobe/da-admin/issues/250)) ([4ee0dbe](https://github.com/adobe/da-admin/commit/4ee0dbec72a350cb92c2403db58137e7189402c5))
+
 ## [1.1.6](https://github.com/adobe/da-admin/compare/v1.1.5...v1.1.6) (2026-02-25)
 
 
