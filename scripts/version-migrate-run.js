@@ -24,8 +24,8 @@ const Bucket = process.env.AEM_BUCKET_NAME;
 const Org = process.env.ORG || process.argv[2];
 const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
 
-const AUDIT_WINDOW_MS = 1000;
-// const AUDIT_WINDOW_MS = 30 * 60 * 1000;
+/** Must match src/storage/version/audit.js AUDIT_TIME_WINDOW_MS for consistent dedup. */
+const AUDIT_WINDOW_MS = 30 * 60 * 1000;
 
 const config = {
   region: 'auto',
@@ -56,8 +56,13 @@ function usersNormalized(usersJson) {
   }
 }
 
+/**
+ * Dedupe audit entries: same-user edits within AUDIT_WINDOW_MS collapse (keep last).
+ * Labelled versions never collapse (match audit.js: version entries "interrupt" the window).
+ */
 function dedupeAuditEntries(entries) {
   const out = [];
+  const isVersionEntry = (e) => (e?.versionLabel ?? '') !== '' || (e?.versionId ?? '') !== '';
   for (const e of entries.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))) {
     const last = out[out.length - 1];
     const ts = parseInt(e.timestamp, 10) || 0;
@@ -65,7 +70,9 @@ function dedupeAuditEntries(entries) {
     const lastTs = parseInt(last?.timestamp, 10) || 0;
     const sameUser = last && usersNormalized(last.users) === userNorm;
     const inWindow = sameUser && (ts - lastTs <= AUDIT_WINDOW_MS);
-    if (inWindow) {
+    const lastIsVersion = last && isVersionEntry(last);
+    const canCollapse = inWindow && !isVersionEntry(e) && !lastIsVersion;
+    if (canCollapse) {
       out[out.length - 1] = e;
     } else {
       out.push(e);
@@ -74,14 +81,14 @@ function dedupeAuditEntries(entries) {
   return out;
 }
 
-/** Normalize path (strip repo prefix) and versionId (strip .ext) for audit storage. */
+/** Normalize path (strip repo prefix) and versionId (strip extension) for audit storage. */
 function normalizeAuditEntry(entry, repo) {
   const path = (repo && entry.path && entry.path.startsWith(`${repo}/`))
     ? entry.path.slice(repo.length)
     : (entry.path ?? '');
   let { versionId } = entry;
-  if (versionId && typeof versionId === 'string' && versionId.endsWith('.html')) {
-    versionId = versionId.slice(0, -5);
+  if (versionId && typeof versionId === 'string' && versionId.includes('.')) {
+    versionId = versionId.replace(/\.[^.]+$/, '');
   }
   return { ...entry, path, versionId };
 }
