@@ -21,7 +21,8 @@ const CONCURRENCY = 50;
  * Try new structure: repo/.da-versions/fileId/ (snapshots) + audit.txt. Merge and sort.
  * @returns {Promise<{ status: number, body?: string, contentType?: string }|null>} null = fallback
  */
-async function listFromNewStructure(env, { bucket, org, key: _ }, fileId, repo) {
+async function listFromNewStructure(env, { bucket, org, key }, fileId, repo) {
+  const ext = (key && key.includes('.')) ? key.split('.').pop() : 'html';
   const listResp = await listObjects(env, {
     bucket,
     org,
@@ -64,9 +65,10 @@ async function listFromNewStructure(env, { bucket, org, key: _ }, fileId, repo) 
     auditEntries = lines.map(({
       users, timestamp, path, versionLabel, versionId,
     }) => {
-      const entry = { users, timestamp, path };
+      const pathFull = (repo && path && path.startsWith('/')) ? repo + path : path;
+      const entry = { users, timestamp, path: pathFull };
       if (versionLabel) entry.versionLabel = versionLabel;
-      if (versionId) entry.versionId = versionId;
+      if (versionId) entry.versionId = ext ? `${versionId}.${ext}` : versionId;
       return entry;
     });
   } catch {

@@ -238,14 +238,18 @@ export async function putObjectWithVersion(
   }
 
   // Audit: one entry per versionable PUT; versionLabel + versionId when labelled version created.
+  // Store path without repo prefix and versionId without extension for readability.
   if (createVersion) {
     try {
-      const versionId = versionCreated ? `${Version}.${daCtx.ext}` : undefined;
+      const versionId = versionCreated ? Version : undefined;
       const versionLabel = versionCreated ? (Label ?? '') : undefined;
+      const pathForAudit = (daCtx.site && Path.startsWith(`${daCtx.site}/`))
+        ? Path.slice(daCtx.site.length)
+        : Path;
       await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
         timestamp: Timestamp,
         users: Users,
-        path: Path,
+        path: pathForAudit,
         versionLabel,
         versionId,
       });

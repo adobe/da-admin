@@ -2366,7 +2366,7 @@ describe('Version Put', () => {
       assert.strictEqual(auditCalls.length, 1, 'writeAuditEntry must be called once');
       assert.strictEqual(auditCalls[0].repo, 'daplayground', 'repo must come from daCtx.site');
       assert.strictEqual(auditCalls[0].fileId, 'file-id-1');
-      assert.strictEqual(auditCalls[0].entry.path, 'daplayground/docs/surf.html');
+      assert.strictEqual(auditCalls[0].entry.path, '/docs/surf.html', 'path stored without repo prefix');
     });
 
     it('writes audit when version is also created (label) - audit separate from version', async () => {
@@ -2474,8 +2474,8 @@ describe('Version Put', () => {
         'audit entry must contain versionId when a labelled version was created',
       );
       assert.ok(
-        auditCalls[0].entry.versionId.endsWith('.html'),
-        'versionId must be snapshot filename (e.g. uuid.html)',
+        auditCalls[0].entry.versionId && !auditCalls[0].entry.versionId.endsWith('.html'),
+        'versionId stored without extension (e.g. uuid)',
       );
     });
 

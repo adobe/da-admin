@@ -24,7 +24,8 @@ const Bucket = process.env.AEM_BUCKET_NAME;
 const Org = process.env.ORG || process.argv[2];
 const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
 
-const AUDIT_WINDOW_MS = 30 * 60 * 1000;
+const AUDIT_WINDOW_MS = 1000;
+// const AUDIT_WINDOW_MS = 30 * 60 * 1000;
 
 const config = {
   region: 'auto',
@@ -71,6 +72,18 @@ function dedupeAuditEntries(entries) {
     }
   }
   return out;
+}
+
+/** Normalize path (strip repo prefix) and versionId (strip .ext) for audit storage. */
+function normalizeAuditEntry(entry, repo) {
+  const path = (repo && entry.path && entry.path.startsWith(`${repo}/`))
+    ? entry.path.slice(repo.length)
+    : (entry.path ?? '');
+  let { versionId } = entry;
+  if (versionId && typeof versionId === 'string' && versionId.endsWith('.html')) {
+    versionId = versionId.slice(0, -5);
+  }
+  return { ...entry, path, versionId };
 }
 
 function formatAuditLine(entry) {
@@ -219,7 +232,8 @@ async function migrateFileId(fileId) {
         (a, b) => (parseInt(a.timestamp, 10) || 0) - (parseInt(b.timestamp, 10) || 0),
       );
       const deduped = dedupeAuditEntries(combined);
-      const body = deduped.map(formatAuditLine).join('\n') + (deduped.length ? '\n' : '');
+      const normalized = deduped.map((e) => normalizeAuditEntry(e, repo));
+      const body = normalized.map(formatAuditLine).join('\n') + (normalized.length ? '\n' : '');
       const auditKey = `${Org}/${repo}/.da-versions/${fileId}/audit.txt`;
       await client.send(new PutObjectCommand({
         Bucket,
