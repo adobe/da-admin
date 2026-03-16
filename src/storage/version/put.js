@@ -114,7 +114,7 @@ export async function putObjectWithVersion(
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
   const input = buildInput(update);
   const Timestamp = `${Date.now()}`;
-  const Path = update.key;
+  const Path = update.key ?? daCtx.key ?? '';
 
   // Validate conflicting conditionals - both headers present is unusual for PUT
   let effectiveConditionals = clientConditionals;
@@ -212,13 +212,11 @@ export async function putObjectWithVersion(
   const shouldCreateVersionObject = createVersion
     && (update.label != null || Label === 'Restore Point');
 
-  const repo = (update.key && update.key.includes('/')) ? update.key.split('/')[0] : '';
-
   if (shouldCreateVersionObject) {
     const versionResp = await putVersion(config, {
       Bucket: input.Bucket,
       Org: daCtx.org,
-      Repo: repo || undefined,
+      Repo: daCtx.site || undefined,
       Body: (body || storeBody ? current.body : ''),
       ContentLength: (body || storeBody ? current.contentLength : undefined),
       ContentType: current.contentType,
@@ -237,13 +235,19 @@ export async function putObjectWithVersion(
       return { status: versionResp.status, metadata: { id: ID } };
     }
     versionCreated = versionResp.status === 200;
-  } else if (createVersion && repo) {
-    // Audit entry: write to audit.txt (new structure only, 30 min dedupe)
+  }
+
+  // Audit: one entry per versionable PUT; versionLabel + versionId when labelled version created.
+  if (createVersion) {
     try {
-      await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, repo, ID, {
+      const versionId = versionCreated ? `${Version}.${daCtx.ext}` : undefined;
+      const versionLabel = versionCreated ? (Label ?? '') : undefined;
+      await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
         timestamp: Timestamp,
         users: Users,
         path: Path,
+        versionLabel,
+        versionId,
       });
     } catch (e) {
       // eslint-disable-next-line no-console

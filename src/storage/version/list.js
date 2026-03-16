@@ -61,7 +61,14 @@ async function listFromNewStructure(env, { bucket, org, key: _ }, fileId, repo) 
   let auditEntries = [];
   try {
     const lines = await readAuditLines(env, { bucket, org }, repo, fileId);
-    auditEntries = lines.map(({ users, timestamp, path }) => ({ users, timestamp, path }));
+    auditEntries = lines.map(({
+      users, timestamp, path, versionLabel, versionId,
+    }) => {
+      const entry = { users, timestamp, path };
+      if (versionLabel) entry.versionLabel = versionLabel;
+      if (versionId) entry.versionId = versionId;
+      return entry;
+    });
   } catch {
     // Ignore audit read errors (e.g. 404)
   }

@@ -74,19 +74,32 @@ function dedupeAuditEntries(entries) {
 }
 
 function formatAuditLine(entry) {
-  return [entry.timestamp, entry.users, entry.path].join('\t');
+  const versionLabel = entry.versionLabel ?? '';
+  const versionId = entry.versionId ?? '';
+  return [entry.timestamp, entry.users, entry.path, versionLabel, versionId].join('\t');
 }
 
-/** Parse one audit line (tab-separated: timestamp, users, path). Same format as audit.js. */
+/** Parse one audit line (ts, users, path, versionLabel?, versionId?). Same format as audit.js. */
 function parseAuditLine(line) {
   const t = line.trim();
   if (!t) return null;
   const parts = t.split('\t');
   if (parts.length < 3) return null;
+  let versionLabel = '';
+  let versionId = '';
+  if (parts.length >= 5) {
+    versionId = parts.pop();
+    versionLabel = parts.pop();
+  } else if (parts.length >= 4) {
+    versionId = parts.pop();
+  }
+  const path = parts.slice(2).join('\t');
   return {
     timestamp: parts[0],
     users: parts[1],
-    path: parts.slice(2).join('\t'),
+    path,
+    versionLabel,
+    versionId,
   };
 }
 
