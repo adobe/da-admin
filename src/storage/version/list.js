@@ -133,9 +133,8 @@ async function listFromLegacyStructure(env, { bucket, org, key: _ }, fileId) {
 }
 
 /**
- * Backward compat: project not yet migrated but new audit entries written to new path.
- * When new path has no snapshots (only audit.txt), merge legacy snapshots + legacy audit
- * with new audit so list shows both.
+ * Backward compat: merge legacy (org/.da-versions/fileId) with new (repo/.da-versions/fileId)
+ * so list shows both old and new versions/audits until migration is complete.
  */
 function mergeLegacyAndNewResult(legacyResult, newResult) {
   if (legacyResult.status !== 200 || !legacyResult.body) return newResult;
@@ -162,13 +161,8 @@ export async function listObjectVersions(env, { bucket, org, key }) {
   if (repo) {
     const newResult = await listFromNewStructure(env, { bucket, org, key }, fileId, repo);
     if (newResult) {
-      const newEntries = JSON.parse(newResult.body);
-      const hasSnapshotsInNew = newEntries.some((e) => e.url);
-      if (!hasSnapshotsInNew) {
-        const legacyResult = await listFromLegacyStructure(env, { bucket, org, key }, fileId);
-        return mergeLegacyAndNewResult(legacyResult, newResult);
-      }
-      return newResult;
+      const legacyResult = await listFromLegacyStructure(env, { bucket, org, key }, fileId);
+      return mergeLegacyAndNewResult(legacyResult, newResult);
     }
   }
 
