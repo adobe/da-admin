@@ -9,16 +9,18 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-/* eslint-disable no-await-in-loop -- migration script: sequential to avoid rate limits */
+/* eslint-disable no-await-in-loop -- script: list + concurrency use await in loops */
 import './load-env.js';
 import {
   S3Client,
   ListObjectsV2Command,
-  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 
 const Bucket = process.env.AEM_BUCKET_NAME;
 const Org = process.env.ORG || process.argv[2];
+
+/** Process N file IDs in parallel. */
+const CONCURRENCY = parseInt(process.env.MIGRATE_ANALYSE_CONCURRENCY || '25', 10);
 
 if (!Bucket || !Org) {
   console.error('Set AEM_BUCKET_NAME and ORG (or pass org as first arg)');
@@ -37,6 +39,23 @@ if (process.env.S3_FORCE_PATH_STYLE === 'true') config.forcePathStyle = true;
 
 const client = new S3Client(config);
 const prefix = `${Org}/.da-versions/`;
+
+async function runWithConcurrency(limit, items, fn) {
+  const results = [];
+  const executing = new Set();
+  for (const item of items) {
+    const p = Promise.resolve().then(() => fn(item));
+    results.push(p);
+    executing.add(p);
+    p.finally(() => {
+      executing.delete(p);
+    });
+    if (executing.size >= limit) {
+      await Promise.race(executing);
+    }
+  }
+  return Promise.all(results);
+}
 
 async function listFileIds() {
   const ids = [];
@@ -59,6 +78,10 @@ async function listFileIds() {
   return ids;
 }
 
+/**
+ * Count objects for one file ID using list only (Size in list response; no HEAD).
+ * @returns {{ fileId: string, total: number, empty: number, nonEmpty: number }}
+ */
 async function countObjects(fileId) {
   const listPrefix = `${prefix}${fileId}/`;
   let total = 0;
@@ -75,48 +98,70 @@ async function countObjects(fileId) {
     const resp = await client.send(cmd);
     for (const obj of resp.Contents || []) {
       total += 1;
-      try {
-        const head = await client.send(new HeadObjectCommand({
-          Bucket,
-          Key: obj.Key,
-        }));
-        const len = head.ContentLength ?? 0;
-        if (len === 0) empty += 1;
-        else nonEmpty += 1;
-      } catch {
-        total -= 1;
-      }
+      const size = obj.Size ?? 0;
+      if (size === 0) empty += 1;
+      else nonEmpty += 1;
     }
     token = resp.NextContinuationToken;
   } while (token);
-  return { total, empty, nonEmpty };
+  return {
+    fileId, total, empty, nonEmpty,
+  };
 }
 
 async function main() {
+  const verbose = process.argv.includes('--verbose') || process.argv.includes('-v');
+
   console.log(`Org: ${Org}, Bucket: ${Bucket}, prefix: ${prefix}`);
   const fileIds = await listFileIds();
   console.log(`File IDs (version folders): ${fileIds.length}`);
+  if (fileIds.length === 0) {
+    console.log('Nothing to analyse.');
+    return;
+  }
+
+  console.log(`Analysing all ${fileIds.length} folders (concurrency: ${CONCURRENCY})...`);
+  const startMs = Date.now();
+  const results = await runWithConcurrency(CONCURRENCY, fileIds, countObjects);
+  const elapsedSec = (Date.now() - startMs) / 1000;
 
   let totalObjects = 0;
   let totalEmpty = 0;
   let totalNonEmpty = 0;
+  const withData = results.filter((r) => r.total > 0);
 
-  const sampleIds = fileIds.slice(0, 50);
-  for (const fileId of sampleIds) {
-    const { total, empty, nonEmpty } = await countObjects(fileId);
-    totalObjects += total;
-    totalEmpty += empty;
-    totalNonEmpty += nonEmpty;
-    if (total > 0) {
-      console.log(`  ${fileId}: total=${total} empty=${empty} nonEmpty=${nonEmpty}`);
+  for (const r of results) {
+    totalObjects += r.total;
+    totalEmpty += r.empty;
+    totalNonEmpty += r.nonEmpty;
+  }
+
+  // Clear summary: what you have and what Migrate will do
+  console.log('');
+  console.log('--- Summary ---');
+  console.log(`  File IDs (version folders):  ${fileIds.length}`);
+  console.log(`  Total objects (legacy):      ${totalObjects}`);
+  console.log(`  Empty (metadata only):       ${totalEmpty}  → will be converted to audit entries`);
+  console.log(`  With content (snapshots):    ${totalNonEmpty}  → will be copied to org/repo/.da-versions/fileId/`);
+  console.log('');
+  console.log('  Migrate will:');
+  console.log(`    • Copy ${totalNonEmpty} snapshot(s) to the new path (one per repo/fileId).`);
+  console.log(`    • Convert ${totalEmpty} empty object(s) to audit lines in audit.txt (same-user + 30 min dedup per file; version entries do not collapse). Final line count is lower — run Migrate with DRY_RUN=1 to see exact numbers.`);
+  console.log('    • Merge with any existing audit.txt already in the new path (hybrid case).');
+  console.log('');
+  const idsPerSec = fileIds.length / elapsedSec;
+  const objectsPerSec = totalObjects / elapsedSec;
+  console.log(
+    `  Timing: ${elapsedSec.toFixed(1)}s total | ${idsPerSec.toFixed(0)} file IDs/s | ${objectsPerSec.toFixed(0)} objects/s`,
+  );
+
+  if (verbose && withData.length > 0) {
+    console.log('');
+    console.log('--- Per-file breakdown ---');
+    for (const r of withData.sort((a, b) => b.total - a.total)) {
+      console.log(`  ${r.fileId}: total=${r.total} empty=${r.empty} nonEmpty=${r.nonEmpty}`);
     }
   }
-
-  if (fileIds.length > 50) {
-    console.log(`  ... (showing first 50; run full count by iterating all ${fileIds.length} IDs)`);
-  }
-
-  console.log(`Sample totals (first ${Math.min(50, fileIds.length)} IDs): ${totalObjects} objects, ${totalEmpty} empty, ${totalNonEmpty} with content`);
 }
 
 main().catch((e) => {

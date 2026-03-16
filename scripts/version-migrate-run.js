@@ -40,6 +40,26 @@ if (process.env.S3_FORCE_PATH_STYLE === 'true') config.forcePathStyle = true;
 const client = new S3Client(config);
 const prefix = `${Org}/.da-versions/`;
 
+/** Process N file IDs in parallel. */
+const CONCURRENCY = parseInt(process.env.MIGRATE_RUN_CONCURRENCY || '15', 10);
+
+async function runWithConcurrency(limit, items, fn) {
+  const results = [];
+  const executing = new Set();
+  for (const item of items) {
+    const p = Promise.resolve().then(() => fn(item));
+    results.push(p);
+    executing.add(p);
+    p.finally(() => {
+      executing.delete(p);
+    });
+    if (executing.size >= limit) {
+      await Promise.race(executing);
+    }
+  }
+  return Promise.all(results);
+}
+
 function getRepoFromPath(path) {
   if (!path || typeof path !== 'string') return '';
   const first = path.split('/')[0];
@@ -219,6 +239,28 @@ async function migrateFileId(fileId) {
     repo = firstRepo;
   } else if (repoSet.size > 1) repo = 'unknown';
 
+  let auditLines = 0;
+  if (auditEntries.length && repo) {
+    const dedupedLegacy = dedupeAuditEntries(auditEntries);
+    const existingInNew = await readExistingAuditInNewPath(repo, fileId);
+    const combined = [...dedupedLegacy, ...existingInNew].sort(
+      (a, b) => (parseInt(a.timestamp, 10) || 0) - (parseInt(b.timestamp, 10) || 0),
+    );
+    const deduped = dedupeAuditEntries(combined);
+    const normalized = deduped.map((e) => normalizeAuditEntry(e, repo));
+    auditLines = normalized.length;
+    if (!DRY_RUN) {
+      const body = normalized.map(formatAuditLine).join('\n') + (normalized.length ? '\n' : '');
+      const auditKey = `${Org}/${repo}/.da-versions/${fileId}/audit.txt`;
+      await client.send(new PutObjectCommand({
+        Bucket,
+        Key: auditKey,
+        Body: body,
+        ContentType: 'text/plain; charset=utf-8',
+      }));
+    }
+  }
+
   if (!DRY_RUN) {
     for (const s of snapshots) {
       const destRepo = s.repo || repo;
@@ -231,30 +273,13 @@ async function migrateFileId(fileId) {
         }));
       }
     }
-
-    if (auditEntries.length && repo) {
-      const dedupedLegacy = dedupeAuditEntries(auditEntries);
-      const existingInNew = await readExistingAuditInNewPath(repo, fileId);
-      const combined = [...dedupedLegacy, ...existingInNew].sort(
-        (a, b) => (parseInt(a.timestamp, 10) || 0) - (parseInt(b.timestamp, 10) || 0),
-      );
-      const deduped = dedupeAuditEntries(combined);
-      const normalized = deduped.map((e) => normalizeAuditEntry(e, repo));
-      const body = normalized.map(formatAuditLine).join('\n') + (normalized.length ? '\n' : '');
-      const auditKey = `${Org}/${repo}/.da-versions/${fileId}/audit.txt`;
-      await client.send(new PutObjectCommand({
-        Bucket,
-        Key: auditKey,
-        Body: body,
-        ContentType: 'text/plain; charset=utf-8',
-      }));
-    }
   }
 
   return {
     fileId,
     snapshots: snapshots.length,
     audit: auditEntries.length,
+    auditLines,
     repo: repo || '(none)',
   };
 }
@@ -267,15 +292,49 @@ async function main() {
   console.log(`Org: ${Org}, Bucket: ${Bucket}, DRY_RUN: ${DRY_RUN}`);
 
   const fileIds = await listFileIds();
-  console.log(`File IDs to process: ${fileIds.length}`);
+  console.log(`File IDs to process: ${fileIds.length} (concurrency: ${CONCURRENCY})`);
+  console.log('');
 
-  for (const fileId of fileIds) {
+  const startMs = Date.now();
+  const results = await runWithConcurrency(CONCURRENCY, fileIds, async (fileId) => {
     try {
       const result = await migrateFileId(fileId);
-      console.log(`  ${fileId}: ${result.snapshots} snapshots, ${result.audit} audit -> repo ${result.repo}`);
+      console.log(`  ${fileId}: ${result.snapshots} snapshots, ${result.auditLines} audit lines -> repo ${result.repo}`);
+      return { fileId, ...result, error: null };
     } catch (e) {
       console.error(`  ${fileId}: error`, e.message);
+      return {
+        fileId, snapshots: 0, audit: 0, auditLines: 0, repo: '', error: e,
+      };
     }
+  });
+
+  const errors = results.filter((r) => r.error);
+  const ok = results.filter((r) => !r.error);
+  const elapsedSec = (Date.now() - startMs) / 1000;
+
+  if (DRY_RUN && ok.length > 0) {
+    const totalSnapshots = ok.reduce((sum, r) => sum + r.snapshots, 0);
+    const totalAuditLines = ok.reduce((sum, r) => sum + (r.auditLines || 0), 0);
+    const filesWithAudit = ok.filter((r) => (r.auditLines || 0) > 0).length;
+    console.log('');
+    console.log('--- DRY RUN summary (no changes were made) ---');
+    console.log(`  File IDs processed:     ${ok.length}${errors.length > 0 ? ` (${errors.length} error(s))` : ''}`);
+    console.log(`  Snapshots would copy:   ${totalSnapshots}`);
+    console.log(`  audit.txt would write:  ${filesWithAudit} file(s), ${totalAuditLines} total lines (after dedup + merge)`);
+    const idsPerSec = ok.length / elapsedSec;
+    console.log(`  Timing: ${elapsedSec.toFixed(1)}s total | ${idsPerSec.toFixed(1)} file IDs/s`);
+    console.log('  Compare with Analyse: "With content" ≈ snapshots above; run without DRY_RUN to apply.');
+  } else if (errors.length > 0) {
+    console.log('');
+    console.log(`Done. ${results.length} processed, ${errors.length} error(s).`);
+  }
+
+  if (ok.length > 0 && !DRY_RUN) {
+    const totalSnapshots = ok.reduce((sum, r) => sum + r.snapshots, 0);
+    const totalAuditLines = ok.reduce((sum, r) => sum + (r.auditLines || 0), 0);
+    console.log('');
+    console.log(`Completed in ${elapsedSec.toFixed(1)}s | ${(ok.length / elapsedSec).toFixed(1)} file IDs/s | ${totalSnapshots} snapshots copied, ${totalAuditLines} audit lines written`);
   }
 }
 
