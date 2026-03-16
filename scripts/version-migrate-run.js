@@ -1,0 +1,251 @@
+/*
+ * Copyright 2025 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
+/* eslint-disable no-await-in-loop, no-continue -- migration: sequential; skip audit.txt */
+import './load-env.js';
+import {
+  S3Client,
+  ListObjectsV2Command,
+  HeadObjectCommand,
+  GetObjectCommand,
+  CopyObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
+
+const Bucket = process.env.AEM_BUCKET_NAME;
+const Org = process.env.ORG || process.argv[2];
+const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
+
+const AUDIT_WINDOW_MS = 30 * 60 * 1000;
+
+const config = {
+  region: 'auto',
+  endpoint: process.env.S3_DEF_URL,
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  },
+};
+if (process.env.S3_FORCE_PATH_STYLE === 'true') config.forcePathStyle = true;
+
+const client = new S3Client(config);
+const prefix = `${Org}/.da-versions/`;
+
+function getRepoFromPath(path) {
+  if (!path || typeof path !== 'string') return '';
+  const first = path.split('/')[0];
+  return first || '';
+}
+
+function usersNormalized(usersJson) {
+  try {
+    const arr = JSON.parse(usersJson);
+    const emails = Array.isArray(arr) ? arr.map((u) => u?.email ?? '').filter(Boolean) : [];
+    return emails.join(',') || usersJson;
+  } catch {
+    return usersJson;
+  }
+}
+
+function dedupeAuditEntries(entries) {
+  const out = [];
+  for (const e of entries.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))) {
+    const last = out[out.length - 1];
+    const ts = parseInt(e.timestamp, 10) || 0;
+    const userNorm = usersNormalized(e.users);
+    const lastTs = parseInt(last?.timestamp, 10) || 0;
+    const sameUser = last && usersNormalized(last.users) === userNorm;
+    const inWindow = sameUser && (ts - lastTs <= AUDIT_WINDOW_MS);
+    if (inWindow) {
+      out[out.length - 1] = e;
+    } else {
+      out.push(e);
+    }
+  }
+  return out;
+}
+
+function formatAuditLine(entry) {
+  return [entry.timestamp, entry.users, entry.path].join('\t');
+}
+
+/** Parse one audit line (tab-separated: timestamp, users, path). Same format as audit.js. */
+function parseAuditLine(line) {
+  const t = line.trim();
+  if (!t) return null;
+  const parts = t.split('\t');
+  if (parts.length < 3) return null;
+  return {
+    timestamp: parts[0],
+    users: parts[1],
+    path: parts.slice(2).join('\t'),
+  };
+}
+
+/** In hybrid case, new path may already have audit.txt. Read and merge with legacy entries. */
+async function readExistingAuditInNewPath(repo, fileId) {
+  const auditKey = `${Org}/${repo}/.da-versions/${fileId}/audit.txt`;
+  try {
+    const resp = await client.send(new GetObjectCommand({ Bucket, Key: auditKey }));
+    const body = resp.Body;
+    let text = '';
+    if (body) {
+      if (typeof body.transformToByteArray === 'function') {
+        const bytes = await body.transformToByteArray();
+        text = new TextDecoder().decode(bytes);
+      } else {
+        const chunks = [];
+        for await (const chunk of body) chunks.push(chunk);
+        text = Buffer.concat(chunks).toString('utf8');
+      }
+    }
+    const lines = text.split('\n').map(parseAuditLine).filter(Boolean);
+    return lines;
+  } catch (e) {
+    if (e?.$metadata?.httpStatusCode === 404 || e?.name === 'NoSuchKey') return [];
+    throw e;
+  }
+}
+
+async function listFileIds() {
+  const ids = [];
+  let token;
+  do {
+    const resp = await client.send(new ListObjectsV2Command({
+      Bucket,
+      Prefix: prefix,
+      Delimiter: '/',
+      MaxKeys: 1000,
+      ContinuationToken: token,
+    }));
+    (resp.CommonPrefixes || []).forEach((cp) => {
+      const p = cp.Prefix.slice(prefix.length).replace(/\/$/, '');
+      if (p) ids.push(p);
+    });
+    token = resp.NextContinuationToken;
+  } while (token);
+  return ids;
+}
+
+async function migrateFileId(fileId) {
+  const listPrefix = `${prefix}${fileId}/`;
+  const objects = [];
+  let token;
+  do {
+    const resp = await client.send(new ListObjectsV2Command({
+      Bucket,
+      Prefix: listPrefix,
+      MaxKeys: 1000,
+      ContinuationToken: token,
+    }));
+    (resp.Contents || []).forEach((c) => objects.push(c.Key));
+    token = resp.NextContinuationToken;
+  } while (token);
+
+  const snapshots = [];
+  const auditEntries = [];
+
+  for (const Key of objects) {
+    const head = await client.send(new HeadObjectCommand({ Bucket, Key }));
+    const contentLength = head.ContentLength ?? 0;
+    const meta = head.Metadata || {};
+    const path = meta.path || meta.Path || '';
+    const timestamp = meta.timestamp || meta.Timestamp || '';
+    const users = meta.users || meta.Users || '[{"email":"anonymous"}]';
+    const repo = getRepoFromPath(path);
+
+    const name = Key.split('/').pop();
+    if (name !== 'audit.txt') {
+      if (contentLength > 0) {
+        snapshots.push({
+          Key,
+          repo,
+          name,
+          copySource: `${Bucket}/${Key}`,
+        });
+      } else {
+        auditEntries.push({ timestamp, users, path });
+      }
+    }
+  }
+
+  const repoSet = new Set(snapshots.map((s) => s.repo).filter(Boolean));
+  const repoFromAudit = auditEntries.length ? getRepoFromPath(auditEntries[0]?.path) : '';
+  if (repoFromAudit) repoSet.add(repoFromAudit);
+  let repo = '';
+  if (repoSet.size === 1) {
+    const [firstRepo] = repoSet;
+    repo = firstRepo;
+  } else if (repoSet.size > 1) repo = 'unknown';
+
+  if (!DRY_RUN) {
+    for (const s of snapshots) {
+      const destRepo = s.repo || repo;
+      if (destRepo) {
+        const destKey = `${Org}/${destRepo}/.da-versions/${fileId}/${s.name}`;
+        await client.send(new CopyObjectCommand({
+          Bucket,
+          CopySource: s.copySource,
+          Key: destKey,
+        }));
+      }
+    }
+
+    if (auditEntries.length && repo) {
+      const dedupedLegacy = dedupeAuditEntries(auditEntries);
+      const existingInNew = await readExistingAuditInNewPath(repo, fileId);
+      const combined = [...dedupedLegacy, ...existingInNew].sort(
+        (a, b) => (parseInt(a.timestamp, 10) || 0) - (parseInt(b.timestamp, 10) || 0),
+      );
+      const deduped = dedupeAuditEntries(combined);
+      const body = deduped.map(formatAuditLine).join('\n') + (deduped.length ? '\n' : '');
+      const auditKey = `${Org}/${repo}/.da-versions/${fileId}/audit.txt`;
+      await client.send(new PutObjectCommand({
+        Bucket,
+        Key: auditKey,
+        Body: body,
+        ContentType: 'text/plain; charset=utf-8',
+      }));
+    }
+  }
+
+  return {
+    fileId,
+    snapshots: snapshots.length,
+    audit: auditEntries.length,
+    repo: repo || '(none)',
+  };
+}
+
+async function main() {
+  if (!Bucket || !Org) {
+    console.error('Set AEM_BUCKET_NAME and ORG (or pass org as first arg)');
+    process.exit(1);
+  }
+  console.log(`Org: ${Org}, Bucket: ${Bucket}, DRY_RUN: ${DRY_RUN}`);
+
+  const fileIds = await listFileIds();
+  console.log(`File IDs to process: ${fileIds.length}`);
+
+  for (const fileId of fileIds) {
+    try {
+      const result = await migrateFileId(fileId);
+      console.log(`  ${fileId}: ${result.snapshots} snapshots, ${result.audit} audit -> repo ${result.repo}`);
+    } catch (e) {
+      console.error(`  ${fileId}: error`, e.message);
+    }
+  }
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

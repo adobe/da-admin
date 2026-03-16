@@ -412,4 +412,167 @@ describe('Version List', () => {
     // Verify MAX_VERSIONS (500) is passed to listObjects
     assert.strictEqual(maxVersionsParam, 500);
   });
+
+  describe('backward compat: not migrated but new audit entries in new path', () => {
+    it('when new path has only audit.txt (no snapshots), merges legacy snapshots + audit with new audit', async () => {
+      const listObjectCalls = [];
+      const getObjectCalls = [];
+      const mockGetObject = async (env, { key }) => {
+        getObjectCalls.push(key);
+        if (key === 'myrepo/docs/file.html') {
+          return { status: 200, metadata: { id: 'file-id-bcompat' } };
+        }
+        if (key === '.da-versions/file-id-bcompat/snap1.html') {
+          return {
+            status: 200,
+            metadata: {
+              timestamp: '1000',
+              users: '[{"email":"legacy@example.com"}]',
+              path: 'myrepo/docs/file.html',
+              label: 'Legacy snapshot',
+            },
+            contentLength: 100,
+          };
+        }
+        return { status: 404 };
+      };
+
+      const mockListObjects = async (env, { key }) => {
+        listObjectCalls.push(key);
+        if (key === 'myrepo/.da-versions/file-id-bcompat') {
+          return {
+            status: 200,
+            body: JSON.stringify([{ name: 'audit', ext: 'txt' }]),
+          };
+        }
+        if (key === '.da-versions/file-id-bcompat') {
+          return {
+            status: 200,
+            body: JSON.stringify([{ name: 'snap1', ext: 'html' }]),
+          };
+        }
+        return { status: 404, body: '[]' };
+      };
+
+      const newAuditLines = [
+        { timestamp: 5000, users: [{ email: 'new@example.com' }], path: 'myrepo/docs/file.html' },
+      ];
+      const mockReadAuditLines = async () => newAuditLines;
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
+      });
+
+      const result = await listObjectVersions(
+        {},
+        { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
+      );
+
+      assert.strictEqual(result.status, 200);
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 2, 'merged legacy snapshot + new audit');
+      const withUrl = versions.filter((v) => v.url);
+      const withoutUrl = versions.filter((v) => !v.url);
+      assert.strictEqual(withUrl.length, 1, 'one legacy snapshot with url');
+      assert.strictEqual(withoutUrl.length, 1, 'one new audit entry without url');
+      assert.strictEqual(withUrl[0].timestamp, 1000);
+      assert.strictEqual(withoutUrl[0].timestamp, 5000);
+      assert.ok(listObjectCalls.some((k) => k.includes('myrepo/.da-versions')));
+      assert.ok(listObjectCalls.some((k) => k.startsWith('.da-versions/')));
+    });
+
+    it('when new path list returns 404, uses legacy only', async () => {
+      const mockGetObject = async (env, { key }) => {
+        if (key === 'repo/path.html') {
+          return { status: 200, metadata: { id: 'id-404' } };
+        }
+        if (key === '.da-versions/id-404/legacy1.html') {
+          return {
+            status: 200,
+            metadata: { timestamp: '2000', users: '[]', path: 'repo/path.html' },
+            contentLength: 50,
+          };
+        }
+        return { status: 404 };
+      };
+
+      const mockListObjects = async (env, { key }) => {
+        if (key === 'repo/.da-versions/id-404') {
+          return { status: 404, body: '[]' };
+        }
+        if (key === '.da-versions/id-404') {
+          return {
+            status: 200,
+            body: JSON.stringify([{ name: 'legacy1', ext: 'html' }]),
+          };
+        }
+        return { status: 404 };
+      };
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+      });
+
+      const result = await listObjectVersions(
+        {},
+        { bucket: 'bkt', org: 'testorg', key: 'repo/path.html' },
+      );
+
+      assert.strictEqual(result.status, 200);
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 1);
+      assert.ok(versions[0].url);
+    });
+
+    it('when new path has snapshots, uses new result only (no legacy merge)', async () => {
+      const mockGetObject = async (env, { key }) => {
+        if (key === 'repo/doc.html') {
+          return { status: 200, metadata: { id: 'id-new' } };
+        }
+        if (key === 'repo/.da-versions/id-new/v1.html') {
+          return {
+            status: 200,
+            metadata: {
+              timestamp: '3000',
+              users: '[{"email":"u@x.com"}]',
+              path: 'repo/doc.html',
+            },
+            contentLength: 200,
+          };
+        }
+        return { status: 404 };
+      };
+
+      const mockListObjects = async (env, { key }) => {
+        if (key === 'repo/.da-versions/id-new') {
+          return {
+            status: 200,
+            body: JSON.stringify([{ name: 'v1', ext: 'html' }]),
+          };
+        }
+        return { status: 404 };
+      };
+
+      const mockReadAuditLines = async () => [];
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
+      });
+
+      const result = await listObjectVersions(
+        {},
+        { bucket: 'bkt', org: 'testorg', key: 'repo/doc.html' },
+      );
+
+      assert.strictEqual(result.status, 200);
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 1);
+      assert.strictEqual(versions[0].url, '/versionsource/testorg/repo/id-new/v1.html');
+    });
+  });
 });
