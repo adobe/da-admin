@@ -205,6 +205,7 @@ async function migrateFileId(fileId) {
 
   const snapshots = [];
   const auditEntries = [];
+  const snapshotAuditEntries = [];
 
   for (const Key of objects) {
     const head = await client.send(new HeadObjectCommand({ Bucket, Key }));
@@ -213,6 +214,7 @@ async function migrateFileId(fileId) {
     const path = meta.path || meta.Path || '';
     const timestamp = meta.timestamp || meta.Timestamp || '';
     const users = meta.users || meta.Users || '[{"email":"anonymous"}]';
+    const versionLabel = meta.label || meta.Label || '';
     const repo = getRepoFromPath(path);
 
     const name = Key.split('/').pop();
@@ -224,6 +226,10 @@ async function migrateFileId(fileId) {
           name,
           copySource: `${Bucket}/${Key}`,
         });
+        const versionId = name.includes('.') ? name.replace(/\.[^.]+$/, '') : name;
+        snapshotAuditEntries.push({
+          timestamp, users, path, versionLabel, versionId,
+        });
       } else {
         auditEntries.push({ timestamp, users, path });
       }
@@ -231,7 +237,8 @@ async function migrateFileId(fileId) {
   }
 
   const repoSet = new Set(snapshots.map((s) => s.repo).filter(Boolean));
-  const repoFromAudit = auditEntries.length ? getRepoFromPath(auditEntries[0]?.path) : '';
+  const repoFromAudit = (auditEntries.length ? getRepoFromPath(auditEntries[0]?.path) : '')
+    || (snapshotAuditEntries.length ? getRepoFromPath(snapshotAuditEntries[0]?.path) : '');
   if (repoFromAudit) repoSet.add(repoFromAudit);
   let repo = '';
   if (repoSet.size === 1) {
@@ -239,9 +246,10 @@ async function migrateFileId(fileId) {
     repo = firstRepo;
   } else if (repoSet.size > 1) repo = 'unknown';
 
+  const allLegacyAudit = [...auditEntries, ...snapshotAuditEntries];
   let auditLines = 0;
-  if (auditEntries.length && repo) {
-    const dedupedLegacy = dedupeAuditEntries(auditEntries);
+  if (allLegacyAudit.length && repo) {
+    const dedupedLegacy = dedupeAuditEntries(allLegacyAudit);
     const existingInNew = await readExistingAuditInNewPath(repo, fileId);
     const combined = [...dedupedLegacy, ...existingInNew].sort(
       (a, b) => (parseInt(a.timestamp, 10) || 0) - (parseInt(b.timestamp, 10) || 0),
