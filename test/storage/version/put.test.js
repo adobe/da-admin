@@ -273,13 +273,8 @@ describe('Version Put', () => {
     const resp = await putObjectWithVersion(env, daCtx, update, true);
     assert.equal(200, resp.status);
     assert.equal('x123', resp.metadata.id);
-    assert.equal(1, s3VersionSent.length);
-    assert.equal('prevbody', s3VersionSent[0].input.Body);
-    assert.equal('bkt', s3VersionSent[0].input.Bucket);
-    assert.equal('myorg/.da-versions/x123/aaa-bbb.html', s3VersionSent[0].input.Key);
-    assert.equal('[{"email":"anonymous"}]', s3VersionSent[0].input.Metadata.Users);
-    assert.equal('a/x.html', s3VersionSent[0].input.Metadata.Path);
-    assert(s3VersionSent[0].input.Metadata.Timestamp > 0);
+    // No Collab Parse version: version only created for explicit label or Restore Point
+    assert.equal(0, s3VersionSent.length);
 
     assert.equal(1, s3Sent.length);
     assert.equal('new-body', s3Sent[0].input.Body);
@@ -346,13 +341,8 @@ describe('Version Put', () => {
     const resp = await putObjectWithVersion(env, daCtx, update, false);
     assert.equal(202, resp.status);
     assert.equal('q123-456', resp.metadata.id);
-    assert.equal(1, s3VersionSent.length);
-    assert.equal('', s3VersionSent[0].input.Body);
-    assert.equal('bbb', s3VersionSent[0].input.Bucket);
-    assert.equal('myorg/.da-versions/q123-456/ver123.html', s3VersionSent[0].input.Key);
-    assert.equal('[{"email":"anonymous"}]', s3VersionSent[0].input.Metadata.Users);
-    assert.equal('a/x.html', s3VersionSent[0].input.Metadata.Path);
-    assert(s3VersionSent[0].input.Metadata.Timestamp > 0);
+    // No empty audit version: audit will use audit.txt in new structure
+    assert.equal(0, s3VersionSent.length);
 
     assert.equal(1, s3Sent.length);
     assert.equal('new-body', s3Sent[0].input.Body);
@@ -558,18 +548,20 @@ describe('Version Put', () => {
         users: '[{"email":"anonymous"}]',
         preparsingstore: 12345,
       };
-      return { body: '', metadata, contentLength: 616 };
+      return {
+        body: '',
+        metadata,
+        contentLength: 616,
+        etag: 'etag-1',
+        status: 200,
+      };
     };
 
     const sentToS3 = [];
     const s3Client = {
       send: async (c) => {
         sentToS3.push(c);
-        return {
-          $metadata: {
-            httpStatusCode: 201,
-          },
-        };
+        return { $metadata: { httpStatusCode: 200 } };
       },
     };
     const mockS3Client = () => s3Client;
@@ -580,17 +572,17 @@ describe('Version Put', () => {
       },
       '../../../src/storage/utils/version.js': {
         ifNoneMatch: mockS3Client,
+        ifMatch: mockS3Client,
       },
     });
 
-    const resp = await putObjectWithVersion({}, { method: 'HEAD' }, { type: 'text/html' });
+    await putObjectWithVersion({}, { method: 'HEAD', org: 'o', ext: 'html' }, {
+      type: 'text/html', org: 'o', key: 'q',
+    });
+    // No version created for HEAD/collab parse (no label)
+    assert.equal(0, sentToS3.filter((c) => c.input.Key?.includes('.da-versions')).length);
+    // Main document updated
     assert.equal(1, sentToS3.length);
-    const { input } = sentToS3[0];
-    assert.equal('', input.Body, 'Empty body for HEAD');
-    assert.equal(0, input.ContentLength, 'Should have used 0 as content length for HEAD');
-    assert.equal('/q', input.Metadata.Path);
-    assert.equal(123, input.Metadata.Timestamp);
-    assert.equal('[{"email":"anonymous"}]', input.Metadata.Users);
   });
 
   it('Test putObjectWithVersion BODY', async () => {
@@ -656,13 +648,8 @@ describe('Version Put', () => {
       users: [{ email: 'hi@acme.com' }],
     };
     await putObjectWithVersion({}, ctx, update, true);
-    assert.equal(1, sentToS3.length);
-    const { input } = sentToS3[0];
-    assert.equal('Somebody...', input.Body);
-    assert.equal(616, input.ContentLength);
-    assert.equal('/qwerty', input.Metadata.Path);
-    assert.equal(1234, input.Metadata.Timestamp);
-    assert.equal('[{"email":"anonymous"}]', input.Metadata.Users);
+    // No Collab Parse version (no explicit label)
+    assert.equal(0, sentToS3.length);
 
     assert.equal(1, sentToS3_2.length);
     const input2 = sentToS3_2[0].input;
@@ -877,7 +864,10 @@ describe('Version Put', () => {
       users: [{ email: 'test@example.com' }],
     };
 
-    await putObjectWithVersion(env, daCtx, { key: 'test-file.html', type: 'text/html' }, 'test body', 'test-guid');
+    // Explicit label required to create a version (no Collab Parse version)
+    await putObjectWithVersion(env, daCtx, {
+      key: 'test-file.html', type: 'text/html', label: 'Test version',
+    }, 'test body', 'test-guid');
 
     assert.strictEqual(sentCommands.length, 2); // Version + main file
     const putCommand = sentCommands[0]; // First command is the version
@@ -1463,24 +1453,71 @@ describe('Version Put', () => {
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.metadata.id, 'html-id-existing');
 
-    // Should have 2 commands: one for version, one for main object
-    assert.strictEqual(sentCommands.length, 2);
+    // No version without explicit label; only main object updated
+    assert.strictEqual(sentCommands.length, 1);
 
-    // First command should store the old version
-    const versionCommand = sentCommands[0];
-    assert.strictEqual(versionCommand.input.Bucket, 'content-bucket');
-    assert(versionCommand.input.Key.includes('.da-versions/html-id-existing/'));
-    assert(versionCommand.input.Key.endsWith('.html'));
-    assert.strictEqual(versionCommand.input.Body, existingHtmlContent);
-    assert.strictEqual(versionCommand.input.ContentType, 'text/html');
-    assert.strictEqual(versionCommand.input.ContentLength, existingHtmlContent.length);
-
-    // Second command should store the new content
-    const mainCommand = sentCommands[1];
+    const mainCommand = sentCommands[0];
     assert.strictEqual(mainCommand.input.Bucket, 'content-bucket');
     assert.strictEqual(mainCommand.input.Key, 'testorg/pages/index.html');
     assert.strictEqual(mainCommand.input.Body, newHtmlFile);
     assert.strictEqual(mainCommand.input.ContentType, 'text/html');
+  });
+
+  it('Test putObjectWithVersion with HTML creates version when label provided', async () => {
+    const existingHtmlContent = '<html><body>Old</body></html>';
+    const mockGetObject = async () => ({
+      body: existingHtmlContent,
+      contentLength: existingHtmlContent.length,
+      contentType: 'text/html',
+      etag: 'etag-old',
+      metadata: {
+        id: 'html-id-existing',
+        version: 'ver-old',
+        path: 'pages/index.html',
+        timestamp: '123',
+        users: '[{"email":"anonymous"}]',
+      },
+      status: 200,
+    });
+
+    const sentCommands = [];
+    const mockS3Client = {
+      send: async (c) => {
+        sentCommands.push(c);
+        return { $metadata: { httpStatusCode: 200 } };
+      },
+    };
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/utils/version.js': {
+        ifNoneMatch: () => mockS3Client,
+        ifMatch: () => mockS3Client,
+      },
+    });
+
+    const env = {};
+    const daCtx = { org: 'testorg', ext: 'html', users: [{ email: 'u@example.com' }] };
+    const newHtmlContent = '<html><body><h1>New</h1></body></html>';
+    const newHtmlFile = new File([newHtmlContent], 'index.html', { type: 'text/html' });
+    const update = {
+      bucket: 'content-bucket',
+      org: 'testorg',
+      key: 'pages/index.html',
+      body: newHtmlFile,
+      type: 'text/html',
+      label: 'Before redesign',
+    };
+
+    const result = await putObjectWithVersion(env, daCtx, update, true);
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.versionCreated, true);
+    assert.strictEqual(sentCommands.length, 2);
+    const versionCommand = sentCommands[0];
+    assert(versionCommand.input.Key.includes('.da-versions/html-id-existing/'));
+    assert.strictEqual(versionCommand.input.Body, existingHtmlContent);
+    assert.strictEqual(versionCommand.input.Metadata.Label, 'Before redesign');
   });
 
   describe('Versioning behavior: CREATE vs UPDATE', () => {
@@ -1707,18 +1744,18 @@ describe('Version Put', () => {
         type: 'text/html',
       };
 
-      // FIRST CALL - no version
+      // FIRST CALL - no version (new file)
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version for HTML
+      // SECOND CALL - no version without explicit label (no Collab Parse)
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
-      assert.strictEqual(sentCommands.length, 2);
+      assert.strictEqual(sentCommands.length, 1);
     });
 
-    it('JSON: New file (404) creates object WITHOUT version, existing file creates version', async () => {
+    it('JSON: New file (404) creates object WITHOUT version, existing file no version without label', async () => {
       const sentCommands = [];
       let callCount = 0;
 
@@ -1782,15 +1819,15 @@ describe('Version Put', () => {
         type: 'application/json',
       };
 
-      // FIRST CALL - no version
+      // FIRST CALL - no version (new file)
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
       assert.strictEqual(sentCommands.length, 1);
 
-      // SECOND CALL - creates version for JSON
+      // SECOND CALL - no version without explicit label
       sentCommands.length = 0;
       await putObjectWithVersion(env, daCtx, update);
-      assert.strictEqual(sentCommands.length, 2);
+      assert.strictEqual(sentCommands.length, 1);
     });
 
     it('PDF: Binary files NEVER create versions (first or second POST)', async () => {
@@ -2162,7 +2199,10 @@ describe('Version Put', () => {
       },
     });
 
-    const resp = await putObjectWithVersion({}, { org: 'o', ext: 'html', users: [] }, { org: 'o', key: 'a.html', body: 'new' }, true);
+    // Explicit label required to create a version
+    const resp = await putObjectWithVersion({}, { org: 'o', ext: 'html', users: [] }, {
+      org: 'o', key: 'a.html', body: 'new', label: 'My version',
+    }, true);
     assert.equal(200, resp.status);
     assert.strictEqual(true, resp.versionCreated);
   });
@@ -2195,7 +2235,10 @@ describe('Version Put', () => {
       },
     });
 
-    const resp = await putObjectWithVersion({}, { org: 'o', ext: 'html', users: [] }, { org: 'o', key: 'a.html', body: 'new' }, true);
+    // Explicit label so we attempt version; putVersion returns 412
+    const resp = await putObjectWithVersion({}, { org: 'o', ext: 'html', users: [] }, {
+      org: 'o', key: 'a.html', body: 'new', label: 'My version',
+    }, true);
     assert.equal(200, resp.status);
     assert.strictEqual(false, resp.versionCreated);
   });
@@ -2267,5 +2310,268 @@ describe('Version Put', () => {
 
     const resp = await postObjectVersion(req, env, ctx);
     assert.equal(201, resp.status);
+  });
+
+  describe('audit entry (writeAuditEntry)', () => {
+    it('writes audit on every versionable PUT (no label) - uses daCtx.site as repo', async () => {
+      const auditCalls = [];
+      const mockWriteAuditEntry = async (env, ctx, repo, fileId, entry) => {
+        auditCalls.push({
+          env,
+          ctx,
+          repo,
+          fileId,
+          entry,
+        });
+      };
+
+      const mockGetObject = async () => ({
+        body: 'content',
+        contentType: 'text/html',
+        contentLength: 7,
+        metadata: { id: 'file-id-1', version: 'v1' },
+        status: 200,
+      });
+
+      const mockS3Client = {
+        send: () => ({ $metadata: { httpStatusCode: 200 } }),
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: mockWriteAuditEntry },
+      });
+
+      const daCtx = {
+        org: 'myorg',
+        ext: 'html',
+        site: 'daplayground',
+        users: [{ email: 'u@x.com' }],
+      };
+      const update = {
+        bucket: 'bkt',
+        org: 'myorg',
+        key: 'daplayground/docs/surf.html',
+        body: 'new body',
+        type: 'text/html',
+      };
+
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
+
+      assert.strictEqual(resp.status, 200);
+      assert.strictEqual(auditCalls.length, 1, 'writeAuditEntry must be called once');
+      assert.strictEqual(auditCalls[0].repo, 'daplayground', 'repo must come from daCtx.site');
+      assert.strictEqual(auditCalls[0].fileId, 'file-id-1');
+      assert.strictEqual(auditCalls[0].entry.path, '/docs/surf.html', 'path stored without repo prefix');
+    });
+
+    it('writes audit when version is also created (label) - audit separate from version', async () => {
+      const auditCalls = [];
+      const mockWriteAuditEntry = async (env, ctx, repo, fileId, entry) => {
+        auditCalls.push({ repo, fileId });
+      };
+
+      const mockGetObject = async () => ({
+        body: 'content',
+        contentType: 'text/html',
+        contentLength: 7,
+        metadata: { id: 'doc-id', version: 'ver-1' },
+        status: 200,
+      });
+
+      const mockS3Client = {
+        send: () => ({ $metadata: { httpStatusCode: 200 } }),
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: mockWriteAuditEntry },
+      });
+
+      const daCtx = {
+        org: 'o',
+        ext: 'html',
+        site: 'mysite',
+        users: [],
+      };
+      const update = {
+        org: 'o',
+        key: 'mysite/page.html',
+        body: 'new',
+        label: 'My version',
+      };
+
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
+
+      assert.strictEqual(resp.status, 200);
+      assert.strictEqual(resp.versionCreated, true);
+      assert.strictEqual(auditCalls.length, 1, 'writeAuditEntry must be called even when version created');
+      assert.strictEqual(auditCalls[0].repo, 'mysite');
+    });
+
+    it('audit entry includes versionLabel and versionId when labelled version is created (identifiable in list)', async () => {
+      const auditCalls = [];
+      const mockWriteAuditEntry = async (env, ctx, repo, fileId, entry) => {
+        auditCalls.push({
+          repo,
+          fileId,
+          entry,
+        });
+      };
+
+      const mockGetObject = async () => ({
+        body: 'content',
+        contentType: 'text/html',
+        contentLength: 7,
+        metadata: { id: 'doc-id', version: 'ver-1' },
+        status: 200,
+      });
+
+      const mockS3Client = {
+        send: () => ({ $metadata: { httpStatusCode: 200 } }),
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: mockWriteAuditEntry },
+      });
+
+      const daCtx = {
+        org: 'o',
+        ext: 'html',
+        site: 'mysite',
+        users: [],
+      };
+      const update = {
+        org: 'o',
+        key: 'mysite/page.html',
+        body: 'new',
+        label: 'Release 1',
+      };
+
+      await putObjectWithVersion({}, daCtx, update, true);
+
+      assert.strictEqual(auditCalls.length, 1);
+      assert.strictEqual(
+        auditCalls[0].entry.versionLabel,
+        'Release 1',
+        'audit entry must contain versionLabel when a labelled version was created',
+      );
+      assert.ok(
+        auditCalls[0].entry.versionId,
+        'audit entry must contain versionId when a labelled version was created',
+      );
+      assert.ok(
+        auditCalls[0].entry.versionId && !auditCalls[0].entry.versionId.endsWith('.html'),
+        'versionId stored without extension (e.g. uuid)',
+      );
+    });
+
+    it('audit entry has no versionLabel/versionId when no version object created (plain edit)', async () => {
+      const auditCalls = [];
+      const mockWriteAuditEntry = async (env, ctx, repo, fileId, entry) => {
+        auditCalls.push({ entry });
+      };
+
+      const mockGetObject = async () => ({
+        body: 'content',
+        contentType: 'text/html',
+        metadata: { id: 'doc-id', version: 'v1' },
+        status: 200,
+      });
+
+      const mockS3Client = {
+        send: () => ({ $metadata: { httpStatusCode: 200 } }),
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: mockWriteAuditEntry },
+      });
+
+      const daCtx = {
+        org: 'o',
+        ext: 'html',
+        site: 'repo',
+        users: [],
+      };
+      const update = {
+        org: 'o',
+        key: 'repo/p.html',
+        body: 'edit',
+        type: 'text/html',
+      };
+
+      await putObjectWithVersion({}, daCtx, update, true);
+
+      assert.strictEqual(auditCalls.length, 1);
+      assert.strictEqual(
+        auditCalls[0].entry.versionLabel,
+        undefined,
+        'audit entry must not have versionLabel for plain edit (no label)',
+      );
+      assert.strictEqual(
+        auditCalls[0].entry.versionId,
+        undefined,
+        'audit entry must not have versionId for plain edit (no label)',
+      );
+    });
+
+    it('does not write audit for non-versionable type (e.g. PDF)', async () => {
+      const auditCalls = [];
+      const mockWriteAuditEntry = async () => {
+        auditCalls.push(1);
+      };
+
+      const mockGetObject = async () => ({
+        body: 'binary',
+        contentType: 'application/pdf',
+        metadata: { id: 'pdf-id' },
+        status: 200,
+      });
+
+      const mockS3Client = {
+        send: () => ({ $metadata: { httpStatusCode: 200 } }),
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: mockWriteAuditEntry },
+      });
+
+      const daCtx = {
+        org: 'o',
+        ext: 'pdf',
+        site: 'repo',
+        users: [],
+      };
+      const update = {
+        org: 'o', key: 'repo/file.pdf', body: 'x', type: 'application/pdf',
+      };
+
+      await putObjectWithVersion({}, daCtx, update, true);
+
+      assert.strictEqual(auditCalls.length, 0, 'no audit for non-versionable type');
+    });
   });
 });
