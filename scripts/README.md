@@ -46,7 +46,7 @@ ORG=myorg AEM_BUCKET_NAME=mybucket node scripts/version-migrate-run.js
 
 Compares object counts for a single document: legacy prefix vs new prefix.
 
-**Testing migration (list API):** To compare versions from legacy vs migrated-only, set `LIST_USE_LEGACY=0` in `.dev.vars` (or env). The list API will then read only the new path; no legacy merge. Compare response with the default (legacy enabled) to confirm migration.
+**Progressive rollout (list API):** Without `VERSIONS_AUDIT_FILE_ORGS`, the list uses **only** `org/.da-versions/{fileId}/` (no `repo/.da-versions`, no `audit.txt`). With the org listed, the list uses `audit.txt` (+ legacy merge unless `VERSIONS_AUDIT_SKIP_LEGACY_ORGS`).
 
 ```bash
 ORG=myorg node scripts/version-migrate-validate.js myorg repo/path/to/file.html
@@ -64,6 +64,7 @@ ORG=myorg node scripts/version-migrate-validate.js myorg repo/path/to/file.html
 | `DRY_RUN`           | Set to `1` to skip writes (migrate script) |
 | `MIGRATE_ANALYSE_CONCURRENCY` | Analyse: parallel file IDs (default 25) |
 | `MIGRATE_RUN_CONCURRENCY`     | Migrate: parallel file IDs (default 15)  |
-| `LIST_USE_LEGACY`             | List API: set to `0` or `false` to disable legacy (new path only; for testing migration) |
+| `VERSIONS_AUDIT_FILE_ORGS`         | List from `audit.txt` for these orgs; merge legacy prefix unless skip list applies |
+| `VERSIONS_AUDIT_SKIP_LEGACY_ORGS` | With audit-file orgs: do not read `org/.da-versions` (after migration) |
 
-Load from `.dev.vars` or `.env` by ensuring the script imports `./load-env.js` first (already done in each script). For the app (list API), set vars in `.dev.vars` or wrangler `vars` so `env.LIST_USE_LEGACY` is available.
+Load from `.dev.vars` or `.env` by ensuring the script imports `./load-env.js` first (already done in each script). For the Worker, set vars in `.dev.vars` or wrangler `vars`.

@@ -17,15 +17,35 @@ import { readAuditLines } from './audit.js';
 const MAX_VERSIONS = 500;
 const CONCURRENCY = 50;
 
-/** When false, list uses only new path (no legacy). Set LIST_USE_LEGACY=0 to test migrated-only. */
-function useLegacyCompat(env) {
-  const v = env?.LIST_USE_LEGACY ?? process.env.LIST_USE_LEGACY;
-  if (v === false || v === '0' || v === 'false') return false;
-  return true;
+function orgListFromEnv(env, name) {
+  const raw = env?.[name];
+  if (!raw || typeof raw !== 'string') return new Set();
+  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+}
+
+/** Org uses audit.txt as the version list source (new feature). */
+function orgUsesAuditFileList(env, org) {
+  return orgListFromEnv(env, 'VERSIONS_AUDIT_FILE_ORGS').has(org);
 }
 
 /**
- * Build list from audit.txt lines only (no folder list). Used when audit exists.
+ * With audit-file feature: skip reading org/.da-versions (after migration).
+ * Only applies when org is also in VERSIONS_AUDIT_FILE_ORGS.
+ */
+function orgSkipsLegacy(env, org) {
+  return orgListFromEnv(env, 'VERSIONS_AUDIT_SKIP_LEGACY_ORGS').has(org);
+}
+
+function versionListModeLog(payload) {
+  console.log('[versionlist]', JSON.stringify(payload));
+}
+
+function fileExt(key) {
+  return (key && key.includes('.')) ? key.split('.').pop() : 'html';
+}
+
+/**
+ * Build list entries from audit.txt lines.
  */
 function buildEntriesFromAudit(lines, repo, org, fileId, ext) {
   return lines.map(({
@@ -45,78 +65,7 @@ function buildEntriesFromAudit(lines, repo, org, fileId, ext) {
 }
 
 /**
- * Try new structure: when audit.txt exists, build list from it only; else list folder + HEAD.
- * @returns {Promise<{ status: number, body?: string, contentType?: string }|null>} null = fallback
- */
-async function listFromNewStructure(env, { bucket, org, key }, fileId, repo) {
-  const ext = (key && key.includes('.')) ? key.split('.').pop() : 'html';
-
-  let auditLines = [];
-  try {
-    auditLines = await readAuditLines(env, { bucket, org }, repo, fileId);
-  } catch {
-    // No audit.txt or read failed
-  }
-
-  if (auditLines.length > 0) {
-    const entries = buildEntriesFromAudit(auditLines, repo, org, fileId, ext);
-    entries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    return {
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(entries),
-    };
-  }
-
-  const listResp = await listObjects(env, {
-    bucket,
-    org,
-    key: `${repo}/.da-versions/${fileId}`,
-  }, MAX_VERSIONS);
-  if (listResp.status !== 200) {
-    return null;
-  }
-
-  const list = JSON.parse(listResp.body);
-  const snapshotEntries = list.filter((e) => !(e.name === 'audit' && e.ext === 'txt'));
-
-  const snapshotVersions = await processQueue(snapshotEntries, async (entry) => {
-    const entryResp = await getObject(env, {
-      bucket,
-      org,
-      key: `${repo}/.da-versions/${fileId}/${entry.name}.${entry.ext}`,
-    }, true);
-
-    if (entryResp.status !== 200 || !entryResp.metadata) {
-      return undefined;
-    }
-
-    const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
-    const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
-    const { label, path } = entryResp.metadata;
-
-    return {
-      url: `/versionsource/${org}/${repo}/${fileId}/${entry.name}.${entry.ext}`,
-      users,
-      timestamp,
-      path,
-      label: label ?? undefined,
-    };
-  }, CONCURRENCY);
-
-  const merged = snapshotVersions.filter(Boolean);
-  merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-  return {
-    status: 200,
-    contentType: listResp.contentType,
-    body: JSON.stringify(merged),
-  };
-}
-
-/**
- * Legacy: list org/.da-versions/fileId/, HEAD each, return list (empty = audit entries).
- * Kept during migration; will be removed when all orgs use the new structure.
+ * Legacy: list org/.da-versions/fileId/, HEAD each.
  */
 async function listFromLegacyStructure(env, { bucket, org, key: _ }, fileId) {
   const resp = await listObjects(env, { bucket, org, key: `.da-versions/${fileId}` }, MAX_VERSIONS);
@@ -161,11 +110,6 @@ async function listFromLegacyStructure(env, { bucket, org, key: _ }, fileId) {
   };
 }
 
-/**
- * Backward compat: merge legacy (org/.da-versions/fileId) with new (repo/.da-versions/fileId)
- * when new path has no snapshots yet. When new path has snapshots (file already migrated),
- * use new only to avoid duplicates while legacy may still exist (cleanup later).
- */
 function mergeLegacyAndNewResult(legacyResult, newResult) {
   if (legacyResult.status !== 200 || !legacyResult.body) return newResult;
   const legacyEntries = JSON.parse(legacyResult.body);
@@ -188,24 +132,48 @@ export async function listObjectVersions(env, { bucket, org, key }) {
   const fileId = current.metadata.id;
   const repo = key.includes('/') ? key.split('/')[0] : '';
 
-  if (repo) {
-    const newResult = await listFromNewStructure(env, { bucket, org, key }, fileId, repo);
-    if (newResult) {
-      if (!useLegacyCompat(env)) {
-        return newResult;
-      }
-      const newEntries = JSON.parse(newResult.body);
-      const hasSnapshotsInNew = newEntries.some((e) => e.url);
-      if (hasSnapshotsInNew) {
-        return newResult;
-      }
-      const legacyResult = await listFromLegacyStructure(env, { bucket, org, key }, fileId);
-      return mergeLegacyAndNewResult(legacyResult, newResult);
+  if (repo && orgUsesAuditFileList(env, org)) {
+    let auditLines = [];
+    try {
+      auditLines = await readAuditLines(env, { bucket, org }, repo, fileId);
+    } catch {
+      // no audit
     }
+    const ext = fileExt(key);
+    const auditEntries = buildEntriesFromAudit(auditLines, repo, org, fileId, ext);
+    auditEntries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    const auditResult = {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(auditEntries),
+    };
+    if (orgSkipsLegacy(env, org)) {
+      versionListModeLog({
+        mode: 'audit_file',
+        org,
+        key,
+        fileId,
+        legacy: 'skipped',
+      });
+      return auditResult;
+    }
+    const legacyResult = await listFromLegacyStructure(env, { bucket, org, key }, fileId);
+    versionListModeLog({
+      mode: 'audit_file',
+      org,
+      key,
+      fileId,
+      legacy: 'merged',
+    });
+    return mergeLegacyAndNewResult(legacyResult, auditResult);
   }
 
-  if (!useLegacyCompat(env)) {
-    return { status: 200, contentType: 'application/json', body: '[]' };
-  }
+  versionListModeLog({
+    mode: 'legacy',
+    org,
+    key,
+    fileId,
+    detail: 'org_root_da_versions_only',
+  });
   return listFromLegacyStructure(env, { bucket, org, key }, fileId);
 }

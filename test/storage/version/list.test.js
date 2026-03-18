@@ -414,7 +414,7 @@ describe('Version List', () => {
   });
 
   describe('backward compat: not migrated but new audit entries in new path', () => {
-    it('when new path has only audit.txt (no snapshots), merges legacy snapshots + audit with new audit', async () => {
+    it('when new path has only audit.txt (no snapshots), legacy mode shows legacy snapshots only', async () => {
       const listObjectCalls = [];
       const getObjectCalls = [];
       const mockGetObject = async (env, { key }) => {
@@ -439,12 +439,6 @@ describe('Version List', () => {
 
       const mockListObjects = async (env, { key }) => {
         listObjectCalls.push(key);
-        if (key === 'myrepo/.da-versions/file-id-bcompat') {
-          return {
-            status: 200,
-            body: JSON.stringify([{ name: 'audit', ext: 'txt' }]),
-          };
-        }
         if (key === '.da-versions/file-id-bcompat') {
           return {
             status: 200,
@@ -472,13 +466,9 @@ describe('Version List', () => {
 
       assert.strictEqual(result.status, 200);
       const versions = JSON.parse(result.body);
-      assert.strictEqual(versions.length, 2, 'merged legacy snapshot + new audit');
-      const withUrl = versions.filter((v) => v.url);
-      const withoutUrl = versions.filter((v) => !v.url);
-      assert.strictEqual(withUrl.length, 1, 'one legacy snapshot with url');
-      assert.strictEqual(withoutUrl.length, 1, 'one new audit entry without url');
-      assert.strictEqual(withUrl[0].timestamp, 1000);
-      assert.strictEqual(withoutUrl[0].timestamp, 5000);
+      assert.strictEqual(versions.length, 1, 'audit.txt not listed without VERSIONS_AUDIT_FILE_ORGS');
+      assert.ok(versions[0].url);
+      assert.strictEqual(versions[0].timestamp, 1000);
       assert.ok(listObjectCalls.some((k) => k.startsWith('.da-versions/')), 'legacy prefix listed for merge');
     });
 
@@ -526,41 +516,26 @@ describe('Version List', () => {
       assert.ok(versions[0].url);
     });
 
-    it('when new path has snapshots, uses new result only (no legacy merge)', async () => {
+    it('without VERSIONS_AUDIT_FILE_ORGS, repo/.da-versions snapshots are not listed', async () => {
+      const listKeys = [];
       const mockGetObject = async (env, { key }) => {
         if (key === 'repo/doc.html') {
           return { status: 200, metadata: { id: 'id-new' } };
-        }
-        if (key === 'repo/.da-versions/id-new/v1.html') {
-          return {
-            status: 200,
-            metadata: {
-              timestamp: '3000',
-              users: '[{"email":"u@x.com"}]',
-              path: 'repo/doc.html',
-            },
-            contentLength: 200,
-          };
         }
         return { status: 404 };
       };
 
       const mockListObjects = async (env, { key }) => {
-        if (key === 'repo/.da-versions/id-new') {
-          return {
-            status: 200,
-            body: JSON.stringify([{ name: 'v1', ext: 'html' }]),
-          };
+        listKeys.push(key);
+        if (key === '.da-versions/id-new') {
+          return { status: 200, body: JSON.stringify([]) };
         }
         return { status: 404 };
       };
 
-      const mockReadAuditLines = async () => [];
-
       const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
         '../../../src/storage/object/get.js': { default: mockGetObject },
         '../../../src/storage/object/list.js': { default: mockListObjects },
-        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
       });
 
       const result = await listObjectVersions(
@@ -570,32 +545,23 @@ describe('Version List', () => {
 
       assert.strictEqual(result.status, 200);
       const versions = JSON.parse(result.body);
-      assert.strictEqual(versions.length, 1);
-      assert.strictEqual(versions[0].url, '/versionsource/testorg/repo/id-new/v1.html');
+      assert.strictEqual(versions.length, 0);
+      assert.ok(!listKeys.some((k) => k.includes('repo/.da-versions')));
     });
   });
 
-  describe('LIST_USE_LEGACY flag', () => {
-    it('when false, returns only new path (no legacy merge)', async () => {
+  describe('VERSIONS_AUDIT_FILE_ORGS (new mode)', () => {
+    it('audit file + SKIP_LEGACY: audit only, no org/.da-versions list', async () => {
       const listObjectCalls = [];
       const mockGetObject = async (env, { key }) => {
         if (key === 'myrepo/docs/file.html') {
           return { status: 200, metadata: { id: 'file-id-flag' } };
-        }
-        if (key === 'myrepo/.da-versions/file-id-flag/audit.txt') {
-          return { status: 404 };
         }
         return { status: 404 };
       };
 
       const mockListObjects = async (env, { key }) => {
         listObjectCalls.push(key);
-        if (key === 'myrepo/.da-versions/file-id-flag') {
-          return { status: 200, body: JSON.stringify([{ name: 'audit', ext: 'txt' }]) };
-        }
-        if (key === '.da-versions/file-id-flag') {
-          return { status: 200, body: JSON.stringify([{ name: 'legacy1', ext: 'html' }]) };
-        }
         return { status: 404, body: '[]' };
       };
 
@@ -610,23 +576,22 @@ describe('Version List', () => {
         '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
       });
 
-      const envNoLegacy = { LIST_USE_LEGACY: false };
       const result = await listObjectVersions(
-        envNoLegacy,
+        {
+          VERSIONS_AUDIT_FILE_ORGS: 'testorg',
+          VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg',
+        },
         { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
       );
 
       assert.strictEqual(result.status, 200);
       const versions = JSON.parse(result.body);
-      assert.strictEqual(versions.length, 1, 'only new audit entry, no legacy');
+      assert.strictEqual(versions.length, 1);
       assert.strictEqual(versions[0].timestamp, 5000);
-      assert.ok(
-        !listObjectCalls.some((k) => k.startsWith('.da-versions/')),
-        'legacy prefix must not be listed',
-      );
+      assert.strictEqual(listObjectCalls.length, 0, 'skip legacy must not list org/.da-versions');
     });
 
-    it('when false, when new path 404 returns 200 with empty array', async () => {
+    it('audit file + SKIP_LEGACY: empty audit returns []', async () => {
       const mockGetObject = async (env, { key }) => {
         if (key === 'repo/path.html') {
           return { status: 200, metadata: { id: 'id-no-legacy' } };
@@ -634,23 +599,20 @@ describe('Version List', () => {
         return { status: 404 };
       };
 
-      const mockListObjects = async (env, { key }) => {
-        if (key === 'repo/.da-versions/id-no-legacy') {
-          return { status: 404, body: '[]' };
-        }
-        if (key === '.da-versions/id-no-legacy') {
-          return { status: 200, body: JSON.stringify([{ name: 'legacy1', ext: 'html' }]) };
-        }
-        return { status: 404 };
-      };
+      const mockListObjects = async () => ({ status: 404, body: '[]' });
+      const mockReadAuditLines = async () => [];
 
       const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
         '../../../src/storage/object/get.js': { default: mockGetObject },
         '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
       });
 
       const result = await listObjectVersions(
-        { LIST_USE_LEGACY: '0' },
+        {
+          VERSIONS_AUDIT_FILE_ORGS: 'testorg',
+          VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg',
+        },
         { bucket: 'bkt', org: 'testorg', key: 'repo/path.html' },
       );
 
@@ -658,7 +620,55 @@ describe('Version List', () => {
       assert.strictEqual(result.body, '[]');
     });
 
-    it('when true, merges legacy with new when new has no snapshots', async () => {
+    it('audit file without skip: merges org/.da-versions with audit entries', async () => {
+      const listObjectCalls = [];
+      const mockGetObject = async (env, { key }) => {
+        if (key === 'myrepo/docs/file.html') {
+          return { status: 200, metadata: { id: 'fid-merge' } };
+        }
+        if (key === '.da-versions/fid-merge/leg.html') {
+          return {
+            status: 200,
+            metadata: {
+              timestamp: '1000',
+              users: '[{"email":"leg@x.com"}]',
+              path: 'myrepo/docs/file.html',
+            },
+            contentLength: 50,
+          };
+        }
+        return { status: 404 };
+      };
+
+      const mockListObjects = async (env, { key }) => {
+        listObjectCalls.push(key);
+        if (key === '.da-versions/fid-merge') {
+          return { status: 200, body: JSON.stringify([{ name: 'leg', ext: 'html' }]) };
+        }
+        return { status: 404, body: '[]' };
+      };
+
+      const mockReadAuditLines = async () => [
+        { timestamp: 5000, users: [{ email: 'u@x.com' }], path: '/docs/file.html' },
+      ];
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
+      });
+
+      const result = await listObjectVersions(
+        { VERSIONS_AUDIT_FILE_ORGS: 'testorg' },
+        { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
+      );
+
+      assert.ok(listObjectCalls.some((k) => k === '.da-versions/fid-merge'));
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 2);
+    });
+
+    it('org not in new mode: merges legacy with new when new has no snapshots', async () => {
       const listObjectCalls = [];
       const mockGetObject = async (env, { key }) => {
         if (key === 'myrepo/docs/file.html') {
@@ -700,14 +710,101 @@ describe('Version List', () => {
       });
 
       const result = await listObjectVersions(
-        { LIST_USE_LEGACY: true },
+        {},
         { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
       );
 
       assert.strictEqual(result.status, 200);
       const versions = JSON.parse(result.body);
-      assert.strictEqual(versions.length, 2, 'merged legacy + new');
+      assert.strictEqual(versions.length, 1, 'new path has no snapshot files; legacy only');
       assert.ok(listObjectCalls.some((k) => k.startsWith('.da-versions/')));
+    });
+
+    it('audit file + skip legacy: audit lines, no legacy list', async () => {
+      const listKeys = [];
+      const mockGetObject = async (env, { key }) => {
+        if (key === 'r/doc.html') {
+          return { status: 200, metadata: { id: 'fid' } };
+        }
+        return { status: 404 };
+      };
+      const mockListObjects = async (env, { key }) => {
+        listKeys.push(key);
+        return { status: 404 };
+      };
+      const mockReadAuditLines = async () => [
+        {
+          timestamp: 100,
+          users: [{ email: 'a@b.com' }],
+          path: '/doc.html',
+          versionLabel: 'v1',
+          versionId: 'uuid-1',
+        },
+      ];
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
+      });
+
+      const result = await listObjectVersions(
+        {
+          VERSIONS_AUDIT_FILE_ORGS: 'acme',
+          VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'acme',
+        },
+        { bucket: 'b', org: 'acme', key: 'r/doc.html' },
+      );
+
+      assert.strictEqual(result.status, 200);
+      assert.strictEqual(listKeys.length, 0);
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 1);
+      assert.strictEqual(versions[0].url, '/versionsource/acme/r/fid/uuid-1.html');
+    });
+
+    it('when org not in VERSIONS_AUDIT_FILE_ORGS, only org/.da-versions (not repo path)', async () => {
+      const listKeys = [];
+      const mockGetObject = async (env, { key }) => {
+        if (key === 'r/doc.html') {
+          return { status: 200, metadata: { id: 'fid2' } };
+        }
+        if (key === '.da-versions/fid2/leg.html') {
+          return {
+            status: 200,
+            metadata: {
+              timestamp: '50',
+              users: '[{"email":"s@b.com"}]',
+              path: 'r/doc.html',
+            },
+            contentLength: 10,
+          };
+        }
+        return { status: 404 };
+      };
+      const mockListObjects = async (env, { key }) => {
+        listKeys.push(key);
+        if (key === '.da-versions/fid2') {
+          return { status: 200, body: JSON.stringify([{ name: 'leg', ext: 'html' }]) };
+        }
+        return { status: 404 };
+      };
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+      });
+
+      const result = await listObjectVersions(
+        { VERSIONS_AUDIT_FILE_ORGS: 'other-org' },
+        { bucket: 'b', org: 'acme', key: 'r/doc.html' },
+      );
+
+      assert.ok(listKeys.some((k) => k === '.da-versions/fid2'));
+      assert.ok(!listKeys.some((k) => k.startsWith('r/')));
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 1);
+      assert.strictEqual(versions[0].url, '/versionsource/acme/fid2/leg.html');
     });
   });
 });
