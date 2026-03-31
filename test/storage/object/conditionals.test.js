@@ -253,8 +253,8 @@ describe('Conditional Headers', () => {
 
       // Should return 412 and NOT retry
       assert.strictEqual(resp.status, 412);
-      // Verify only one PutObjectCommand was called (no retry)
-      assert.strictEqual(s3Mock.commandCalls(PutObjectCommand).length, 2); // 1 version + 1 main
+      // 2 audit PUT attempts (original + 1 retry on 412) + 1 main PUT = 3 total
+      assert.strictEqual(s3Mock.commandCalls(PutObjectCommand).length, 3);
     });
   });
 

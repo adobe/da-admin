@@ -173,14 +173,17 @@ function usersNormalized(usersJson) {
  * Append or update last line in audit.txt (read-modify-write). If last line is same user
  * and within AUDIT_TIME_WINDOW_MS and both last and new are edits (no version), replace that
  * line; else append. A version entry always appends and is never replaced (breaks the window).
+ *
+ * Uses If-Match on the PUT so that a concurrent write causes a 412, which triggers one retry.
  * @param {object} env
  * @param {{ bucket: string, org: string }} ctx - bucket, org
  * @param {string} repo
  * @param {string} fileId
  * @param {object} entry - { timestamp, users, path, versionLabel?, versionId? }
+ * @param {number} [attempt=0] - retry counter (max 1 retry)
  * @returns {Promise<{ status: number }>}
  */
-export async function writeAuditEntry(env, ctx, repo, fileId, entry) {
+export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0) {
   try {
     const config = getS3Config(env);
     const client = new S3Client(config);
@@ -189,6 +192,7 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry) {
     const entryUsersNorm = usersNormalized(entry.users);
 
     let existingText = '';
+    let etag;
     try {
       const getResp = await client.send(new GetObjectCommand({
         Bucket: ctx.bucket,
@@ -196,6 +200,7 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry) {
       }));
       const body = getResp?.Body;
       existingText = body != null ? await streamToString(body) : '';
+      etag = getResp?.ETag;
     } catch (e) {
       if (e?.$metadata?.httpStatusCode !== 404 && e?.name !== 'NoSuchKey') {
         throw e;
@@ -222,14 +227,25 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry) {
       newContent = `${existingText}${sep}${formatAuditLine(entry)}\n`;
     }
 
-    const resp = await client.send(new PutObjectCommand({
+    const putInput = {
       Bucket: ctx.bucket,
       Key: key,
       Body: newContent,
       ContentType: 'text/plain; charset=utf-8',
-    }));
+    };
+    // Guard against concurrent writes: if someone else wrote since our GET, the PUT
+    // will fail with 412 and we retry once with a fresh read.
+    if (etag) putInput.IfMatch = etag;
 
-    return { status: resp?.$metadata?.httpStatusCode ?? 200 };
+    try {
+      const resp = await client.send(new PutObjectCommand(putInput));
+      return { status: resp?.$metadata?.httpStatusCode ?? 200 };
+    } catch (e) {
+      if (e?.$metadata?.httpStatusCode === 412 && attempt === 0) {
+        return writeAuditEntry(env, ctx, repo, fileId, entry, 1);
+      }
+      throw e;
+    }
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('writeAuditEntry failed', e);

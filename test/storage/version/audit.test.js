@@ -434,5 +434,179 @@ describe('Version Audit', () => {
       assert.ok(lines[1].includes('Release 1') && lines[1].includes('uuid.html'), 'second line is version');
       assert.ok(lines[2].startsWith(String(edit2At)) && lines[2].endsWith('\t\t'), 'third line is edit');
     });
+
+    it('sends If-Match header on PUT using ETag from GET', async () => {
+      const bodyStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(''));
+          controller.close();
+        },
+      });
+
+      const putCalls = [];
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) {
+                  return { Body: bodyStream, ETag: '"etag-abc"' };
+                }
+                if (cmd instanceof PutObjectCommand) {
+                  putCalls.push(cmd.input);
+                  return { $metadata: { httpStatusCode: 200 } };
+                }
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '1000',
+        users: '[{"email":"u@x.com"}]',
+        path: 'repo/doc.html',
+      });
+
+      assert.strictEqual(putCalls.length, 1);
+      assert.strictEqual(putCalls[0].IfMatch, '"etag-abc"', 'If-Match must equal ETag from GET');
+    });
+
+    it('omits If-Match when file does not yet exist (first write)', async () => {
+      const putCalls = [];
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) {
+                  const err = new Error('not found');
+                  err.name = 'NoSuchKey';
+                  throw err;
+                }
+                if (cmd instanceof PutObjectCommand) {
+                  putCalls.push(cmd.input);
+                  return { $metadata: { httpStatusCode: 200 } };
+                }
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '1000',
+        users: '[{"email":"u@x.com"}]',
+        path: 'repo/doc.html',
+      });
+
+      assert.strictEqual(putCalls.length, 1);
+      assert.strictEqual(putCalls[0].IfMatch, undefined, 'If-Match must be absent for first write');
+    });
+
+    it('retries once on 412 from PUT and succeeds on second attempt', async () => {
+      let getCallCount = 0;
+      const putCalls = [];
+
+      const makeBody = () => new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(''));
+          controller.close();
+        },
+      });
+
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) {
+                  getCallCount += 1;
+                  return { Body: makeBody(), ETag: `"etag-${getCallCount}"` };
+                }
+                if (cmd instanceof PutObjectCommand) {
+                  putCalls.push(cmd.input);
+                  if (putCalls.length === 1) {
+                    // First PUT: simulate concurrent write → 412
+                    const err = new Error('precondition failed');
+                    err.$metadata = { httpStatusCode: 412 };
+                    throw err;
+                  }
+                  return { $metadata: { httpStatusCode: 200 } };
+                }
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '5000',
+        users: '[{"email":"u@x.com"}]',
+        path: 'repo/doc.html',
+      });
+
+      assert.strictEqual(result.status, 200);
+      assert.strictEqual(getCallCount, 2, 'must re-read on retry');
+      assert.strictEqual(putCalls.length, 2, 'must retry the PUT');
+      assert.strictEqual(putCalls[0].IfMatch, '"etag-1"');
+      assert.strictEqual(putCalls[1].IfMatch, '"etag-2"', 'retry uses fresh ETag');
+    });
+
+    it('returns status 500 when PUT 412 on retry attempt (no further retries)', async () => {
+      const makeBody = () => new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(''));
+          controller.close();
+        },
+      });
+
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) {
+                  return { Body: makeBody(), ETag: '"etag-x"' };
+                }
+                if (cmd instanceof PutObjectCommand) {
+                  const err = new Error('precondition failed');
+                  err.$metadata = { httpStatusCode: 412 };
+                  throw err;
+                }
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '5000',
+        users: '[{"email":"u@x.com"}]',
+        path: 'repo/doc.html',
+      });
+
+      assert.strictEqual(result.status, 500, 'persistent 412 must surface as 500 after one retry');
+    });
   });
 });
