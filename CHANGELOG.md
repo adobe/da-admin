@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/adobe/da-admin/compare/v1.1.7...v1.2.0) (2026-03-31)
+
+
+### Features
+
+* improve error handling ([#255](https://github.com/adobe/da-admin/issues/255)) ([3fc681c](https://github.com/adobe/da-admin/commit/3fc681c13561d30b5b182c8d1f6ff491b82eea7f))
+
 ## [1.1.7](https://github.com/adobe/da-admin/compare/v1.1.6...v1.1.7) (2026-03-12)
 
 
