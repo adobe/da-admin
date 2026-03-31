@@ -33,11 +33,11 @@ export default async function moveObject(env, daCtx, details) {
 
   // The input prefix has a forward slash to prevent (drafts + drafts-new, etc.).
   // Which means the list will only pickup children. This adds to the initial list.
-  const sourceKeys = [details.source];
+  const initialKeys = [details.source];
 
   // Only add .props if the source is a folder
   // Note: this is not guaranteed to exist
-  if (!daCtx.isFile) sourceKeys.push(`${details.source}.props`);
+  if (!daCtx.isFile) initialKeys.push(`${details.source}.props`);
 
   const results = [];
   let ContinuationToken;
@@ -49,9 +49,14 @@ export default async function moveObject(env, daCtx, details) {
       const resp = await client.send(command);
 
       const { Contents = [], NextContinuationToken } = resp;
-      sourceKeys.push(...Contents.map(({ Key }) => Key.replace(`${daCtx.org}/`, '')));
 
-      const movedLoad = sourceKeys
+      // Include the folder object and .props on the first page only to avoid re-processing
+      const pageKeys = [
+        ...(!ContinuationToken ? initialKeys : []),
+        ...Contents.map(({ Key }) => Key.replace(`${daCtx.org}/`, '')),
+      ];
+
+      const movedLoad = pageKeys
         .filter((key) => hasPermission(daCtx, key, 'write'))
         .filter((key) => hasPermission(daCtx, key.replace(details.source, details.destination), 'write'))
         .map(async (key) => {
@@ -68,11 +73,16 @@ export default async function moveObject(env, daCtx, details) {
         });
 
       // eslint-disable-next-line no-await-in-loop
-      results.push(...await Promise.all(movedLoad));
+      const settled = await Promise.allSettled(movedLoad);
+      const failed = settled.filter((r) => r.status === 'rejected');
+      if (failed.length) {
+        return { body: JSON.stringify({ error: 'partial_failure', failed: failed.length }), status: 500 };
+      }
+      results.push(...settled.map((r) => r.value));
 
       ContinuationToken = NextContinuationToken;
     } catch (e) {
-      return { body: '', status: 404 };
+      return { body: JSON.stringify({ error: 'move_failed' }), status: 500 };
     }
   } while (ContinuationToken);
 

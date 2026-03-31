@@ -12,20 +12,22 @@
 import assert from 'node:assert';
 import esmock from 'esmock';
 
+let mockSendFn;
+
+class MockS3Client {
+  // eslint-disable-next-line class-methods-use-this
+  send() { return mockSendFn(); }
+}
+
 describe('Move', () => {
   it('Move files with permission check', async () => {
-    const mockS3Client = class {
-      // eslint-disable-next-line class-methods-use-this,no-unused-vars
-      send(c) {
-        return {
-          Contents: [
-            { Key: 'myorg/somewhere/x.html' },
-            { Key: 'myorg/somewhere/y.png' },
-            { Key: 'myorg/somewhere/z.html' },
-          ],
-        };
-      }
-    };
+    mockSendFn = () => ({
+      Contents: [
+        { Key: 'myorg/somewhere/x.html' },
+        { Key: 'myorg/somewhere/y.png' },
+        { Key: 'myorg/somewhere/z.html' },
+      ],
+    });
 
     const copyFileCalled = [];
     const copyFile = (c, e, x, k, d, m) => {
@@ -42,7 +44,7 @@ describe('Move', () => {
 
     const moveObject = await esmock('../../../src/storage/object/move.js', {
       '@aws-sdk/client-s3': {
-        S3Client: mockS3Client,
+        S3Client: MockS3Client,
       },
       '../../../src/storage/object/copy.js': {
         copyFile,
@@ -96,5 +98,112 @@ describe('Move', () => {
     console.log(resp2);
 
     // do another test to a non-copyiable place
+  });
+
+  it('Returns JSON error body when S3 list throws', async () => {
+    mockSendFn = () => {
+      throw new Error('R2 throttled');
+    };
+
+    const moveObject = await esmock('../../../src/storage/object/move.js', {
+      '@aws-sdk/client-s3': { S3Client: MockS3Client },
+      '../../../src/storage/object/copy.js': { copyFile: () => {} },
+      '../../../src/storage/object/delete.js': { deleteObject: () => {} },
+    });
+
+    const pathLookup = new Map();
+    const ctx = {
+      org: 'myorg', aclCtx: { pathLookup }, users: [], key: 'q.html',
+    };
+    const resp = await moveObject({}, ctx, { source: 'somewhere', destination: 'somedest' });
+
+    assert.strictEqual(resp.status, 500);
+    const body = JSON.parse(resp.body);
+    assert.strictEqual(body.error, 'move_failed');
+  });
+
+  it('Returns partial_failure JSON when a file copy rejects', async () => {
+    // Contents excludes the source file itself — S3 list prefix has a trailing slash
+    mockSendFn = () => ({ Contents: [{ Key: 'myorg/somewhere/b.html' }] });
+
+    const copyFileCalled = [];
+    const copyFile = (c, e, x, k) => {
+      copyFileCalled.push(k);
+      if (k === 'somewhere/a.html') throw new Error('R2 throttled');
+      return { $metadata: { httpStatusCode: 200 } };
+    };
+
+    const deleteObjectCalled = [];
+    const deleteObject = (c, x, k) => {
+      deleteObjectCalled.push(k);
+      return { status: 204 };
+    };
+
+    const moveObject = await esmock('../../../src/storage/object/move.js', {
+      '@aws-sdk/client-s3': { S3Client: MockS3Client },
+      '../../../src/storage/object/copy.js': { copyFile },
+      '../../../src/storage/object/delete.js': { deleteObject },
+    });
+
+    const pathLookup = new Map();
+    pathLookup.set('blah@foo.org', [
+      { path: '/somewhere/+**', actions: ['read', 'write'] },
+      { path: '/somedest/+**', actions: ['read', 'write'] },
+    ]);
+    const ctx = {
+      org: 'myorg',
+      aclCtx: { pathLookup },
+      users: [{ email: 'blah@foo.org' }],
+      isFile: true,
+      key: 'q.html',
+    };
+    const resp = await moveObject({}, ctx, { source: 'somewhere/a.html', destination: 'somedest/a.html' });
+
+    // a.html (from initialKeys) throws, b.html succeeds — one failure, one success
+    assert.strictEqual(resp.status, 500);
+    const body = JSON.parse(resp.body);
+    assert.strictEqual(body.error, 'partial_failure');
+    assert.strictEqual(body.failed, 1);
+    assert.strictEqual(deleteObjectCalled.length, 1, 'b.html should still be deleted despite a.html failing');
+  });
+
+  it('Does not re-process page 1 keys on page 2 iteration', async () => {
+    let callCount = 0;
+    mockSendFn = () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return { Contents: [{ Key: 'myorg/somewhere/a.html' }], NextContinuationToken: 'token1' };
+      }
+      return { Contents: [{ Key: 'myorg/somewhere/b.html' }] };
+    };
+
+    const copyFileCalled = [];
+    const copyFile = (c, e, x, k) => {
+      copyFileCalled.push(k);
+      return { $metadata: { httpStatusCode: 200 } };
+    };
+
+    const moveObject = await esmock('../../../src/storage/object/move.js', {
+      '@aws-sdk/client-s3': { S3Client: MockS3Client },
+      '../../../src/storage/object/copy.js': { copyFile },
+      '../../../src/storage/object/delete.js': { deleteObject: () => ({ status: 204 }) },
+    });
+
+    const pathLookup = new Map();
+    pathLookup.set('blah@foo.org', [
+      { path: '/somewhere/+**', actions: ['read', 'write'] },
+      { path: '/somedest/+**', actions: ['read', 'write'] },
+    ]);
+    const ctx = {
+      org: 'myorg', aclCtx: { pathLookup }, users: [{ email: 'blah@foo.org' }], isFile: true, key: 'q.html',
+    };
+    const resp = await moveObject({}, ctx, { source: 'somewhere', destination: 'somedest' });
+
+    assert.strictEqual(resp.status, 204);
+    // a.html from page 1 must appear exactly once, not again on the page 2 pass
+    const aCopies = copyFileCalled.filter((k) => k === 'somewhere/a.html');
+    const bCopies = copyFileCalled.filter((k) => k === 'somewhere/b.html');
+    assert.strictEqual(aCopies.length, 1, 'page 1 key must not be re-processed on page 2');
+    assert.strictEqual(bCopies.length, 1, 'page 2 key must be processed once');
   });
 });
