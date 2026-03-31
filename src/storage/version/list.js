@@ -13,6 +13,7 @@ import processQueue from '@adobe/helix-shared-process-queue';
 import getObject from '../object/get.js';
 import listObjects from '../object/list.js';
 import { readAuditLines } from './audit.js';
+import { versionKeyLegacy, versionPrefixLegacy } from './paths.js';
 
 const MAX_VERSIONS = 500;
 const CONCURRENCY = 50;
@@ -67,7 +68,8 @@ function buildEntriesFromAudit(lines, repo, org, fileId, ext) {
  * Legacy: list org/.da-versions/fileId/, HEAD each.
  */
 async function listFromLegacyStructure(env, { bucket, org, key: _ }, fileId) {
-  const resp = await listObjects(env, { bucket, org, key: `.da-versions/${fileId}` }, MAX_VERSIONS);
+  const prefix = versionPrefixLegacy(fileId);
+  const resp = await listObjects(env, { bucket, org, key: prefix }, MAX_VERSIONS);
   if (resp.status !== 200) {
     return resp;
   }
@@ -77,7 +79,7 @@ async function listFromLegacyStructure(env, { bucket, org, key: _ }, fileId) {
     const entryResp = await getObject(env, {
       bucket,
       org,
-      key: `.da-versions/${fileId}/${entry.name}.${entry.ext}`,
+      key: versionKeyLegacy(fileId, entry.name, entry.ext),
     }, true);
 
     if (entryResp.status !== 200 || !entryResp.metadata) {

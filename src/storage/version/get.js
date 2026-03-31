@@ -10,10 +10,10 @@
  * governing permissions and limitations under the License.
  */
 import getObject from '../object/get.js';
-import { versionKeyNew } from './paths.js';
+import { versionKeyNew, versionKeyLegacy } from './paths.js';
 
 /**
- * GET version: try new path (repo/.da-versions/fileId/versionId.ext) then legacy.
+ * GET version: try new path then legacy.
  * daCtx.key can be "repo/fileId/versionId.ext" or "fileId/versionId.ext".
  */
 export async function getObjectVersion(env, { bucket, org, key }, head, conditionalHeaders) {
@@ -23,14 +23,20 @@ export async function getObjectVersion(env, { bucket, org, key }, head, conditio
     const versionFile = rest.join('/');
     const ext = versionFile.split('.').pop();
     const versionId = versionFile.slice(0, -(ext.length + 1));
-    const newKey = versionKeyNew(org, repo, fileId, versionId, ext);
+    const newKey = versionKeyNew(repo, fileId, versionId, ext);
     const resp = await getObject(env, { bucket, org, key: newKey }, head, conditionalHeaders);
     if (resp.status !== 404) {
       return resp;
     }
+    // Legacy path; kept during migration, will be removed when all orgs use new structure.
+    const legacyKey = versionKeyLegacy(fileId, versionId, ext);
+    return getObject(env, { bucket, org, key: legacyKey }, head, conditionalHeaders);
   }
 
-  // Legacy path; kept during migration, will be removed when all orgs use new structure.
-  const legacyKey = `.da-versions/${key}`;
+  // Short key (fileId/versionId.ext): legacy-only path.
+  const [fileId, versionFile] = parts;
+  const ext = versionFile.split('.').pop();
+  const versionId = versionFile.slice(0, -(ext.length + 1));
+  const legacyKey = versionKeyLegacy(fileId, versionId, ext);
   return getObject(env, { bucket, org, key: legacyKey }, head, conditionalHeaders);
 }

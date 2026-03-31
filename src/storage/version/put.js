@@ -21,6 +21,7 @@ import {
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 import { writeAuditEntry } from './audit.js';
+import { versionKeyNew, versionKeyLegacy } from './paths.js';
 
 export function getContentLength(body) {
   if (body === undefined) {
@@ -50,8 +51,8 @@ export async function putVersion(config, {
 
   const client = noneMatch ? ifNoneMatch(config) : new S3Client(config);
   const key = Repo
-    ? `${Org}/${Repo}/.da-versions/${ID}/${Version}.${Ext}`
-    : `${Org}/.da-versions/${ID}/${Version}.${Ext}`;
+    ? `${Org}/${versionKeyNew(Repo, ID, Version, Ext)}`
+    : `${Org}/${versionKeyLegacy(ID, Version, Ext)}`;
   const input = {
     Bucket, Key: key, Body, Metadata, ContentLength: length, ContentType,
   };

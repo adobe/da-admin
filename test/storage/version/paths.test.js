@@ -10,37 +10,18 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'node:assert';
-import { versionKeyNew, versionKeyLegacy, auditKey } from '../../../src/storage/version/paths.js';
+import { versionKeyNew, auditKey } from '../../../src/storage/version/paths.js';
 
 describe('Version Paths', () => {
   describe('versionKeyNew', () => {
     it('returns repo-scoped path under .da-versions', () => {
-      const key = versionKeyNew('myorg', 'myrepo', 'file-id-123', 'v-uuid', 'html');
+      const key = versionKeyNew('myrepo', 'file-id-123', 'v-uuid', 'html');
       assert.strictEqual(key, 'myrepo/.da-versions/file-id-123/v-uuid.html');
     });
 
-    it('excludes org from the key', () => {
-      const key = versionKeyNew('org1', 'repo1', 'fid', 'vid', 'json');
-      assert.ok(!key.includes('org1'), 'org must not appear in new key');
-      assert.strictEqual(key, 'repo1/.da-versions/fid/vid.json');
-    });
-
     it('handles different extensions', () => {
-      assert.strictEqual(versionKeyNew('o', 'r', 'fid', 'vid', 'mp4'), 'r/.da-versions/fid/vid.mp4');
-      assert.strictEqual(versionKeyNew('o', 'r', 'fid', 'vid', 'png'), 'r/.da-versions/fid/vid.png');
-    });
-  });
-
-  describe('versionKeyLegacy', () => {
-    it('returns root-level .da-versions path', () => {
-      const key = versionKeyLegacy('myorg', 'file-id-abc', 'v-uuid', 'html');
-      assert.strictEqual(key, '.da-versions/file-id-abc/v-uuid.html');
-    });
-
-    it('excludes org from the legacy key', () => {
-      const key = versionKeyLegacy('someorg', 'fid', 'vid', 'txt');
-      assert.ok(!key.includes('someorg'), 'org must not appear in legacy key');
-      assert.strictEqual(key, '.da-versions/fid/vid.txt');
+      assert.strictEqual(versionKeyNew('r', 'fid', 'vid', 'mp4'), 'r/.da-versions/fid/vid.mp4');
+      assert.strictEqual(versionKeyNew('r', 'fid', 'vid', 'png'), 'r/.da-versions/fid/vid.png');
     });
   });
 

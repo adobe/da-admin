@@ -12,27 +12,34 @@
 
 /**
  * New structure: versions live under repo. Path for a version object.
- * @param {string} org
  * @param {string} repo
  * @param {string} fileId
  * @param {string} versionId
  * @param {string} ext
- * @returns {string} key (org/repo/.da-versions/fileId/versionId.ext)
+ * @returns {string} key (repo/.da-versions/fileId/versionId.ext)
  */
-export function versionKeyNew(org, repo, fileId, versionId, ext) {
+export function versionKeyNew(repo, fileId, versionId, ext) {
   return `${repo}/.da-versions/${fileId}/${versionId}.${ext}`;
 }
 
 /**
  * Legacy structure: versions at org root. Path for a version object.
- * @param {string} org
  * @param {string} fileId
  * @param {string} versionId
  * @param {string} ext
  * @returns {string} key (.da-versions/fileId/versionId.ext)
  */
-export function versionKeyLegacy(org, fileId, versionId, ext) {
+export function versionKeyLegacy(fileId, versionId, ext) {
   return `.da-versions/${fileId}/${versionId}.${ext}`;
+}
+
+/**
+ * Legacy structure: listing prefix for all versions of a file.
+ * @param {string} fileId
+ * @returns {string} key (.da-versions/fileId)
+ */
+export function versionPrefixLegacy(fileId) {
+  return `.da-versions/${fileId}`;
 }
 
 /**

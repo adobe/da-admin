@@ -39,7 +39,7 @@ describe('getObjectVersion', () => {
     const getObjectCalls = [];
     const mockGetObject = async (env, { key }) => {
       getObjectCalls.push(key);
-      if (key.includes('.da-versions/file-id/')) {
+      if (key.startsWith('repo/')) {
         // new path 404
         return { status: 404 };
       }
@@ -57,7 +57,7 @@ describe('getObjectVersion', () => {
     assert.strictEqual(result.body, 'legacy-content');
     assert.strictEqual(getObjectCalls.length, 2, 'tried new path then legacy path');
     assert.ok(getObjectCalls[1].startsWith('.da-versions/'), 'second call is legacy path');
-    assert.strictEqual(getObjectCalls[1], '.da-versions/repo/file-id/v1.html');
+    assert.strictEqual(getObjectCalls[1], '.da-versions/file-id/v1.html');
   });
 
   it('uses only legacy path when key has fewer than 3 parts', async () => {
