@@ -53,13 +53,12 @@ function buildEntriesFromAudit(lines, repo, org, fileId, ext) {
   }) => {
     const pathFull = (repo && path && path.startsWith('/')) ? repo + path : path;
     const entry = { users, timestamp, path: pathFull };
-    if (versionLabel) entry.versionLabel = versionLabel;
+    if (versionLabel) entry.label = versionLabel;
     const versionIdWithExt = ext ? `${versionId}.${ext}` : versionId;
     if (versionId) {
       entry.versionId = versionIdWithExt;
       entry.url = `/versionsource/${org}/${repo}/${fileId}/${versionIdWithExt}`;
     }
-    if (versionLabel) entry.label = versionLabel;
     return entry;
   });
 }
