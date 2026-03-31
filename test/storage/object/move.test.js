@@ -16,7 +16,6 @@ let mockSendFn;
 
 class MockS3Client {
   // eslint-disable-next-line class-methods-use-this
-  // eslint-disable-next-line class-methods-use-this
   send() { return mockSendFn(); }
 }
 
