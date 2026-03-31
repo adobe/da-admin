@@ -720,6 +720,35 @@ describe('Version List', () => {
       assert.ok(listObjectCalls.some((k) => k.startsWith('.da-versions/')));
     });
 
+    it('readAuditLines throws: falls back to empty audit entries and proceeds', async () => {
+      const mockGetObject = async (env, { key }) => {
+        if (key === 'repo/doc.html') {
+          return { status: 200, metadata: { id: 'fid-throw' } };
+        }
+        return { status: 404 };
+      };
+
+      const mockListObjects = async () => ({ status: 200, body: JSON.stringify([]) });
+      const mockReadAuditLines = async () => {
+        throw new Error('S3 unreachable');
+      };
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
+      });
+
+      const result = await listObjectVersions(
+        { VERSIONS_AUDIT_FILE_ORGS: 'testorg' },
+        { bucket: 'b', org: 'testorg', key: 'repo/doc.html' },
+      );
+
+      assert.strictEqual(result.status, 200);
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 0, 'audit error must be swallowed, result is empty');
+    });
+
     it('audit file + skip legacy: audit lines, no legacy list', async () => {
       const listKeys = [];
       const mockGetObject = async (env, { key }) => {

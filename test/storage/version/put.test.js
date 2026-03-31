@@ -2574,4 +2574,170 @@ describe('Version Put', () => {
       assert.strictEqual(auditCalls.length, 0, 'no audit for non-versionable type');
     });
   });
+
+  describe('version creation error handling', () => {
+    it('returns version status when putVersion returns non-200 non-412 (early return)', async () => {
+      const mockGetObject = async () => ({
+        status: 200,
+        body: 'existing content',
+        contentType: 'text/html',
+        contentLength: 16,
+        metadata: { id: 'file-id-err', version: 'v1' },
+      });
+
+      const versionSent = [];
+      const versionClient = {
+        async send(cmd) {
+          versionSent.push(cmd);
+          return { $metadata: { httpStatusCode: 503 } };
+        },
+      };
+      const mainClient = {
+        async send() {
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => versionClient,
+          ifMatch: () => mainClient,
+        },
+      });
+
+      const daCtx = { org: 'o', ext: 'html', users: [{ email: 'u@x.com' }] };
+      const update = {
+        org: 'o', key: 'doc.html', type: 'text/html', label: 'Named Version',
+      };
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
+
+      assert.strictEqual(resp.status, 503, 'must propagate the version creation error status');
+      assert.strictEqual(resp.metadata.id, 'file-id-err');
+    });
+
+    it('swallows writeAuditEntry error and still returns main put result', async () => {
+      const mockGetObject = async () => ({
+        status: 200,
+        body: 'doc',
+        contentType: 'text/html',
+        contentLength: 3,
+        metadata: { id: 'audit-err-id', version: 'v1' },
+      });
+
+      const s3Client = {
+        async send() {
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => s3Client,
+          ifMatch: () => s3Client,
+        },
+        '../../../src/storage/version/audit.js': {
+          writeAuditEntry: async () => { throw new Error('audit service unavailable'); },
+        },
+      });
+
+      const daCtx = { org: 'o', ext: 'html', users: [{ email: 'u@x.com' }] };
+      const update = { org: 'o', key: 'doc.html', type: 'text/html' };
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
+
+      // audit failure must not bubble up; main put succeeded
+      assert.strictEqual(resp.status, 200);
+      assert.strictEqual(resp.metadata.id, 'audit-err-id');
+    });
+  });
+
+  describe('postObjectVersion with no JSON body', () => {
+    it('handles req.json() throwing (no body) and creates version with undefined label', async () => {
+      const mockGetObject = async () => ({
+        body: 'content',
+        contentType: 'text/html',
+        contentLength: 7,
+        status: 200,
+        metadata: { id: 'no-body-id', version: 'v1' },
+      });
+
+      const s3Client = {
+        async send() {
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+
+      const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => s3Client,
+          ifMatch: () => s3Client,
+        },
+        '../../../src/storage/version/audit.js': {
+          writeAuditEntry: async () => ({ status: 200 }),
+        },
+        '../../../src/storage/utils/config.js': { default: () => ({}) },
+      });
+
+      // req.json() throws → label is undefined → postObjectVersionWithLabel(undefined, ...)
+      const req = {
+        json: () => {
+          throw new Error('no body');
+        },
+      };
+      const daCtx = {
+        bucket: 'b', org: 'o', key: 'r/doc.html', ext: 'html', users: [],
+      };
+      const resp = await postObjectVersion(req, {}, daCtx);
+
+      // No label means shouldCreateVersionObject is false → versionCreated stays false → 500
+      assert.strictEqual(resp.status, 500);
+    });
+  });
+
+  describe('postObjectVersionWithLabel', () => {
+    it('returns 500 when versionCreated is false (version already exists / 412)', async () => {
+      const mockGetObject = async () => ({
+        body: 'doc content',
+        contentType: 'text/html',
+        contentLength: 200,
+        status: 200,
+        metadata: { id: 'post-label-id', version: 'v1' },
+      });
+
+      const mainClient = {
+        async send() {
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+      // version put throws 412 → putVersion returns { status: 412 } → versionCreated stays false
+      const versionClient = {
+        async send() {
+          const err = new Error('precondition failed');
+          err.$metadata = { httpStatusCode: 412 };
+          throw err;
+        },
+      };
+
+      const { postObjectVersionWithLabel } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => versionClient,
+          ifMatch: () => mainClient,
+        },
+        '../../../src/storage/version/audit.js': {
+          writeAuditEntry: async () => ({ status: 200 }),
+        },
+        '../../../src/storage/utils/config.js': { default: () => ({}) },
+      });
+
+      const daCtx = {
+        bucket: 'b', org: 'o', key: 'r/doc.html', ext: 'html', users: [],
+      };
+      const resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
+
+      assert.strictEqual(resp.status, 500, 'must return 500 when version was not created');
+    });
+  });
 });

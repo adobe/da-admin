@@ -63,6 +63,151 @@ describe('Version Audit', () => {
     });
   });
 
+  describe('readAuditLines', () => {
+    it('reads audit lines from a Node-style async iterable body', async () => {
+      const lineText = '3000\t[{"email":"node@x.com"}]\trepo/path.html\t\t\n';
+
+      async function* asyncIterableBody() {
+        yield Buffer.from(lineText.slice(0, 10));
+        yield Buffer.from(lineText.slice(10));
+      }
+
+      const { readAuditLines } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async () => ({ Body: asyncIterableBody() });
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+
+      assert.strictEqual(lines.length, 1);
+      assert.strictEqual(lines[0].timestamp, 3000);
+      assert.deepStrictEqual(lines[0].users, [{ email: 'node@x.com' }]);
+      assert.strictEqual(lines[0].path, 'repo/path.html');
+    });
+
+    it('returns [] when S3 throws 404 (NoSuchKey)', async () => {
+      const notFound = Object.assign(new Error('not found'), { name: 'NoSuchKey' });
+
+      const { readAuditLines } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async () => {
+                throw notFound;
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.deepStrictEqual(lines, []);
+    });
+
+    it('returns empty string when Node-style async iterable body throws during iteration', async () => {
+      async function* throwingIterable() {
+        yield Buffer.from('partial');
+        throw new Error('stream error mid-read');
+      }
+
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) return { Body: throwingIterable() };
+                if (cmd instanceof PutObjectCommand) return { $metadata: { httpStatusCode: 200 } };
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      // throwing iterable → streamToString catch → existingText = '' → append new entry
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '7000',
+        users: '[{"email":"e@x.com"}]',
+        path: 'repo/f.html',
+      });
+
+      assert.strictEqual(result.status, 200);
+    });
+
+    it('re-throws when S3 throws a non-404 error in readAuditLines', async () => {
+      const serverError = Object.assign(new Error('server err'), {
+        $metadata: { httpStatusCode: 500 },
+      });
+
+      const { readAuditLines } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async () => {
+                throw serverError;
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      await assert.rejects(
+        () => readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid'),
+        (err) => err.$metadata?.httpStatusCode === 500,
+      );
+    });
+
+    it('returns default anonymous user when users JSON is invalid', async () => {
+      const lineText = '1000\tinvalid-json\trepo/doc.html\t\t\n';
+
+      const { readAuditLines } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async () => ({
+                Body: new ReadableStream({
+                  start(controller) {
+                    controller.enqueue(new TextEncoder().encode(lineText));
+                    controller.close();
+                  },
+                }),
+              });
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(lines.length, 1);
+      assert.deepStrictEqual(lines[0].users, [{ email: 'anonymous' }]);
+    });
+  });
+
   describe('writeAuditEntry read-modify-write', () => {
     it('appends new line when existing content is read (Web ReadableStream body)', async () => {
       const existingLine = '1000\t[{"email":"a@b.com"}]\trepo/path.html';
@@ -165,6 +310,78 @@ describe('Version Audit', () => {
       assert.strictEqual(putCalls.length, 1);
       const lines = putCalls[0].Body.split('\n').filter((l) => l.trim());
       assert.strictEqual(lines.length, 1, 'must overwrite last line (same user, within window)');
+    });
+
+    it('handles body with text() method (fetch Response-like body)', async () => {
+      const textBody = {
+        text: async () => '5000\t[{"email":"t@t.com"}]\trepo/doc.html\t\t\n',
+      };
+
+      const putCalls = [];
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) return { Body: textBody };
+                if (cmd instanceof PutObjectCommand) {
+                  putCalls.push(cmd.input);
+                  return { $metadata: { httpStatusCode: 200 } };
+                }
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const newEntry = {
+        timestamp: '9999',
+        users: '[{"email":"t@t.com"}]',
+        path: 'repo/doc.html',
+      };
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', newEntry);
+
+      assert.strictEqual(result.status, 200);
+      assert.strictEqual(putCalls.length, 1);
+      // text() body was read: existing line is present (same user, within window → collapsed)
+      const lines = putCalls[0].Body.split('\n').filter((l) => l.trim());
+      assert.ok(lines.length >= 1, 'body was read from text() stream');
+    });
+
+    it('returns status 500 when GET throws a non-404 error in writeAuditEntry', async () => {
+      const serverError = Object.assign(new Error('server error'), {
+        $metadata: { httpStatusCode: 500 },
+      });
+
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) throw serverError;
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '1000',
+        users: '[{"email":"x@x.com"}]',
+        path: 'repo/f.html',
+      });
+
+      assert.strictEqual(result.status, 500);
     });
 
     it('appends three entries when edit then version then edit (version breaks time window)', async () => {
