@@ -2694,6 +2694,172 @@ describe('Version Put', () => {
 
       assert.strictEqual(auditCalls.length, 0, 'no audit for non-versionable type');
     });
+
+    // Mode A (legacy): binary file — no version marker written at all (not even an empty object)
+    it('Mode A: binary file save writes no version marker to .da-versions/', async () => {
+      const versionWrites = [];
+
+      const mockGetObject = async () => ({
+        body: 'binary-data',
+        contentType: 'image/jpeg',
+        contentLength: 11,
+        metadata: { id: 'img-id', version: 'v1' },
+        status: 200,
+      });
+
+      const mockS3Client = { send: async () => ({ $metadata: { httpStatusCode: 200 } }) };
+      function MockS3Client() {
+        this.send = async (cmd) => {
+          if (cmd instanceof PutObjectCommand) versionWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        };
+      }
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '@aws-sdk/client-s3': { S3Client: MockS3Client, PutObjectCommand },
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: async () => {} },
+      });
+
+      // No VERSIONS_AUDIT_FILE_ORGS → Mode A
+      await putObjectWithVersion(
+        {},
+        {
+          org: 'o', ext: 'jpg', site: 'repo', users: [],
+        },
+        {
+          org: 'o', key: 'repo/photo.jpg', body: 'img', type: 'image/jpeg',
+        },
+        true,
+      );
+
+      const daVersionWrites = versionWrites.filter((p) => p.Key?.includes('.da-versions/'));
+      assert.strictEqual(daVersionWrites.length, 0, 'binary files must never write to .da-versions/');
+    });
+
+    // Mode B (audit-file): plain edit — audit entry written, no snapshot object written
+    it('Mode B: plain edit writes audit entry but no snapshot to .da-versions/', async () => {
+      const auditCalls = [];
+      const snapshotWrites = [];
+
+      const mockGetObject = async () => ({
+        body: 'doc content',
+        contentType: 'text/html',
+        contentLength: 11,
+        metadata: { id: 'doc-id', version: 'v1' },
+        status: 200,
+      });
+
+      const mockIfNoneMatch = () => ({
+        send: async (cmd) => {
+          if (cmd instanceof PutObjectCommand) snapshotWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      });
+      const mockIfMatch = () => ({
+        send: async () => ({ $metadata: { httpStatusCode: 200 } }),
+      });
+      function MockS3ClientB() {
+        this.send = async () => ({ $metadata: { httpStatusCode: 200 } });
+      }
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '@aws-sdk/client-s3': { S3Client: MockS3ClientB, PutObjectCommand },
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: mockIfNoneMatch,
+          ifMatch: mockIfMatch,
+        },
+        '../../../src/storage/version/audit.js': {
+          writeAuditEntry: async (env, ctx, repo, fileId, entry) => {
+            auditCalls.push({ repo, fileId, entry });
+          },
+        },
+      });
+
+      // VERSIONS_AUDIT_FILE_ORGS contains org → Mode B; no label → plain edit
+      await putObjectWithVersion(
+        { VERSIONS_AUDIT_FILE_ORGS: 'myorg' },
+        {
+          org: 'myorg', ext: 'html', site: 'myrepo', users: [{ email: 'u@x.com' }],
+        },
+        {
+          org: 'myorg', key: 'myrepo/page.html', body: 'updated', type: 'text/html',
+        },
+        true,
+      );
+
+      assert.strictEqual(auditCalls.length, 1, 'audit entry must be written on plain edit');
+      const snapshotToDaVersions = snapshotWrites.filter((p) => p.Key?.includes('.da-versions/'));
+      assert.strictEqual(snapshotToDaVersions.length, 0, 'plain edit must not write a snapshot object');
+    });
+
+    // Mode B (audit-file): labeled version — snapshot stored under repo-scoped new path
+    it('Mode B: labeled version snapshot stored under repo-scoped new path', async () => {
+      const snapshotWrites = [];
+
+      const mockGetObject = async () => ({
+        body: 'doc content',
+        contentType: 'text/html',
+        contentLength: 11,
+        metadata: { id: 'doc-id', version: 'v1' },
+        status: 200,
+      });
+
+      const mockIfNoneMatch = () => ({
+        send: async (cmd) => {
+          if (cmd instanceof PutObjectCommand) snapshotWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      });
+      const mockIfMatch = () => ({
+        send: async () => ({ $metadata: { httpStatusCode: 200 } }),
+      });
+      function MockS3ClientC() {
+        this.send = async () => ({ $metadata: { httpStatusCode: 200 } });
+      }
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '@aws-sdk/client-s3': { S3Client: MockS3ClientC, PutObjectCommand },
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: mockIfNoneMatch,
+          ifMatch: mockIfMatch,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: async () => {} },
+      });
+
+      // VERSIONS_AUDIT_FILE_ORGS contains org → Mode B; label provided → labeled version
+      await putObjectWithVersion(
+        { VERSIONS_AUDIT_FILE_ORGS: 'myorg' },
+        {
+          org: 'myorg', ext: 'html', site: 'myrepo', users: [{ email: 'u@x.com' }],
+        },
+        {
+          org: 'myorg',
+          key: 'myrepo/page.html',
+          body: 'updated',
+          type: 'text/html',
+          label: 'Release 2',
+        },
+        true,
+      );
+
+      const snapshot = snapshotWrites.find((p) => p.Key?.includes('.da-versions/'));
+      assert.ok(snapshot, 'snapshot must be written for labeled version in Mode B');
+      assert.ok(
+        snapshot.Key.startsWith('myorg/myrepo/.da-versions/'),
+        `snapshot must use repo-scoped new path (org/repo/.da-versions/); got: ${snapshot.Key}`,
+      );
+      assert.ok(
+        !snapshot.Key.match(/^myorg\/\.da-versions\//),
+        'snapshot must NOT use legacy org-root path (org/.da-versions/)',
+      );
+    });
   });
 
   describe('version creation error handling', () => {
