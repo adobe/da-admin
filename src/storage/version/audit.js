@@ -13,13 +13,16 @@ import {
   S3Client,
   GetObjectCommand,
   PutObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
-import { auditKey } from './paths.js';
+import { auditKey, auditArchiveKey, auditDirPrefix } from './paths.js';
 
 /** Same-user edits within this window (ms) collapse into one entry (last timestamp). 30 min. */
 export const AUDIT_TIME_WINDOW_MS = 30 * 60 * 1000;
+
+export const AUDIT_MAX_ENTRIES = 500;
 
 const SEP = '\t';
 
@@ -125,33 +128,47 @@ async function streamToString(body) {
 export async function readAuditLines(env, ctx, repo, fileId) {
   const config = getS3Config(env);
   const client = new S3Client(config);
-  const key = `${ctx.org}/${auditKey(repo, fileId)}`;
+  const prefix = `${ctx.org}/${auditDirPrefix(repo, fileId)}`;
+
+  let keys;
   try {
-    const resp = await client.send(new GetObjectCommand({
+    const listResp = await client.send(new ListObjectsV2Command({
       Bucket: ctx.bucket,
-      Key: key,
+      Prefix: prefix,
     }));
-    const text = await streamToString(resp.Body);
-    const lines = text.split('\n').map(parseAuditLine).filter(Boolean);
-    return lines.map((line) => ({
-      timestamp: parseInt(line.timestamp, 10) || 0,
-      users: (() => {
-        try {
-          return JSON.parse(line.users);
-        } catch {
-          return [{ email: 'anonymous' }];
-        }
-      })(),
-      path: line.path,
-      versionLabel: line.versionLabel || undefined,
-      versionId: line.versionId || undefined,
-    }));
+    keys = (listResp.Contents || []).map((obj) => obj.Key);
   } catch (e) {
     if (e.$metadata?.httpStatusCode === 404 || e.name === 'NoSuchKey') {
       return [];
     }
     throw e;
   }
+
+  if (keys.length === 0) return [];
+
+  const allLineArrays = await Promise.all(keys.map(async (key) => {
+    try {
+      const resp = await client.send(new GetObjectCommand({ Bucket: ctx.bucket, Key: key }));
+      const text = await streamToString(resp.Body);
+      return text.split('\n').map(parseAuditLine).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }));
+
+  return allLineArrays.flat().map((line) => ({
+    timestamp: parseInt(line.timestamp, 10) || 0,
+    users: (() => {
+      try {
+        return JSON.parse(line.users);
+      } catch {
+        return [{ email: 'anonymous' }];
+      }
+    })(),
+    path: line.path,
+    versionLabel: line.versionLabel || undefined,
+    versionId: line.versionId || undefined,
+  }));
 }
 
 /**
@@ -225,6 +242,18 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0
     } else {
       const sep = existingText && !existingText.endsWith('\n') ? '\n' : '';
       newContent = `${existingText}${sep}${formatAuditLine(entry)}\n`;
+    }
+
+    const shouldArchive = !canCollapse && lines.length >= AUDIT_MAX_ENTRIES;
+    if (shouldArchive) {
+      const archiveTs = lastLine?.timestamp || Date.now();
+      await client.send(new PutObjectCommand({
+        Bucket: ctx.bucket,
+        Key: `${ctx.org}/${auditArchiveKey(repo, fileId, archiveTs)}`,
+        Body: existingText,
+        ContentType: 'text/plain; charset=utf-8',
+      }));
+      newContent = `${formatAuditLine(entry)}\n`;
     }
 
     const putInput = {

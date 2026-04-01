@@ -11,7 +11,7 @@
  */
 import assert from 'node:assert';
 import esmock from 'esmock';
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 describe('Version Audit', () => {
   describe('formatAuditLine / parseAuditLine', () => {
@@ -77,10 +77,17 @@ describe('Version Audit', () => {
         {
           '@aws-sdk/client-s3': {
             S3Client: function S3Client() {
-              this.send = async () => ({ Body: asyncIterableBody() });
+              this.send = async (cmd) => {
+                if (cmd instanceof ListObjectsV2Command) {
+                  return { Contents: [{ Key: 'o/repo/.da-versions/fid/audit.txt' }] };
+                }
+                if (cmd instanceof GetObjectCommand) return { Body: asyncIterableBody() };
+                return {};
+              };
             },
             GetObjectCommand,
             PutObjectCommand,
+            ListObjectsV2Command,
           },
           '../../../src/storage/utils/config.js': { default: () => ({}) },
         },
@@ -108,6 +115,7 @@ describe('Version Audit', () => {
             },
             GetObjectCommand,
             PutObjectCommand,
+            ListObjectsV2Command,
           },
           '../../../src/storage/utils/config.js': { default: () => ({}) },
         },
@@ -167,6 +175,7 @@ describe('Version Audit', () => {
             },
             GetObjectCommand,
             PutObjectCommand,
+            ListObjectsV2Command,
           },
           '../../../src/storage/utils/config.js': { default: () => ({}) },
         },
@@ -186,17 +195,23 @@ describe('Version Audit', () => {
         {
           '@aws-sdk/client-s3': {
             S3Client: function S3Client() {
-              this.send = async () => ({
-                Body: new ReadableStream({
-                  start(controller) {
-                    controller.enqueue(new TextEncoder().encode(lineText));
-                    controller.close();
-                  },
-                }),
-              });
+              this.send = async (cmd) => {
+                if (cmd instanceof ListObjectsV2Command) {
+                  return { Contents: [{ Key: 'o/repo/.da-versions/fid/audit.txt' }] };
+                }
+                return {
+                  Body: new ReadableStream({
+                    start(controller) {
+                      controller.enqueue(new TextEncoder().encode(lineText));
+                      controller.close();
+                    },
+                  }),
+                };
+              };
             },
             GetObjectCommand,
             PutObjectCommand,
+            ListObjectsV2Command,
           },
           '../../../src/storage/utils/config.js': { default: () => ({}) },
         },
@@ -205,6 +220,76 @@ describe('Version Audit', () => {
       const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
       assert.strictEqual(lines.length, 1);
       assert.deepStrictEqual(lines[0].users, [{ email: 'anonymous' }]);
+    });
+
+    it('reads current audit.txt and archive files, merging all entries', async () => {
+      const archiveLine = '1000\t[{"email":"a@x.com"}]\t/doc.html\t\t';
+      const currentLine = '9000\t[{"email":"b@x.com"}]\t/doc.html\t\t';
+
+      const { readAuditLines } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof ListObjectsV2Command) {
+                  return {
+                    Contents: [
+                      { Key: 'o/repo/.da-versions/fid/audit-1000.txt' },
+                      { Key: 'o/repo/.da-versions/fid/audit.txt' },
+                    ],
+                  };
+                }
+                if (cmd instanceof GetObjectCommand) {
+                  const isArchive = cmd.input.Key.includes('audit-1000');
+                  const line = isArchive ? archiveLine : currentLine;
+                  return {
+                    Body: new ReadableStream({
+                      start(controller) {
+                        controller.enqueue(new TextEncoder().encode(`${line}\n`));
+                        controller.close();
+                      },
+                    }),
+                  };
+                }
+                return {};
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+            ListObjectsV2Command,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(lines.length, 2);
+      const timestamps = lines.map((l) => l.timestamp).sort((a, b) => a - b);
+      assert.deepStrictEqual(timestamps, [1000, 9000]);
+    });
+
+    it('returns [] when no audit files exist (empty list)', async () => {
+      const { readAuditLines } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof ListObjectsV2Command) return { Contents: [] };
+                return {};
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+            ListObjectsV2Command,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.deepStrictEqual(lines, []);
     });
   });
 
@@ -566,6 +651,71 @@ describe('Version Audit', () => {
       assert.strictEqual(putCalls.length, 2, 'must retry the PUT');
       assert.strictEqual(putCalls[0].IfMatch, '"etag-1"');
       assert.strictEqual(putCalls[1].IfMatch, '"etag-2"', 'retry uses fresh ETag');
+    });
+
+    it('archives existing content and starts fresh when entry count reaches AUDIT_MAX_ENTRIES', async () => {
+      const { AUDIT_MAX_ENTRIES } = await import('../../../src/storage/version/audit.js');
+
+      const lastTs = 5000;
+      const existingLines = Array.from({ length: AUDIT_MAX_ENTRIES }, (_, i) => (
+        `${1000 + i}\t[{"email":"u@x.com"}]\t/doc.html\t\t`
+      ));
+      existingLines[existingLines.length - 1] = `${lastTs}\t[{"email":"u@x.com"}]\t/doc.html\t\t`;
+      const existingText = `${existingLines.join('\n')}\n`;
+
+      const putCalls = [];
+      const mockSend = async (cmd) => {
+        if (cmd instanceof GetObjectCommand) {
+          return {
+            Body: new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode(existingText));
+                controller.close();
+              },
+            }),
+            ETag: '"etag-1"',
+          };
+        }
+        if (cmd instanceof PutObjectCommand) {
+          putCalls.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+        return {};
+      };
+
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() { this.send = mockSend; },
+            GetObjectCommand,
+            PutObjectCommand,
+            ListObjectsV2Command,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const newEntry = {
+        timestamp: String(lastTs + 10000000),
+        users: '[{"email":"other@x.com"}]',
+        path: '/doc.html',
+      };
+
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', newEntry);
+
+      assert.strictEqual(result.status, 200);
+      assert.strictEqual(putCalls.length, 2, 'must PUT archive + new audit.txt');
+
+      const archivePut = putCalls.find((p) => p.Key.includes('audit-'));
+      const auditPut = putCalls.find((p) => p.Key.endsWith('audit.txt'));
+      assert.ok(archivePut, 'archive PUT must exist');
+      assert.ok(auditPut, 'audit.txt PUT must exist');
+      assert.strictEqual(archivePut.Body, existingText, 'archive must contain the old content');
+      assert.ok(archivePut.Key.includes(`audit-${lastTs}`), 'archive key must use last entry timestamp');
+      const newAuditLines = auditPut.Body.split('\n').filter((l) => l.trim());
+      assert.strictEqual(newAuditLines.length, 1, 'new audit.txt must contain only the new entry');
+      assert.ok(newAuditLines[0].includes(newEntry.timestamp), 'new entry must be present in fresh audit.txt');
     });
 
     it('returns status 500 when PUT 412 on retry attempt (no further retries)', async () => {

@@ -51,3 +51,24 @@ export function versionPrefixLegacy(fileId) {
 export function auditKey(repo, fileId) {
   return `${repo}/.da-versions/${fileId}/audit.txt`;
 }
+
+/**
+ * New structure: archive audit file path.
+ * @param {string} repo
+ * @param {string} fileId
+ * @param {string|number} timestamp - last entry timestamp in the archived file
+ * @returns {string} key (repo/.da-versions/fileId/audit-{timestamp}.txt)
+ */
+export function auditArchiveKey(repo, fileId, timestamp) {
+  return `${repo}/.da-versions/${fileId}/audit-${timestamp}.txt`;
+}
+
+/**
+ * Prefix that matches all audit files (audit.txt + audit-*.txt) for a file.
+ * @param {string} repo
+ * @param {string} fileId
+ * @returns {string} prefix (repo/.da-versions/fileId/audit)
+ */
+export function auditDirPrefix(repo, fileId) {
+  return `${repo}/.da-versions/${fileId}/audit`;
+}

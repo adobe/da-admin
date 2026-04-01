@@ -841,6 +841,39 @@ describe('Version List', () => {
       assert.strictEqual(versions[0].url, '/versionsource/acme/r/fid/uuid-1.html');
     });
 
+    it('caps audit entries at MAX_VERSIONS (500) when more exist across archives', async () => {
+      const mockGetObject = async (env, { key }) => {
+        if (key === 'myrepo/doc.html') {
+          return { status: 200, metadata: { id: 'fid-cap' } };
+        }
+        return { status: 404 };
+      };
+
+      const mockListObjects = async () => ({ status: 404, body: '[]' });
+
+      const mockReadAuditLines = async () => Array.from({ length: 600 }, (_, i) => ({
+        timestamp: i + 1,
+        users: [{ email: 'u@x.com' }],
+        path: '/doc.html',
+      }));
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
+      });
+
+      const result = await listObjectVersions(
+        { VERSIONS_AUDIT_FILE_ORGS: 'testorg', VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg' },
+        { bucket: 'b', org: 'testorg', key: 'myrepo/doc.html' },
+      );
+
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 500, 'result must be capped at MAX_VERSIONS (500)');
+      assert.strictEqual(versions[0].timestamp, 600, 'most recent entry first');
+      assert.strictEqual(versions[499].timestamp, 101, 'oldest included entry');
+    });
+
     it('when org not in VERSIONS_AUDIT_FILE_ORGS, only org/.da-versions (not repo path)', async () => {
       const listKeys = [];
       const mockGetObject = async (env, { key }) => {

@@ -10,7 +10,12 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'node:assert';
-import { versionKeyNew, auditKey } from '../../../src/storage/version/paths.js';
+import {
+  versionKeyNew,
+  auditKey,
+  auditArchiveKey,
+  auditDirPrefix,
+} from '../../../src/storage/version/paths.js';
 
 describe('Version Paths', () => {
   describe('versionKeyNew', () => {
@@ -34,6 +39,27 @@ describe('Version Paths', () => {
     it('uses the fileId in the path', () => {
       const key = auditKey('repo-a', 'id-42');
       assert.strictEqual(key, 'repo-a/.da-versions/id-42/audit.txt');
+    });
+  });
+
+  describe('auditArchiveKey', () => {
+    it('returns timestamped archive path under .da-versions', () => {
+      const key = auditArchiveKey('myrepo', 'file-id-xyz', 1234567890);
+      assert.strictEqual(key, 'myrepo/.da-versions/file-id-xyz/audit-1234567890.txt');
+    });
+
+    it('uses string timestamp as-is', () => {
+      assert.strictEqual(
+        auditArchiveKey('r', 'fid', '9999'),
+        'r/.da-versions/fid/audit-9999.txt',
+      );
+    });
+  });
+
+  describe('auditDirPrefix', () => {
+    it('returns prefix that matches audit.txt and audit-*.txt', () => {
+      const prefix = auditDirPrefix('myrepo', 'file-id-xyz');
+      assert.strictEqual(prefix, 'myrepo/.da-versions/file-id-xyz/audit');
     });
   });
 });

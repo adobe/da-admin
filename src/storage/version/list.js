@@ -144,6 +144,7 @@ export async function listObjectVersions(env, { bucket, org, key }) {
     const ext = fileExt(key);
     const auditEntries = buildEntriesFromAudit(auditLines, repo, org, fileId, ext);
     auditEntries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    auditEntries.splice(MAX_VERSIONS);
     const auditResult = {
       status: 200,
       contentType: 'application/json',

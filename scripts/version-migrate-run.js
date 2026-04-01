@@ -26,6 +26,8 @@ const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
 
 /** Must match src/storage/version/audit.js AUDIT_TIME_WINDOW_MS for consistent dedup. */
 const AUDIT_WINDOW_MS = 30 * 60 * 1000;
+/** Must match src/storage/version/audit.js AUDIT_MAX_ENTRIES. */
+const AUDIT_MAX_ENTRIES = 500;
 
 const config = {
   region: 'auto',
@@ -258,14 +260,22 @@ async function migrateFileId(fileId) {
     const normalized = deduped.map((e) => normalizeAuditEntry(e, repo));
     auditLines = normalized.length;
     if (!DRY_RUN) {
-      const body = normalized.map(formatAuditLine).join('\n') + (normalized.length ? '\n' : '');
-      const auditKey = `${Org}/${repo}/.da-versions/${fileId}/audit.txt`;
-      await client.send(new PutObjectCommand({
-        Bucket,
-        Key: auditKey,
-        Body: body,
-        ContentType: 'text/plain; charset=utf-8',
-      }));
+      // Split into chunks of AUDIT_MAX_ENTRIES; all but the last become archive files.
+      for (let i = 0; i < normalized.length; i += AUDIT_MAX_ENTRIES) {
+        const chunk = normalized.slice(i, i + AUDIT_MAX_ENTRIES);
+        const body = `${chunk.map(formatAuditLine).join('\n')}\n`;
+        const isLast = i + AUDIT_MAX_ENTRIES >= normalized.length;
+        const lastTs = chunk[chunk.length - 1].timestamp;
+        const key = isLast
+          ? `${Org}/${repo}/.da-versions/${fileId}/audit.txt`
+          : `${Org}/${repo}/.da-versions/${fileId}/audit-${lastTs}.txt`;
+        await client.send(new PutObjectCommand({
+          Bucket,
+          Key: key,
+          Body: body,
+          ContentType: 'text/plain; charset=utf-8',
+        }));
+      }
     }
   }
 
