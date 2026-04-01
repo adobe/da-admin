@@ -25,6 +25,7 @@ node scripts/version-migrate-analyse.js myorg --verbose
 
 Runs standalone (no need to run Analyse first). Processes file IDs in parallel. For each file ID under `org/.da-versions/`:
 
+- **Skips binary objects** (non-HTML/JSON content types) — these were never versioned by the worker and are dropped during migration, cleaning up any legacy binary version data.
 - Copies snapshot objects (contentLength > 0) to `org/repo/.da-versions/fileId/versionId.ext` (repo from object metadata `path`).
 - Builds `audit.txt`: deduplicates legacy empty-version metadata (same user + 30 min window), **merges with any existing `audit.txt` already in the new path** (hybrid case: project not yet migrated but new PUTs have been writing audit there), then writes the combined, deduplicated result.
 

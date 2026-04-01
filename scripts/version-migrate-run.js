@@ -62,6 +62,13 @@ async function runWithConcurrency(limit, items, fn) {
   return Promise.all(results);
 }
 
+/** Must match src/storage/version/put.js shouldCreateVersion. */
+function shouldCreateVersion(contentType) {
+  if (!contentType) return false;
+  const type = contentType.toLowerCase();
+  return type.startsWith('text/html') || type.startsWith('application/json');
+}
+
 function getRepoFromPath(path) {
   if (!path || typeof path !== 'string') return '';
   const first = path.split('/')[0];
@@ -219,8 +226,9 @@ async function migrateFileId(fileId) {
     const versionLabel = meta.label || meta.Label || '';
     const repo = getRepoFromPath(path);
 
+    const contentType = head.ContentType || '';
     const name = Key.split('/').pop();
-    if (name !== 'audit.txt') {
+    if (name !== 'audit.txt' && shouldCreateVersion(contentType)) {
       if (contentLength > 0) {
         snapshots.push({
           Key,
