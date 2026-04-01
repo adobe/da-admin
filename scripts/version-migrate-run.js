@@ -45,6 +45,27 @@ const prefix = `${Org}/.da-versions/`;
 /** Process N file IDs in parallel. */
 const CONCURRENCY = parseInt(process.env.MIGRATE_RUN_CONCURRENCY || '15', 10);
 
+const RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 2000;
+
+async function withRetry(fn, label) {
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await fn();
+    } catch (e) {
+      if (attempt === RETRY_ATTEMPTS) throw e;
+      const delay = RETRY_DELAY_MS * attempt;
+      console.warn(`  ${label}: attempt ${attempt} failed (${e.message}), retrying in ${delay}ms...`);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => {
+        setTimeout(resolve, delay);
+      });
+    }
+  }
+  return undefined;
+}
+
 async function runWithConcurrency(limit, items, fn) {
   const results = [];
   const executing = new Set();
@@ -62,11 +83,13 @@ async function runWithConcurrency(limit, items, fn) {
   return Promise.all(results);
 }
 
-/** Must match src/storage/version/put.js shouldCreateVersion. */
-function shouldCreateVersion(contentType) {
-  if (!contentType) return false;
-  const type = contentType.toLowerCase();
-  return type.startsWith('text/html') || type.startsWith('application/json');
+/**
+ * Must match src/storage/version/put.js shouldCreateVersion semantics.
+ * For legacy objects the stored ContentType may be absent, so we derive from the file extension.
+ */
+function shouldCreateVersion(name) {
+  const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+  return ext === 'html' || ext === 'json';
 }
 
 function getRepoFromPath(path) {
@@ -88,23 +111,30 @@ function usersNormalized(usersJson) {
 /**
  * Dedupe audit entries: same-user edits within AUDIT_WINDOW_MS collapse (keep last).
  * Labelled versions never collapse (match audit.js: version entries "interrupt" the window).
+ *
+ * Window is anchored to the START of each collapse run, not the last updated entry.
+ * This prevents chained collapsing across hours/days when replaying historical entries.
  */
 function dedupeAuditEntries(entries) {
   const out = [];
+  // Track the original (first) timestamp of each run so the window doesn't slide forward.
+  const outWindowStart = [];
   const isVersionEntry = (e) => (e?.versionLabel ?? '') !== '' || (e?.versionId ?? '') !== '';
   for (const e of entries.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))) {
     const last = out[out.length - 1];
     const ts = parseInt(e.timestamp, 10) || 0;
     const userNorm = usersNormalized(e.users);
-    const lastTs = parseInt(last?.timestamp, 10) || 0;
+    const windowStartTs = outWindowStart.length ? outWindowStart[outWindowStart.length - 1] : 0;
     const sameUser = last && usersNormalized(last.users) === userNorm;
-    const inWindow = sameUser && (ts - lastTs <= AUDIT_WINDOW_MS);
+    const inWindow = sameUser && (ts - windowStartTs <= AUDIT_WINDOW_MS);
     const lastIsVersion = last && isVersionEntry(last);
     const canCollapse = inWindow && !isVersionEntry(e) && !lastIsVersion;
     if (canCollapse) {
       out[out.length - 1] = e;
+      // windowStart stays unchanged — window is anchored to the run's first entry
     } else {
       out.push(e);
+      outWindowStart.push(ts);
     }
   }
   return out;
@@ -226,9 +256,8 @@ async function migrateFileId(fileId) {
     const versionLabel = meta.label || meta.Label || '';
     const repo = getRepoFromPath(path);
 
-    const contentType = head.ContentType || '';
     const name = Key.split('/').pop();
-    if (name !== 'audit.txt' && shouldCreateVersion(contentType)) {
+    if (name !== 'audit.txt' && shouldCreateVersion(name)) {
       if (contentLength > 0) {
         snapshots.push({
           Key,
@@ -261,7 +290,11 @@ async function migrateFileId(fileId) {
   if (allLegacyAudit.length && repo) {
     const dedupedLegacy = dedupeAuditEntries(allLegacyAudit);
     const existingInNew = await readExistingAuditInNewPath(repo, fileId);
-    const combined = [...dedupedLegacy, ...existingInNew].sort(
+    // Deduplicate by exact timestamp before window-based dedup to make re-runs idempotent.
+    // Existing audit.txt entries take priority (they may have been updated since migration).
+    const seenTs = new Set(existingInNew.map((e) => e.timestamp));
+    const merged = [...existingInNew, ...dedupedLegacy.filter((e) => !seenTs.has(e.timestamp))];
+    const combined = merged.sort(
       (a, b) => (parseInt(a.timestamp, 10) || 0) - (parseInt(b.timestamp, 10) || 0),
     );
     const deduped = dedupeAuditEntries(combined);
@@ -301,8 +334,12 @@ async function migrateFileId(fileId) {
     }
   }
 
+  const samplePath = snapshots[0]
+    ? (auditEntries[0]?.path || snapshotAuditEntries[0]?.path || '')
+    : (auditEntries[0]?.path || snapshotAuditEntries[0]?.path || '');
   return {
     fileId,
+    path: samplePath,
     snapshots: snapshots.length,
     audit: auditEntries.length,
     auditLines,
@@ -324,11 +361,13 @@ async function main() {
   const startMs = Date.now();
   const results = await runWithConcurrency(CONCURRENCY, fileIds, async (fileId) => {
     try {
-      const result = await migrateFileId(fileId);
-      console.log(`  ${fileId}: ${result.snapshots} snapshots, ${result.auditLines} audit lines -> repo ${result.repo}`);
+      const result = await withRetry(() => migrateFileId(fileId), fileId);
+      const pathHint = result.path ? ` (${result.path})` : '';
+      console.log(`  ${fileId}${pathHint}: ${result.snapshots} snapshots, ${result.auditLines} audit lines -> repo ${result.repo}`);
       return { fileId, ...result, error: null };
     } catch (e) {
-      console.error(`  ${fileId}: error`, e.message);
+      console.error(`  ${fileId}: ERROR - ${e.message}`);
+      console.error(e);
       return {
         fileId, snapshots: 0, audit: 0, auditLines: 0, repo: '', error: e,
       };

@@ -15,12 +15,13 @@ import {
   S3Client,
   ListObjectsV2Command,
   HeadObjectCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
 
 const Bucket = process.env.AEM_BUCKET_NAME;
-const args = process.argv.slice(2);
-const Org = process.env.ORG || args[0];
-const Path = args[1] || args[0];
+const rawPath = (process.argv[2] || '').replace(/^\//, '');
+const [Org, ...pathParts] = rawPath.split('/');
+const Path = pathParts.join('/');
 
 const config = {
   region: 'auto',
@@ -67,9 +68,11 @@ async function listLegacyVersions(fileId) {
 
 async function listNewVersions(repo, fileId) {
   const prefix = `${Org}/${repo}/.da-versions/${fileId}/`;
-  const list = [];
+  const snapshots = [];
+  const auditKeys = [];
   let token;
   do {
+    // eslint-disable-next-line no-await-in-loop
     const resp = await client.send(new ListObjectsV2Command({
       Bucket,
       Prefix: prefix,
@@ -78,17 +81,31 @@ async function listNewVersions(repo, fileId) {
     }));
     (resp.Contents || []).forEach((c) => {
       const name = c.Key.slice(prefix.length);
-      if (name && name !== 'audit.txt') list.push(name);
+      if (!name) return;
+      if (name.startsWith('audit')) auditKeys.push(c.Key);
+      else snapshots.push(name);
     });
     token = resp.NextContinuationToken;
   } while (token);
-  return list;
+
+  let auditLines = 0;
+  await Promise.all(auditKeys.map(async (key) => {
+    try {
+      const resp = await client.send(new GetObjectCommand({ Bucket, Key: key }));
+      const chunks = [];
+      for await (const chunk of resp.Body) chunks.push(chunk);
+      const text = Buffer.concat(chunks).toString('utf8');
+      auditLines += text.split('\n').filter((l) => l.trim()).length;
+    } catch { /* ignore */ }
+  }));
+
+  return { snapshots, auditLines };
 }
 
 async function main() {
   if (!Bucket || !Org || !Path) {
-    console.error('Usage: ORG=org node scripts/version-migrate-validate.js [org] <path>');
-    console.error('Example: ORG=kptdobe node scripts/version-migrate-validate.js kptdobe test/docs/foo.html');
+    console.error('Usage: AEM_BUCKET_NAME=bucket node scripts/version-migrate-validate.js <org/repo/path.html>');
+    console.error('Example: AEM_BUCKET_NAME=aem-content node scripts/version-migrate-validate.js kptdobe/daplayground/surf.html');
     process.exit(1);
   }
 
@@ -102,14 +119,19 @@ async function main() {
   const repo = Path.includes('/') ? Path.split('/')[0] : '';
 
   const legacy = await listLegacyVersions(fileId);
-  const migrated = repo ? await listNewVersions(repo, fileId) : [];
+  const empty = { snapshots: [], auditLines: 0 };
+  const { snapshots, auditLines } = repo ? await listNewVersions(repo, fileId) : empty;
 
-  console.log(`FileId: ${fileId}, path: ${Path}, repo: ${repo || '(none)'}`);
-  console.log(`Legacy prefix count: ${legacy.length}`);
-  console.log(`New prefix count: ${migrated.length}`);
-  if (legacy.length !== migrated.length) {
-    console.log('  Mismatch: legacy vs new count differs');
-  }
+  // Legacy: objects with content = snapshots; empty objects = plain edit markers
+  // New: snapshot files + audit lines (plain edits collapsed by dedup window)
+  console.log(`FileId:        ${fileId}`);
+  console.log(`Path:          ${Path}, repo: ${repo || '(none)'}`);
+  console.log(`Legacy objects:    ${legacy.length}`);
+  console.log(`New snapshots:     ${snapshots.length}`);
+  console.log(`New audit lines:   ${auditLines}`);
+  console.log('');
+  console.log('Note: audit line count is lower than legacy object count — expected.');
+  console.log('      Same-user edits within 30 min are collapsed into one audit line.');
 }
 
 main().catch((e) => {
