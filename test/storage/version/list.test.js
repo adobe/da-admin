@@ -668,6 +668,55 @@ describe('Version List', () => {
       assert.strictEqual(versions.length, 2);
     });
 
+    it('audit file without skip: deduplicates entries with same timestamp as audit', async () => {
+      const mockGetObject = async (env, { key }) => {
+        if (key === 'myrepo/docs/file.html') {
+          return { status: 200, metadata: { id: 'fid-dedup' } };
+        }
+        if (key === '.da-versions/fid-dedup/v1.html') {
+          return {
+            status: 200,
+            metadata: {
+              timestamp: '1000',
+              users: '[{"email":"u@x.com"}]',
+              path: 'myrepo/docs/file.html',
+            },
+            contentLength: 50,
+          };
+        }
+        return { status: 404 };
+      };
+
+      const mockListObjects = async (env, { key }) => {
+        if (key === '.da-versions/fid-dedup') {
+          return { status: 200, body: JSON.stringify([{ name: 'v1', ext: 'html' }]) };
+        }
+        return { status: 404, body: '[]' };
+      };
+
+      // audit.txt has the same entry (timestamp 1000) — post-migration hybrid case
+      const mockReadAuditLines = async () => [
+        {
+          timestamp: 1000, users: [{ email: 'u@x.com' }], path: '/docs/file.html', versionId: 'v1',
+        },
+      ];
+
+      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
+      });
+
+      const result = await listObjectVersions(
+        { VERSIONS_AUDIT_FILE_ORGS: 'testorg' },
+        { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
+      );
+
+      const versions = JSON.parse(result.body);
+      assert.strictEqual(versions.length, 1, 'duplicate entry (same timestamp) must appear only once');
+      assert.strictEqual(versions[0].timestamp, 1000);
+    });
+
     it('org not in new mode: merges legacy with new when new has no snapshots', async () => {
       const listObjectCalls = [];
       const mockGetObject = async (env, { key }) => {

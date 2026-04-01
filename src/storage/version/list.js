@@ -115,7 +115,8 @@ function mergeLegacyAndNewResult(legacyResult, newResult) {
   if (legacyResult.status !== 200 || !legacyResult.body) return newResult;
   const legacyEntries = JSON.parse(legacyResult.body);
   const newEntries = JSON.parse(newResult.body);
-  const merged = [...legacyEntries, ...newEntries];
+  const seen = new Set(newEntries.map((e) => e.timestamp));
+  const merged = [...newEntries, ...legacyEntries.filter((e) => !seen.has(e.timestamp))];
   merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
   return {
     status: 200,
