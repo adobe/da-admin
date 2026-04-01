@@ -52,6 +52,16 @@ Compares object counts for a single document: legacy prefix vs new prefix.
 ORG=myorg node scripts/version-migrate-validate.js myorg repo/path/to/file.html
 ```
 
+## Operational ordering
+
+**Run migration before activating `VERSIONS_AUDIT_SKIP_LEGACY_ORGS` for an org.** Once that flag is set, the worker's list logic stops reading the legacy prefix (`org/.da-versions/`). Any audit entries written to the legacy path after that point will be invisible to the worker — and the migration script would also miss them if run afterwards.
+
+Safe order:
+1. Run `version-migrate-run.js` for the org.
+2. Verify with `version-migrate-validate.js`.
+3. Add the org to `VERSIONS_AUDIT_FILE_ORGS` (reads from `audit.txt`).
+4. Add the org to `VERSIONS_AUDIT_SKIP_LEGACY_ORGS` (stops reading legacy prefix).
+
 ## Env vars
 
 | Variable            | Description                    |
