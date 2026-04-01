@@ -209,6 +209,10 @@ export async function putObjectWithVersion(
 
   const Preparsingstore = storeBody ? Timestamp : pps;
 
+  const usesAuditFile = new Set(
+    (env?.VERSIONS_AUDIT_FILE_ORGS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  ).has(daCtx.org);
+
   // Only create version for explicit label (POST /versionsource) or Restore Point. No Collab Parse.
   const shouldCreateVersionObject = createVersion
     && (update.label != null || Label === 'Restore Point');
@@ -217,7 +221,7 @@ export async function putObjectWithVersion(
     const versionResp = await putVersion(config, {
       Bucket: input.Bucket,
       Org: daCtx.org,
-      Repo: daCtx.site || undefined,
+      Repo: usesAuditFile ? (daCtx.site || undefined) : undefined,
       Body: (body || storeBody ? current.body : ''),
       ContentLength: (body || storeBody ? current.contentLength : undefined),
       ContentType: current.contentType,
@@ -241,22 +245,43 @@ export async function putObjectWithVersion(
   // Audit: one entry per versionable PUT; versionLabel + versionId when labelled version created.
   // Store path without repo prefix and versionId without extension for readability.
   if (createVersion) {
-    try {
-      const versionId = versionCreated ? Version : undefined;
-      const versionLabel = versionCreated ? (Label ?? '') : undefined;
-      const pathForAudit = (daCtx.site && Path.startsWith(`${daCtx.site}/`))
-        ? Path.slice(daCtx.site.length)
-        : Path;
-      await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
-        timestamp: Timestamp,
-        users: Users,
-        path: pathForAudit,
-        versionLabel,
-        versionId,
-      });
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to write audit entry', e);
+    if (usesAuditFile) {
+      try {
+        const versionId = versionCreated ? Version : undefined;
+        const versionLabel = versionCreated ? (Label ?? '') : undefined;
+        const pathForAudit = (daCtx.site && Path.startsWith(`${daCtx.site}/`))
+          ? Path.slice(daCtx.site.length)
+          : Path;
+        await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
+          timestamp: Timestamp,
+          users: Users,
+          path: pathForAudit,
+          versionLabel,
+          versionId,
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to write audit entry', e);
+      }
+    } else if (!shouldCreateVersionObject) {
+      // Legacy path: write an empty version object so listFromLegacyStructure can find it.
+      // Only needed when no snapshot was created — the snapshot itself serves as the marker.
+      await putVersion(config, {
+        Bucket: input.Bucket,
+        Org: daCtx.org,
+        Body: '',
+        ContentLength: 0,
+        ContentType: current.contentType,
+        ID,
+        Version,
+        Ext: daCtx.ext,
+        Metadata: {
+          Users,
+          Timestamp,
+          Path,
+          Label: Label ?? '',
+        },
+      }, false);
     }
   }
 
