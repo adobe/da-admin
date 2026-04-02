@@ -20,6 +20,8 @@ import {
   getUsersForMetadata, ifMatch, ifNoneMatch,
 } from '../utils/version.js';
 import getObject from '../object/get.js';
+import { writeAuditEntry } from './audit.js';
+import { versionKeyNew, versionKeyLegacy } from './paths.js';
 
 export function getContentLength(body) {
   if (body === undefined) {
@@ -35,14 +37,24 @@ export function getContentLength(body) {
   return undefined;
 }
 
+/**
+ * @param {object} config - S3 config
+ * @param {object} params - Bucket, Org, Repo (optional), Body, ID, Version, Ext,
+ *   Metadata, ContentLength, ContentType
+ * @param {boolean} [noneMatch=true]
+ * @returns {Promise<{ status: number }>}
+ */
 export async function putVersion(config, {
-  Bucket, Org, Body, ID, Version, Ext, Metadata, ContentLength, ContentType,
+  Bucket, Org, Repo, Body, ID, Version, Ext, Metadata, ContentLength, ContentType,
 }, noneMatch = true) {
   const length = ContentLength ?? getContentLength(Body);
 
   const client = noneMatch ? ifNoneMatch(config) : new S3Client(config);
+  const key = Repo
+    ? `${Org}/${versionKeyNew(Repo, ID, Version, Ext)}`
+    : `${Org}/${versionKeyLegacy(ID, Version, Ext)}`;
   const input = {
-    Bucket, Key: `${Org}/.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length, ContentType,
+    Bucket, Key: key, Body, Metadata, ContentLength: length, ContentType,
   };
   const command = new PutObjectCommand(input);
   try {
@@ -86,9 +98,6 @@ export async function putObjectWithVersion(
   clientConditionals = null,
 ) {
   const config = getS3Config(env);
-  // While we are automatically storing the body once for the 'Collab Parse' changes, we never
-  // do a HEAD, because we may need the content. Once we don't need to do this automatic store
-  // any more, we can change the 'false' argument in the next line back to !body.
   const current = await getObject(env, update, false);
 
   let ID = current.metadata?.id;
@@ -106,7 +115,7 @@ export async function putObjectWithVersion(
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
   const input = buildInput(update);
   const Timestamp = `${Date.now()}`;
-  const Path = update.key;
+  const Path = update.key ?? daCtx.key ?? '';
 
   // Validate conflicting conditionals - both headers present is unusual for PUT
   let effectiveConditionals = clientConditionals;
@@ -183,29 +192,36 @@ export async function putObjectWithVersion(
   }
 
   const pps = current.metadata?.preparsingstore || '0';
-  let storeBody = !body && pps === '0';
+  let storeBody = false;
   let versionCreated = false;
-  let Preparsingstore = storeBody ? Timestamp : pps;
-  let Label = storeBody ? 'Collab Parse' : update.label;
+  let Label = update.label;
 
-  if (createVersion) {
-    if (daCtx.method === 'PUT'
-      && daCtx.ext === 'html'
-      && current.contentLength > EMPTY_DOC_SIZE
-      && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
-      // we are about to empty the document body
-      // this should almost never happen but it does in some unexpectedcases
-      // we want then to store a version of the full document as a Restore Point
-      // eslint-disable-next-line no-console
-      console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
-      storeBody = true;
-      Label = 'Restore Point';
-      Preparsingstore = Timestamp;
-    }
+  // Restore Point: we are about to empty the document body; store current content as a snapshot
+  if (daCtx.method === 'PUT'
+    && daCtx.ext === 'html'
+    && current.contentLength > EMPTY_DOC_SIZE
+    && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
+    // eslint-disable-next-line no-console
+    console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
+    storeBody = true;
+    Label = 'Restore Point';
+  }
 
+  const Preparsingstore = storeBody ? Timestamp : pps;
+
+  const usesAuditFile = new Set(
+    (env?.VERSIONS_AUDIT_FILE_ORGS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  ).has(daCtx.org);
+
+  // Only create version for explicit label (POST /versionsource) or Restore Point. No Collab Parse.
+  const shouldCreateVersionObject = createVersion
+    && (update.label != null || Label === 'Restore Point');
+
+  if (shouldCreateVersionObject) {
     const versionResp = await putVersion(config, {
       Bucket: input.Bucket,
       Org: daCtx.org,
+      Repo: usesAuditFile ? (daCtx.site || undefined) : undefined,
       Body: (body || storeBody ? current.body : ''),
       ContentLength: (body || storeBody ? current.contentLength : undefined),
       ContentType: current.contentType,
@@ -224,6 +240,49 @@ export async function putObjectWithVersion(
       return { status: versionResp.status, metadata: { id: ID } };
     }
     versionCreated = versionResp.status === 200;
+  }
+
+  // Audit: one entry per versionable PUT; versionLabel + versionId when labelled version created.
+  // Store path without repo prefix and versionId without extension for readability.
+  if (createVersion) {
+    if (usesAuditFile) {
+      try {
+        const versionId = versionCreated ? Version : undefined;
+        const versionLabel = versionCreated ? (Label ?? '') : undefined;
+        const pathForAudit = (daCtx.site && Path.startsWith(`${daCtx.site}/`))
+          ? Path.slice(daCtx.site.length)
+          : Path;
+        await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
+          timestamp: Timestamp,
+          users: Users,
+          path: pathForAudit,
+          versionLabel,
+          versionId,
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to write audit entry', e);
+      }
+    } else if (!shouldCreateVersionObject) {
+      // Legacy path: write an empty version object so listFromLegacyStructure can find it.
+      // Only needed when no snapshot was created — the snapshot itself serves as the marker.
+      await putVersion(config, {
+        Bucket: input.Bucket,
+        Org: daCtx.org,
+        Body: '',
+        ContentLength: 0,
+        ContentType: current.contentType,
+        ID,
+        Version,
+        Ext: daCtx.ext,
+        Metadata: {
+          Users,
+          Timestamp,
+          Path,
+          Label: Label ?? '',
+        },
+      }, false);
+    }
   }
 
   const metadata = {

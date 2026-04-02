@@ -243,18 +243,27 @@ describe('Conditional Headers', () => {
         .on(PutObjectCommand)
         .rejects({ $metadata: { httpStatusCode: 412 } });
 
-      const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
+      const daCtx = {
+        users: [{ email: 'test@example.com' }], org: ORG, ext: 'html', method: 'PUT',
+      };
       const update = {
         bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
       };
       const clientConditionals = { ifMatch: '"wrongetag"' };
 
-      const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
+      const resp = await putObjectWithVersion(
+        { VERSIONS_AUDIT_FILE_ORGS: ORG },
+        daCtx,
+        update,
+        false,
+        null,
+        clientConditionals,
+      );
 
       // Should return 412 and NOT retry
       assert.strictEqual(resp.status, 412);
-      // Verify only one PutObjectCommand was called (no retry)
-      assert.strictEqual(s3Mock.commandCalls(PutObjectCommand).length, 2); // 1 version + 1 main
+      // 2 audit PUT attempts (original + 1 retry on 412) + 1 main PUT = 3 total
+      assert.strictEqual(s3Mock.commandCalls(PutObjectCommand).length, 3);
     });
   });
 
