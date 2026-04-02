@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/adobe/da-admin/compare/v1.2.0...v1.3.0) (2026-04-02)
+
+
+### Features
+
+* restructure versions ([#253](https://github.com/adobe/da-admin/issues/253)) ([f583359](https://github.com/adobe/da-admin/commit/f58335943319553726ac9e01a76dd2828ed7ed7a))
+
 # [1.2.0](https://github.com/adobe/da-admin/compare/v1.1.7...v1.2.0) (2026-03-31)
 
 
