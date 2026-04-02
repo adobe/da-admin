@@ -2929,9 +2929,11 @@ describe('Version Put', () => {
         },
       });
 
-      const daCtx = { org: 'o', ext: 'html', users: [{ email: 'u@x.com' }] };
-      const update = { org: 'o', key: 'doc.html', type: 'text/html' };
-      const resp = await putObjectWithVersion({}, daCtx, update, true);
+      const daCtx = {
+        org: 'o', ext: 'html', site: 'repo', users: [{ email: 'u@x.com' }],
+      };
+      const update = { org: 'o', key: 'repo/doc.html', type: 'text/html' };
+      const resp = await putObjectWithVersion({ VERSIONS_AUDIT_FILE_ORGS: 'o' }, daCtx, update, true);
 
       // audit failure must not bubble up; main put succeeded
       assert.strictEqual(resp.status, 200);

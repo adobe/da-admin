@@ -269,6 +269,50 @@ describe('Version Audit', () => {
       assert.deepStrictEqual(timestamps, [1000, 9000]);
     });
 
+    it('skips an archive file that throws on GET and still returns other entries', async () => {
+      const currentLine = '9000\t[{"email":"b@x.com"}]\t/doc.html\t\t';
+
+      const { readAuditLines } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof ListObjectsV2Command) {
+                  return {
+                    Contents: [
+                      { Key: 'o/repo/.da-versions/fid/audit-1000.txt' },
+                      { Key: 'o/repo/.da-versions/fid/audit.txt' },
+                    ],
+                  };
+                }
+                if (cmd instanceof GetObjectCommand) {
+                  if (cmd.input.Key.includes('audit-1000')) throw new Error('S3 read error');
+                  return {
+                    Body: new ReadableStream({
+                      start(controller) {
+                        controller.enqueue(new TextEncoder().encode(`${currentLine}\n`));
+                        controller.close();
+                      },
+                    }),
+                  };
+                }
+                return {};
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+            ListObjectsV2Command,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(lines.length, 1, 'failed archive GET must be skipped, not throw');
+      assert.strictEqual(lines[0].timestamp, 9000);
+    });
+
     it('returns [] when no audit files exist (empty list)', async () => {
       const { readAuditLines } = await esmock(
         '../../../src/storage/version/audit.js',
@@ -716,6 +760,56 @@ describe('Version Audit', () => {
       const newAuditLines = auditPut.Body.split('\n').filter((l) => l.trim());
       assert.strictEqual(newAuditLines.length, 1, 'new audit.txt must contain only the new entry');
       assert.ok(newAuditLines[0].includes(newEntry.timestamp), 'new entry must be present in fresh audit.txt');
+    });
+
+    it('treats malformed users JSON in existing entry as opaque string (no crash)', async () => {
+      // Covers usersNormalized catch branch: invalid JSON falls back to raw string comparison.
+      const existingLine = '1000\tnot-valid-json\t/doc.html\t\t';
+      const putCalls = [];
+
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) {
+                  return {
+                    Body: new ReadableStream({
+                      start(controller) {
+                        controller.enqueue(new TextEncoder().encode(`${existingLine}\n`));
+                        controller.close();
+                      },
+                    }),
+                    ETag: '"etag-bad"',
+                  };
+                }
+                if (cmd instanceof PutObjectCommand) {
+                  putCalls.push(cmd.input);
+                  return { $metadata: { httpStatusCode: 200 } };
+                }
+                return {};
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+            ListObjectsV2Command,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+
+      // Different user — must not collapse with the malformed-JSON entry
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '9000',
+        users: '[{"email":"u@x.com"}]',
+        path: '/doc.html',
+      });
+
+      assert.strictEqual(result.status, 200);
+      assert.strictEqual(putCalls.length, 1);
+      const lines = putCalls[0].Body.split('\n').filter((l) => l.trim());
+      assert.strictEqual(lines.length, 2, 'both entries must be present (no collapse across mismatched users)');
     });
 
     it('returns status 500 when PUT 412 on retry attempt (no further retries)', async () => {
