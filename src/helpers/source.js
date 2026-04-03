@@ -10,6 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import { FORM_TYPES } from '../utils/constants.js';
+import normalizeCharset from '../utils/charset.js';
 
 /**
  * Builds a source response
@@ -59,12 +60,27 @@ async function formPutHandler(req) {
   return formData ? getFormEntries(formData) : null;
 }
 
-export default async function putHelper(req, env, daCtx) {
-  const contentType = req.headers.get('content-type')?.split(';')[0];
+async function rawBodyPutHandler(req, contentType) {
+  if (typeof req.text !== 'function') return null;
+  const body = await req.text();
+  if (!body) return null;
 
-  if (!contentType) return null;
+  const normalized = normalizeCharset(contentType);
+  const data = new File([body], 'source', { type: normalized });
+  return { data };
+}
+
+export default async function putHelper(req, env, daCtx) {
+  const rawContentType = req.headers.get('content-type');
+  if (!rawContentType) return null;
+
+  const contentType = rawContentType.split(';')[0].trim();
 
   if (FORM_TYPES.some((type) => type === contentType)) return formPutHandler(req, env, daCtx);
+
+  if (contentType === 'text/html') {
+    return rawBodyPutHandler(req, contentType);
+  }
 
   return undefined;
 }

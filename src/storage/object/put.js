@@ -15,12 +15,13 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
+import normalizeCharset from '../../utils/charset.js';
 import { sourceRespObject } from '../../helpers/source.js';
 import { putObjectWithVersion } from '../version/put.js';
 
 async function getFileBody(data) {
   await data.text();
-  return { body: data, type: data.type };
+  return { body: data, type: normalizeCharset(data.type) };
 }
 
 function getObjectBody(data) {
