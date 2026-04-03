@@ -105,7 +105,7 @@ describe('Source helper', () => {
       assert(text.includes('Café'));
     });
 
-    it('Handles text/plain raw body', async () => {
+    it('Returns undefined for text/plain raw body', async () => {
       const opts = {
         body: 'Hello — world™',
         method: 'PUT',
@@ -116,17 +116,12 @@ describe('Source helper', () => {
 
       const req = new Request(MOCK_URL, opts);
       const helped = await putHelper(req, env, daCtx);
-      assert(helped.data instanceof File);
-      assert.strictEqual(helped.data.type, 'text/plain; charset=utf-8');
-      const text = await helped.data.text();
-      assert(text.includes('—'));
-      assert(text.includes('™'));
+      assert.strictEqual(helped, undefined);
     });
 
-    it('Handles application/json raw body', async () => {
-      const json = JSON.stringify({ title: 'Café' });
+    it('Returns undefined for application/json raw body', async () => {
       const opts = {
-        body: json,
+        body: JSON.stringify({ title: 'Café' }),
         method: 'PUT',
         headers: new Headers({
           'Content-Type': 'application/json',
@@ -135,10 +130,7 @@ describe('Source helper', () => {
 
       const req = new Request(MOCK_URL, opts);
       const helped = await putHelper(req, env, daCtx);
-      assert(helped.data instanceof File);
-      assert.strictEqual(helped.data.type, 'application/json');
-      const text = await helped.data.text();
-      assert.strictEqual(text, json);
+      assert.strictEqual(helped, undefined);
     });
 
     it('Handles text/html with existing charset', async () => {

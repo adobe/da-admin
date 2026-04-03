@@ -9,7 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { FORM_TYPES, TEXT_TYPES } from '../utils/constants.js';
+import { FORM_TYPES } from '../utils/constants.js';
+import normalizeCharset from '../utils/charset.js';
 
 /**
  * Builds a source response
@@ -59,13 +60,6 @@ async function formPutHandler(req) {
   return formData ? getFormEntries(formData) : null;
 }
 
-function normalizeCharset(type) {
-  if (type && type.startsWith('text/') && !type.includes('charset')) {
-    return `${type}; charset=utf-8`;
-  }
-  return type;
-}
-
 async function rawBodyPutHandler(req, contentType) {
   if (typeof req.text !== 'function') return null;
   const body = await req.text();
@@ -84,7 +78,7 @@ export default async function putHelper(req, env, daCtx) {
 
   if (FORM_TYPES.some((type) => type === contentType)) return formPutHandler(req, env, daCtx);
 
-  if (TEXT_TYPES.some((type) => contentType.startsWith(type))) {
+  if (contentType === 'text/html') {
     return rawBodyPutHandler(req, contentType);
   }
 

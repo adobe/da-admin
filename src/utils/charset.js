@@ -9,18 +9,9 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-export const FORM_TYPES = ['multipart/form-data', 'application/x-www-form-urlencoded'];
-
-export const SUPPORTED_TYPES = [
-  'text/html',
-  'application/json',
-  'image/jpeg',
-  'image/gif',
-  'image/png',
-  'image/svg+xml',
-  'video/mp4',
-];
-
-// this is the size of the empty document
-// <body><header></header><main><div></div></main><footer></footer></body>
-export const EMPTY_DOC_SIZE = 83;
+export default function normalizeCharset(type) {
+  if (type && type.startsWith('text/') && !type.includes('charset')) {
+    return `${type}; charset=utf-8`;
+  }
+  return type;
+}

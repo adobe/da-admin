@@ -9,6 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import normalizeCharset from './charset.js';
+
 /**
  * Creates a response
  * @param status
@@ -20,13 +22,6 @@
  * @param ctx
  * @returns {Response}
  */
-function normalizeCharset(type) {
-  if (type && type.startsWith('text/') && !type.includes('charset')) {
-    return `${type}; charset=utf-8`;
-  }
-  return type;
-}
-
 export default function daResp({
   status,
   body,
