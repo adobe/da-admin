@@ -780,6 +780,70 @@ describe('Object storage', () => {
       assert(versionCalls[0].update.body instanceof File);
     });
 
+    it('JSON file with non-ASCII preserves content and type', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'test-json-utf8' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const jsonContent = JSON.stringify({
+        title: 'Café résumé',
+        description: 'Señor González — Pro™',
+        tags: ['naïve', 'façade', 'über'],
+      });
+      const jsonFile = new File([jsonContent], 'sheet.json', { type: 'application/json' });
+
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'data/sheet.json',
+        pathname: '/data/sheet',
+        propsKey: 'data/sheet.json.props',
+        ext: 'json',
+      };
+
+      const obj = { data: jsonFile, guid: 'json-utf8-guid' };
+      const resp = await putObjectWithVersioning(env, daCtx, obj);
+
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(versionCalls[0].update.type, 'application/json');
+      const stored = await versionCalls[0].update.body.text();
+      const parsed = JSON.parse(stored);
+      assert.strictEqual(parsed.title, 'Café résumé');
+      assert.strictEqual(parsed.description, 'Señor González — Pro™');
+      assert.deepStrictEqual(parsed.tags, ['naïve', 'façade', 'über']);
+    });
+
+    it('JSON object data with non-ASCII preserves content', async () => {
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        key: 'data/config',
+        propsKey: 'data/config.props',
+      };
+      const obj = {
+        data: {
+          heading: 'Ünïcödé heading',
+          body: 'Content with €, £, ¥ symbols',
+          author: '日本語テスト',
+        },
+      };
+      const resp = await putObject(env, daCtx, obj);
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(resp.contentType, 'application/json');
+    });
+
     it('Creates version for JSON file upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
