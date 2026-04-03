@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/adobe/da-admin/compare/v1.3.0...v1.3.1) (2026-04-03)
+
+
+### Bug Fixes
+
+* normalize charset=utf-8 for text content types and support raw-body HTML PUTs ([#256](https://github.com/adobe/da-admin/issues/256)) ([29b4f4b](https://github.com/adobe/da-admin/commit/29b4f4b4cb35421be1389c3e2f42f1ced82895b2))
+
 # [1.3.0](https://github.com/adobe/da-admin/compare/v1.2.0...v1.3.0) (2026-04-02)
 
 
