@@ -85,4 +85,102 @@ describe('Source helper', () => {
       assert.strictEqual('12345', helped.guid);
     });
   });
+
+  describe('Raw body PUT', async () => {
+    it('Handles text/html raw body', async () => {
+      const html = '<body><p>Café résumé</p></body>';
+      const opts = {
+        body: html,
+        method: 'PUT',
+        headers: new Headers({
+          'Content-Type': 'text/html',
+        }),
+      };
+
+      const req = new Request(MOCK_URL, opts);
+      const helped = await putHelper(req, env, daCtx);
+      assert(helped.data instanceof File);
+      assert.strictEqual(helped.data.type, 'text/html; charset=utf-8');
+      const text = await helped.data.text();
+      assert(text.includes('Café'));
+    });
+
+    it('Handles text/plain raw body', async () => {
+      const opts = {
+        body: 'Hello — world™',
+        method: 'PUT',
+        headers: new Headers({
+          'Content-Type': 'text/plain',
+        }),
+      };
+
+      const req = new Request(MOCK_URL, opts);
+      const helped = await putHelper(req, env, daCtx);
+      assert(helped.data instanceof File);
+      assert.strictEqual(helped.data.type, 'text/plain; charset=utf-8');
+      const text = await helped.data.text();
+      assert(text.includes('—'));
+      assert(text.includes('™'));
+    });
+
+    it('Handles application/json raw body', async () => {
+      const json = JSON.stringify({ title: 'Café' });
+      const opts = {
+        body: json,
+        method: 'PUT',
+        headers: new Headers({
+          'Content-Type': 'application/json',
+        }),
+      };
+
+      const req = new Request(MOCK_URL, opts);
+      const helped = await putHelper(req, env, daCtx);
+      assert(helped.data instanceof File);
+      assert.strictEqual(helped.data.type, 'application/json');
+      const text = await helped.data.text();
+      assert.strictEqual(text, json);
+    });
+
+    it('Handles text/html with existing charset', async () => {
+      const html = '<body><p>Test</p></body>';
+      const opts = {
+        body: html,
+        method: 'PUT',
+        headers: new Headers({
+          'Content-Type': 'text/html; charset=utf-8',
+        }),
+      };
+
+      const req = new Request(MOCK_URL, opts);
+      const helped = await putHelper(req, env, daCtx);
+      assert(helped.data instanceof File);
+      assert.strictEqual(helped.data.type, 'text/html; charset=utf-8');
+    });
+
+    it('Returns null for empty raw body', async () => {
+      const opts = {
+        body: '',
+        method: 'PUT',
+        headers: new Headers({
+          'Content-Type': 'text/html',
+        }),
+      };
+
+      const req = new Request(MOCK_URL, opts);
+      const helped = await putHelper(req, env, daCtx);
+      assert.strictEqual(helped, null);
+    });
+
+    it('Still returns undefined for unsupported types', async () => {
+      const opts = {
+        headers: new Headers({
+          'Content-Type': 'image/png',
+        }),
+      };
+
+      const req = new Request(MOCK_URL, opts);
+      const helped = await putHelper(req, env, daCtx);
+      assert.strictEqual(helped, undefined);
+    });
+  });
 });

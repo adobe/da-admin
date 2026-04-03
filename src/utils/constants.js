@@ -11,6 +11,8 @@
  */
 export const FORM_TYPES = ['multipart/form-data', 'application/x-www-form-urlencoded'];
 
+export const TEXT_TYPES = ['text/html', 'text/plain', 'text/javascript', 'application/json'];
+
 export const SUPPORTED_TYPES = [
   'text/html',
   'application/json',

@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { FORM_TYPES } from '../utils/constants.js';
+import { FORM_TYPES, TEXT_TYPES } from '../utils/constants.js';
 
 /**
  * Builds a source response
@@ -59,12 +59,34 @@ async function formPutHandler(req) {
   return formData ? getFormEntries(formData) : null;
 }
 
-export default async function putHelper(req, env, daCtx) {
-  const contentType = req.headers.get('content-type')?.split(';')[0];
+function normalizeCharset(type) {
+  if (type && type.startsWith('text/') && !type.includes('charset')) {
+    return `${type}; charset=utf-8`;
+  }
+  return type;
+}
 
-  if (!contentType) return null;
+async function rawBodyPutHandler(req, contentType) {
+  if (typeof req.text !== 'function') return null;
+  const body = await req.text();
+  if (!body) return null;
+
+  const normalized = normalizeCharset(contentType);
+  const data = new File([body], 'source', { type: normalized });
+  return { data };
+}
+
+export default async function putHelper(req, env, daCtx) {
+  const rawContentType = req.headers.get('content-type');
+  if (!rawContentType) return null;
+
+  const contentType = rawContentType.split(';')[0].trim();
 
   if (FORM_TYPES.some((type) => type === contentType)) return formPutHandler(req, env, daCtx);
+
+  if (TEXT_TYPES.some((type) => contentType.startsWith(type))) {
+    return rawBodyPutHandler(req, contentType);
+  }
 
   return undefined;
 }
