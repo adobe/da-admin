@@ -53,6 +53,38 @@ describe('Object storage', () => {
       assert.strictEqual(JSON.parse(resp.body).source.editUrl, 'https://da.live/edit#/adobe/foo');
     });
 
+    it('Normalizes charset for text/plain files', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'test-plain-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const data = new File(['Hello world'], 'readme.txt', { type: 'text/plain' });
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'docs/readme.txt',
+        pathname: '/docs/readme',
+        propsKey: 'docs/readme.txt.props',
+        ext: 'txt',
+      };
+
+      const obj = { data };
+      await putObjectWithVersioning(env, daCtx, obj);
+      assert.strictEqual(versionCalls[0].update.type, 'text/plain; charset=utf-8');
+    });
+
     it('Successfully puts no data', async () => {
       const daCtx = {
         org: 'adobe', site: 'geometrixx', key: 'geometrixx', propsKey: 'geometrixx.props',
@@ -349,6 +381,313 @@ describe('Object storage', () => {
       assert(versionCalls[0].update.body instanceof File);
     });
 
+    it('Does not add charset to image types', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'test-img-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const jpegData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]);
+      const jpegFile = new File([jpegData], 'photo.jpg', { type: 'image/jpeg' });
+
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'images/photo.jpg',
+        pathname: '/images/photo',
+        propsKey: 'images/photo.jpg.props',
+        ext: 'jpg',
+      };
+
+      const obj = { data: jpegFile };
+      await putObjectWithVersioning(env, daCtx, obj);
+      assert.strictEqual(versionCalls[0].update.type, 'image/jpeg');
+    });
+
+    it('Does not double-add charset if already present', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'test-charset-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const htmlFile = new File(['<h1>Test</h1>'], 'page.html', { type: 'text/html; charset=utf-8' });
+
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'pages/page.html',
+        pathname: '/pages/page',
+        propsKey: 'pages/page.html.props',
+        ext: 'html',
+      };
+
+      const obj = { data: htmlFile };
+      await putObjectWithVersioning(env, daCtx, obj);
+      assert.strictEqual(versionCalls[0].update.type, 'text/html; charset=utf-8');
+    });
+
+    it('Normalizes charset for text/css files', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'test-css-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const cssFile = new File(['body { color: red; }'], 'styles.css', { type: 'text/css' });
+
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'styles/styles.css',
+        pathname: '/styles/styles',
+        propsKey: 'styles/styles.css.props',
+        ext: 'css',
+      };
+
+      const obj = { data: cssFile };
+      await putObjectWithVersioning(env, daCtx, obj);
+      assert.strictEqual(versionCalls[0].update.type, 'text/css; charset=utf-8');
+    });
+
+    it('Normalizes charset for HTML with accented characters', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'accented-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const html = '<body><p>Café résumé naïve crème brûlée</p></body>';
+      const file = new File([html], 'page.html', { type: 'text/html' });
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'pages/accented.html',
+        pathname: '/pages/accented',
+        propsKey: 'pages/accented.html.props',
+        ext: 'html',
+      };
+
+      await putObjectWithVersioning(env, daCtx, { data: file });
+      assert.strictEqual(versionCalls[0].update.type, 'text/html; charset=utf-8');
+      const stored = await versionCalls[0].update.body.text();
+      assert(stored.includes('Café'));
+      assert(stored.includes('résumé'));
+    });
+
+    it('Normalizes charset for HTML with em dashes and trademarks', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'symbols-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const html = '<body><p>DigiCert® ONE™ — the platform. Copyright © 2026.</p></body>';
+      const file = new File([html], 'brand.html', { type: 'text/html' });
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'pages/brand.html',
+        pathname: '/pages/brand',
+        propsKey: 'pages/brand.html.props',
+        ext: 'html',
+      };
+
+      await putObjectWithVersioning(env, daCtx, { data: file });
+      assert.strictEqual(versionCalls[0].update.type, 'text/html; charset=utf-8');
+      const stored = await versionCalls[0].update.body.text();
+      assert(stored.includes('®'));
+      assert(stored.includes('™'));
+      assert(stored.includes('—'));
+      assert(stored.includes('©'));
+    });
+
+    it('Normalizes charset for HTML with smart quotes and en dashes', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'quotes-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const html = '<body><p>\u201cHello\u201d and \u2018world\u2019 2020\u20132026</p></body>';
+      const file = new File([html], 'quotes.html', { type: 'text/html' });
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'pages/quotes.html',
+        pathname: '/pages/quotes',
+        propsKey: 'pages/quotes.html.props',
+        ext: 'html',
+      };
+
+      await putObjectWithVersioning(env, daCtx, { data: file });
+      assert.strictEqual(versionCalls[0].update.type, 'text/html; charset=utf-8');
+      const stored = await versionCalls[0].update.body.text();
+      assert(stored.includes('\u201c'));
+      assert(stored.includes('\u2013'));
+    });
+
+    it('Normalizes charset for text/plain with non-ASCII content', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'plain-utf8-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const text = 'Ärzte über Straße — Gemütlichkeit™\nCopyright © 2026';
+      const file = new File([text], 'notes.txt', { type: 'text/plain' });
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'docs/notes.txt',
+        pathname: '/docs/notes',
+        propsKey: 'docs/notes.txt.props',
+        ext: 'txt',
+      };
+
+      await putObjectWithVersioning(env, daCtx, { data: file });
+      assert.strictEqual(versionCalls[0].update.type, 'text/plain; charset=utf-8');
+      const stored = await versionCalls[0].update.body.text();
+      assert(stored.includes('Ärzte'));
+      assert(stored.includes('Straße'));
+      assert(stored.includes('©'));
+    });
+
+    it('Normalizes charset for text/markdown files', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'md-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const md = '# Café résumé\n\nDigiCert® — Pro™';
+      const file = new File([md], 'readme.md', { type: 'text/markdown' });
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'docs/readme.md',
+        pathname: '/docs/readme',
+        propsKey: 'docs/readme.md.props',
+        ext: 'md',
+      };
+
+      await putObjectWithVersioning(env, daCtx, { data: file });
+      assert.strictEqual(versionCalls[0].update.type, 'text/markdown; charset=utf-8');
+    });
+
+    it('Normalizes charset for text/xml files', async () => {
+      const versionCalls = [];
+      const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
+        versionCalls.push({
+          e, daCtx, update, body, guid,
+        });
+        return { status: 201, metadata: { id: 'xml-id' } };
+      };
+
+      const putObjectWithVersioning = await esmock('../../../src/storage/object/put.js', {
+        '../../../src/storage/version/put.js': {
+          putObjectWithVersion: mockPutObjectWithVersion,
+          postObjectVersion,
+        },
+      });
+
+      const xml = '<?xml version="1.0"?><root><name>Señor García</name></root>';
+      const file = new File([xml], 'data.xml', { type: 'text/xml' });
+      const daCtx = {
+        org: 'testorg',
+        site: 'testsite',
+        isFile: true,
+        key: 'data/config.xml',
+        pathname: '/data/config',
+        propsKey: 'data/config.xml.props',
+        ext: 'xml',
+      };
+
+      await putObjectWithVersioning(env, daCtx, { data: file });
+      assert.strictEqual(versionCalls[0].update.type, 'text/xml; charset=utf-8');
+    });
+
     it('Creates version for audio file upload', async () => {
       const versionCalls = [];
       const mockPutObjectWithVersion = async (e, daCtx, update, body, guid) => {
@@ -436,7 +775,7 @@ describe('Object storage', () => {
       assert.strictEqual(resp.status, 201);
       assert.strictEqual(resp.metadata.id, 'test-html-id');
       assert.strictEqual(versionCalls.length, 1);
-      assert.strictEqual(versionCalls[0].update.type, 'text/html');
+      assert.strictEqual(versionCalls[0].update.type, 'text/html; charset=utf-8');
       assert.strictEqual(versionCalls[0].guid, 'html-guid-mno');
       assert(versionCalls[0].update.body instanceof File);
     });

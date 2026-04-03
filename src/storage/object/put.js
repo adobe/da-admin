@@ -18,9 +18,16 @@ import getS3Config from '../utils/config.js';
 import { sourceRespObject } from '../../helpers/source.js';
 import { putObjectWithVersion } from '../version/put.js';
 
+function normalizeCharset(type) {
+  if (type && type.startsWith('text/') && !type.includes('charset')) {
+    return `${type}; charset=utf-8`;
+  }
+  return type;
+}
+
 async function getFileBody(data) {
   await data.text();
-  return { body: data, type: data.type };
+  return { body: data, type: normalizeCharset(data.type) };
 }
 
 function getObjectBody(data) {
