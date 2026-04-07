@@ -414,8 +414,9 @@ async function main() {
     const filesWithAudit = ok.filter((r) => (r.auditLines || 0) > 0).length;
     console.log('');
     console.log('--- DRY RUN summary (no changes were made) ---');
+    const skippedRepos = [...new Set(skipped.map((r) => r.repo))].sort();
     console.log(`  File IDs processed:     ${ok.length}${errors.length > 0 ? ` (${errors.length} error(s))` : ''}`);
-    console.log(`  Repos not found:        ${skipped.length} file ID(s) skipped`);
+    console.log(`  Repos not found:        ${skipped.length} file ID(s) skipped${skippedRepos.length ? ` (${skippedRepos.join(', ')})` : ''}`);
     console.log(`  Snapshots would copy:   ${totalSnapshots}`);
     console.log(`  audit.txt would write:  ${filesWithAudit} file(s), ${totalAuditLines} total lines (after dedup + merge)`);
     const idsPerSec = ok.length / elapsedSec;
@@ -423,14 +424,17 @@ async function main() {
     console.log('  Compare with Analyse: "With content" ≈ snapshots above; run without DRY_RUN to apply.');
   } else if (errors.length > 0 || skipped.length > 0) {
     console.log('');
-    console.log(`Done. ${results.length} processed, ${skipped.length} skipped (repo gone), ${errors.length} error(s).`);
+    const skippedRepos = [...new Set(skipped.map((r) => r.repo))].sort();
+    console.log(`Done. ${results.length} processed, ${skipped.length} skipped (repo gone${skippedRepos.length ? `: ${skippedRepos.join(', ')}` : ''}), ${errors.length} error(s).`);
   }
 
   if (ok.length > 0 && !DRY_RUN) {
     const totalSnapshots = ok.reduce((sum, r) => sum + r.snapshots, 0);
     const totalAuditLines = ok.reduce((sum, r) => sum + (r.auditLines || 0), 0);
     console.log('');
-    console.log(`Completed in ${elapsedSec.toFixed(1)}s | ${(ok.length / elapsedSec).toFixed(1)} file IDs/s | ${totalSnapshots} snapshots copied, ${totalAuditLines} audit lines written${skipped.length > 0 ? ` | ${skipped.length} skipped (repo gone)` : ''}`);
+    const skippedRepos = [...new Set(skipped.map((r) => r.repo))].sort();
+    const skippedSuffix = skipped.length > 0 ? ` | ${skipped.length} skipped (repo gone${skippedRepos.length ? `: ${skippedRepos.join(', ')}` : ''})` : '';
+    console.log(`Completed in ${elapsedSec.toFixed(1)}s | ${(ok.length / elapsedSec).toFixed(1)} file IDs/s | ${totalSnapshots} snapshots copied, ${totalAuditLines} audit lines written${skippedSuffix}`);
   }
 }
 
