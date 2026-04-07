@@ -42,6 +42,25 @@ if (process.env.S3_FORCE_PATH_STYLE === 'true') config.forcePathStyle = true;
 const client = new S3Client(config);
 const prefix = `${Org}/.da-versions/`;
 
+/** Cache repo existence checks (Promise<boolean>) so each repo is checked only once. */
+const repoExistsCache = new Map();
+
+async function repoExistsInStorage(repo) {
+  const resp = await client.send(new ListObjectsV2Command({
+    Bucket,
+    Prefix: `${Org}/${repo}/`,
+    MaxKeys: 1,
+  }));
+  return (resp.KeyCount ?? 0) > 0;
+}
+
+function checkRepoExists(repo) {
+  if (!repoExistsCache.has(repo)) {
+    repoExistsCache.set(repo, repoExistsInStorage(repo));
+  }
+  return repoExistsCache.get(repo);
+}
+
 /** Process N file IDs in parallel. */
 const CONCURRENCY = parseInt(process.env.MIGRATE_RUN_CONCURRENCY || '15', 10);
 
@@ -285,6 +304,16 @@ async function migrateFileId(fileId) {
     repo = firstRepo;
   } else if (repoSet.size > 1) repo = 'unknown';
 
+  if (repo && repo !== 'unknown') {
+    const exists = await checkRepoExists(repo);
+    if (!exists) {
+      console.log(`  ${fileId}: repo "${repo}" no longer exists, skipping.`);
+      return {
+        fileId, skipped: true, repo, snapshots: 0, audit: 0, auditLines: 0,
+      };
+    }
+  }
+
   const allLegacyAudit = [...auditEntries, ...snapshotAuditEntries];
   let auditLines = 0;
   if (allLegacyAudit.length && repo) {
@@ -375,7 +404,8 @@ async function main() {
   });
 
   const errors = results.filter((r) => r.error);
-  const ok = results.filter((r) => !r.error);
+  const skipped = results.filter((r) => r.skipped);
+  const ok = results.filter((r) => !r.error && !r.skipped);
   const elapsedSec = (Date.now() - startMs) / 1000;
 
   if (DRY_RUN && ok.length > 0) {
@@ -385,21 +415,22 @@ async function main() {
     console.log('');
     console.log('--- DRY RUN summary (no changes were made) ---');
     console.log(`  File IDs processed:     ${ok.length}${errors.length > 0 ? ` (${errors.length} error(s))` : ''}`);
+    console.log(`  Repos not found:        ${skipped.length} file ID(s) skipped`);
     console.log(`  Snapshots would copy:   ${totalSnapshots}`);
     console.log(`  audit.txt would write:  ${filesWithAudit} file(s), ${totalAuditLines} total lines (after dedup + merge)`);
     const idsPerSec = ok.length / elapsedSec;
     console.log(`  Timing: ${elapsedSec.toFixed(1)}s total | ${idsPerSec.toFixed(1)} file IDs/s`);
     console.log('  Compare with Analyse: "With content" ≈ snapshots above; run without DRY_RUN to apply.');
-  } else if (errors.length > 0) {
+  } else if (errors.length > 0 || skipped.length > 0) {
     console.log('');
-    console.log(`Done. ${results.length} processed, ${errors.length} error(s).`);
+    console.log(`Done. ${results.length} processed, ${skipped.length} skipped (repo gone), ${errors.length} error(s).`);
   }
 
   if (ok.length > 0 && !DRY_RUN) {
     const totalSnapshots = ok.reduce((sum, r) => sum + r.snapshots, 0);
     const totalAuditLines = ok.reduce((sum, r) => sum + (r.auditLines || 0), 0);
     console.log('');
-    console.log(`Completed in ${elapsedSec.toFixed(1)}s | ${(ok.length / elapsedSec).toFixed(1)} file IDs/s | ${totalSnapshots} snapshots copied, ${totalAuditLines} audit lines written`);
+    console.log(`Completed in ${elapsedSec.toFixed(1)}s | ${(ok.length / elapsedSec).toFixed(1)} file IDs/s | ${totalSnapshots} snapshots copied, ${totalAuditLines} audit lines written${skipped.length > 0 ? ` | ${skipped.length} skipped (repo gone)` : ''}`);
   }
 }
 
