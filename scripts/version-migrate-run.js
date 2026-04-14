@@ -387,15 +387,21 @@ async function main() {
   console.log(`File IDs to process: ${fileIds.length} (concurrency: ${CONCURRENCY})`);
   console.log('');
 
+  const total = fileIds.length;
+  let completed = 0;
   const startMs = Date.now();
   const results = await runWithConcurrency(CONCURRENCY, fileIds, async (fileId) => {
     try {
       const result = await withRetry(() => migrateFileId(fileId), fileId);
+      completed += 1;
+      const idx = completed;
       const pathHint = result.path ? ` (${result.path})` : '';
-      console.log(`  ${fileId}${pathHint}: ${result.snapshots} snapshots, ${result.auditLines} audit lines -> repo ${result.repo}`);
+      console.log(`${idx} / ${total} - ${fileId}${pathHint}: ${result.snapshots} snapshots, ${result.auditLines} audit lines -> repo ${result.repo}`);
       return { fileId, ...result, error: null };
     } catch (e) {
-      console.error(`  ${fileId}: ERROR - ${e.message}`);
+      completed += 1;
+      const idx = completed;
+      console.error(`${idx} / ${total} - ${fileId}: ERROR - ${e.message}`);
       console.error(e);
       return {
         fileId, snapshots: 0, audit: 0, auditLines: 0, repo: '', error: e,
