@@ -397,12 +397,16 @@ async function main() {
       const idx = completed;
       const pathHint = result.path ? ` (${result.path})` : '';
       console.log(`${idx} / ${total} - ${fileId}${pathHint}: ${result.snapshots} snapshots, ${result.auditLines} audit lines -> repo ${result.repo}`);
+      if (result.auditLines > AUDIT_MAX_ENTRIES) {
+        console.log(`[HIGH_AUDIT] ${fileId}${pathHint}: ${result.auditLines} audit lines (> ${AUDIT_MAX_ENTRIES}) -> repo ${result.repo}`);
+      }
       return { fileId, ...result, error: null };
     } catch (e) {
       completed += 1;
       const idx = completed;
       console.error(`${idx} / ${total} - ${fileId}: ERROR - ${e.message}`);
       console.error(e);
+      console.log(`[FAILED] ${fileId}`);
       return {
         fileId, snapshots: 0, audit: 0, auditLines: 0, repo: '', error: e,
       };
@@ -432,6 +436,12 @@ async function main() {
     console.log('');
     const skippedRepos = [...new Set(skipped.map((r) => r.repo))].sort();
     console.log(`Done. ${results.length} processed, ${skipped.length} skipped (repo gone${skippedRepos.length ? `: ${skippedRepos.join(', ')}` : ''}), ${errors.length} error(s).`);
+  }
+
+  if (errors.length > 0) {
+    console.log('');
+    console.log(`[FAILED_IDS] ${errors.length} file ID(s) to re-run:`);
+    errors.forEach((r) => console.log(`[FAILED] ${r.fileId}`));
   }
 
   if (ok.length > 0 && !DRY_RUN) {
