@@ -2534,6 +2534,96 @@ describe('Version Put', () => {
       );
     });
 
+    it('retries writeAuditEntry on transient failure and succeeds on second attempt', async () => {
+      let callCount = 0;
+      const mockWriteAuditEntry = async () => {
+        callCount += 1;
+        if (callCount < 2) throw new Error('transient R2 error');
+      };
+
+      const mockS3Client = { send: () => ({ $metadata: { httpStatusCode: 200 } }) };
+      const mockGetObject = async () => ({
+        body: 'content',
+        contentType: 'text/html',
+        metadata: { id: 'doc-id', version: 'v1' },
+        status: 200,
+      });
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: mockWriteAuditEntry },
+      });
+
+      const resp = await putObjectWithVersion(
+        { VERSIONS_AUDIT_FILE_ORGS: 'o' },
+        {
+          org: 'o', ext: 'html', site: 'repo', users: [],
+        },
+        {
+          org: 'o', key: 'repo/p.html', body: 'edit', type: 'text/html',
+        },
+        true,
+      );
+
+      assert.strictEqual(resp.status, 200, 'document write must succeed despite transient audit error');
+      assert.strictEqual(callCount, 2, 'writeAuditEntry must be retried once after first failure');
+    });
+
+    it('logs error and continues when writeAuditEntry fails all retries', async () => {
+      let callCount = 0;
+      const mockWriteAuditEntry = async () => {
+        callCount += 1;
+        throw new Error('persistent R2 error');
+      };
+
+      const mockS3Client = { send: () => ({ $metadata: { httpStatusCode: 200 } }) };
+      const mockGetObject = async () => ({
+        body: 'content',
+        contentType: 'text/html',
+        metadata: { id: 'doc-id', version: 'v1' },
+        status: 200,
+      });
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => mockS3Client,
+          ifMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: mockWriteAuditEntry },
+      });
+
+      const errors = [];
+      const origError = console.error;
+      console.error = (...args) => errors.push(args.map(String).join(' '));
+      let resp;
+      try {
+        resp = await putObjectWithVersion(
+          { VERSIONS_AUDIT_FILE_ORGS: 'o' },
+          {
+            org: 'o', ext: 'html', site: 'repo', users: [],
+          },
+          {
+            org: 'o', key: 'repo/p.html', body: 'edit', type: 'text/html',
+          },
+          true,
+        );
+      } finally {
+        console.error = origError;
+      }
+
+      assert.strictEqual(resp.status, 200, 'document write must succeed even when audit write is permanently failing');
+      assert.strictEqual(callCount, 3, 'writeAuditEntry must be attempted 3 times before giving up');
+      assert.ok(
+        errors.some((e) => e.includes('after 3 retries')),
+        'error after all retries exhausted must be logged with retry count',
+      );
+    });
+
     it('writes legacy empty version object when org is not in VERSIONS_AUDIT_FILE_ORGS', async () => {
       const auditCalls = [];
       const legacyPutCalls = [];

@@ -23,6 +23,8 @@ import getObject from '../object/get.js';
 import { writeAuditEntry } from './audit.js';
 import { versionKeyNew, versionKeyLegacy } from './paths.js';
 
+const AUDIT_WRITE_RETRIES = 3;
+
 export function getContentLength(body) {
   if (body === undefined) {
     return undefined;
@@ -246,22 +248,29 @@ export async function putObjectWithVersion(
   // Store path without repo prefix and versionId without extension for readability.
   if (createVersion) {
     if (usesAuditFile) {
-      try {
-        const versionId = versionCreated ? Version : undefined;
-        const versionLabel = versionCreated ? (Label ?? '') : undefined;
-        const pathForAudit = (daCtx.site && Path.startsWith(`${daCtx.site}/`))
-          ? Path.slice(daCtx.site.length)
-          : Path;
-        await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
-          timestamp: Timestamp,
-          users: Users,
-          path: pathForAudit,
-          versionLabel,
-          versionId,
-        });
-      } catch (e) {
+      const versionId = versionCreated ? Version : undefined;
+      const versionLabel = versionCreated ? (Label ?? '') : undefined;
+      const pathForAudit = (daCtx.site && Path.startsWith(`${daCtx.site}/`))
+        ? Path.slice(daCtx.site.length)
+        : Path;
+      let auditErr;
+      for (let i = 0; i < AUDIT_WRITE_RETRIES; i += 1) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
+            timestamp: Timestamp,
+            users: Users,
+            path: pathForAudit,
+            versionLabel,
+            versionId,
+          });
+          auditErr = null;
+          break;
+        } catch (e) { auditErr = e; }
+      }
+      if (auditErr) {
         // eslint-disable-next-line no-console
-        console.error('Failed to write audit entry', e);
+        console.error(`Failed to write audit entry after ${AUDIT_WRITE_RETRIES} retries`, auditErr);
       }
     } else if (!shouldCreateVersionObject) {
       // Legacy path: write an empty version object so listFromLegacyStructure can find it.
