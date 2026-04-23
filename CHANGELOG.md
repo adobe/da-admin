@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/adobe/da-admin/compare/v1.3.1...v1.4.0) (2026-04-23)
+
+
+### Features
+
+* add a retry to compensate R2 transient failure ([#257](https://github.com/adobe/da-admin/issues/257)) ([eb25f6d](https://github.com/adobe/da-admin/commit/eb25f6d258157af0fcfd6bc9219a1f907c211f51))
+
 ## [1.3.1](https://github.com/adobe/da-admin/compare/v1.3.0...v1.3.1) (2026-04-03)
 
 
