@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/adobe/da-admin/compare/v1.4.0...v1.5.0) (2026-04-27)
+
+
+### Features
+
+* all orgs write to audit.txt ([#262](https://github.com/adobe/da-admin/issues/262)) ([8dc7659](https://github.com/adobe/da-admin/commit/8dc765968a0a10199ba5452ff0ecfffb38dea896))
+
 # [1.4.0](https://github.com/adobe/da-admin/compare/v1.3.1...v1.4.0) (2026-04-23)
 
 
