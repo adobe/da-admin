@@ -2361,7 +2361,7 @@ describe('Version Put', () => {
         type: 'text/html',
       };
 
-      const resp = await putObjectWithVersion({ VERSIONS_AUDIT_FILE_ORGS: 'myorg' }, daCtx, update, true);
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
 
       assert.strictEqual(resp.status, 200);
       assert.strictEqual(auditCalls.length, 1, 'writeAuditEntry must be called once');
@@ -2410,7 +2410,7 @@ describe('Version Put', () => {
         label: 'My version',
       };
 
-      const resp = await putObjectWithVersion({ VERSIONS_AUDIT_FILE_ORGS: 'o' }, daCtx, update, true);
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
 
       assert.strictEqual(resp.status, 200);
       assert.strictEqual(resp.versionCreated, true);
@@ -2462,7 +2462,7 @@ describe('Version Put', () => {
         label: 'Release 1',
       };
 
-      await putObjectWithVersion({ VERSIONS_AUDIT_FILE_ORGS: 'o' }, daCtx, update, true);
+      await putObjectWithVersion({}, daCtx, update, true);
 
       assert.strictEqual(auditCalls.length, 1);
       assert.strictEqual(
@@ -2519,7 +2519,7 @@ describe('Version Put', () => {
         type: 'text/html',
       };
 
-      await putObjectWithVersion({ VERSIONS_AUDIT_FILE_ORGS: 'o' }, daCtx, update, true);
+      await putObjectWithVersion({}, daCtx, update, true);
 
       assert.strictEqual(auditCalls.length, 1);
       assert.strictEqual(
@@ -2559,7 +2559,7 @@ describe('Version Put', () => {
       });
 
       const resp = await putObjectWithVersion(
-        { VERSIONS_AUDIT_FILE_ORGS: 'o' },
+        {},
         {
           org: 'o', ext: 'html', site: 'repo', users: [],
         },
@@ -2603,7 +2603,7 @@ describe('Version Put', () => {
       let resp;
       try {
         resp = await putObjectWithVersion(
-          { VERSIONS_AUDIT_FILE_ORGS: 'o' },
+          {},
           {
             org: 'o', ext: 'html', site: 'repo', users: [],
           },
@@ -2622,126 +2622,6 @@ describe('Version Put', () => {
         errors.some((e) => e.includes('after 3 retries')),
         'error after all retries exhausted must be logged with retry count',
       );
-    });
-
-    it('writes legacy empty version object when org is not in VERSIONS_AUDIT_FILE_ORGS', async () => {
-      const auditCalls = [];
-      const legacyPutCalls = [];
-
-      const mockGetObject = async () => ({
-        body: 'content',
-        contentType: 'text/html',
-        contentLength: 7,
-        metadata: { id: 'fid', version: 'v1' },
-        status: 200,
-      });
-
-      const mockS3Client = { send: async () => ({ $metadata: { httpStatusCode: 200 } }) };
-      // S3Client is used directly by putVersion(noneMatch=false) for the legacy audit write
-      function MockS3Client() {
-        this.send = async (cmd) => {
-          if (cmd instanceof PutObjectCommand) legacyPutCalls.push(cmd.input);
-          return { $metadata: { httpStatusCode: 200 } };
-        };
-      }
-
-      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-        '@aws-sdk/client-s3': { S3Client: MockS3Client, PutObjectCommand },
-        '../../../src/storage/object/get.js': { default: mockGetObject },
-        '../../../src/storage/utils/version.js': {
-          ifNoneMatch: () => mockS3Client,
-          ifMatch: () => mockS3Client,
-        },
-        '../../../src/storage/version/audit.js': {
-          writeAuditEntry: async () => { auditCalls.push(1); },
-        },
-      });
-
-      const daCtx = {
-        org: 'legacyorg',
-        ext: 'html',
-        site: 'myrepo',
-        users: [{ email: 'u@x.com' }],
-      };
-      const update = {
-        bucket: 'bkt',
-        org: 'legacyorg',
-        key: 'myrepo/doc.html',
-        body: 'updated',
-        type: 'text/html',
-      };
-
-      // env has no VERSIONS_AUDIT_FILE_ORGS → legacy path
-      const resp = await putObjectWithVersion({}, daCtx, update, true);
-
-      assert.strictEqual(resp.status, 200);
-      assert.strictEqual(auditCalls.length, 0, 'writeAuditEntry must NOT be called for legacy org');
-      assert.strictEqual(legacyPutCalls.length, 1, 'legacy empty version PUT must happen');
-      assert.ok(legacyPutCalls[0].Key.includes('.da-versions/'), 'must use legacy .da-versions/ path');
-      assert.strictEqual(legacyPutCalls[0].ContentLength, 0, 'legacy version body must be empty');
-      assert.strictEqual(legacyPutCalls[0].Metadata?.Path, 'myrepo/doc.html');
-    });
-
-    it('stores labeled snapshot under legacy .da-versions/ path when org is not in VERSIONS_AUDIT_FILE_ORGS', async () => {
-      const snapshotPutCalls = [];
-      const mockGetObject = async () => ({
-        body: 'content',
-        contentType: 'text/html',
-        contentLength: 7,
-        metadata: { id: 'fid', version: 'v1' },
-        status: 200,
-      });
-
-      const emptyCalls = [];
-      const mockIfNoneMatch = () => ({
-        send: async (cmd) => {
-          if (cmd instanceof PutObjectCommand) snapshotPutCalls.push(cmd.input);
-          return { $metadata: { httpStatusCode: 200 } };
-        },
-      });
-      const mockS3Client = { send: async () => ({ $metadata: { httpStatusCode: 200 } }) };
-      function MockS3Client() {
-        this.send = async (cmd) => {
-          if (cmd instanceof PutObjectCommand) emptyCalls.push(cmd.input);
-          return { $metadata: { httpStatusCode: 200 } };
-        };
-      }
-
-      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-        '@aws-sdk/client-s3': { S3Client: MockS3Client, PutObjectCommand },
-        '../../../src/storage/object/get.js': { default: mockGetObject },
-        '../../../src/storage/utils/version.js': {
-          ifNoneMatch: mockIfNoneMatch,
-          ifMatch: () => mockS3Client,
-        },
-        '../../../src/storage/version/audit.js': { writeAuditEntry: async () => {} },
-      });
-
-      const daCtx = {
-        org: 'legacyorg',
-        ext: 'html',
-        site: 'myrepo',
-        users: [{ email: 'u@x.com' }],
-      };
-      const update = {
-        bucket: 'bkt',
-        org: 'legacyorg',
-        key: 'myrepo/doc.html',
-        body: 'updated',
-        type: 'text/html',
-        label: 'My snapshot',
-      };
-
-      // env has no VERSIONS_AUDIT_FILE_ORGS → legacy path
-      await putObjectWithVersion({}, daCtx, update, true);
-
-      const snapshotPut = snapshotPutCalls.find((p) => p.Key?.includes('.da-versions/'));
-      assert.ok(snapshotPut, 'snapshot must be PUT under .da-versions/');
-      assert.ok(!snapshotPut.Key.includes('myrepo/.da-versions'), 'snapshot must NOT use repo-scoped new path');
-      assert.ok(snapshotPut.Key.startsWith('legacyorg/.da-versions/'), 'snapshot must use legacy org-root path');
-      // The snapshot itself is the version marker — no separate empty write must clobber it
-      const emptyVersionWrites = emptyCalls.filter((p) => p.Key?.includes('.da-versions/') && p.ContentLength === 0);
-      assert.strictEqual(emptyVersionWrites.length, 0, 'empty write must NOT overwrite the labeled snapshot');
     });
 
     it('does not write audit for non-versionable type (e.g. PDF)', async () => {
@@ -2815,7 +2695,6 @@ describe('Version Put', () => {
         '../../../src/storage/version/audit.js': { writeAuditEntry: async () => {} },
       });
 
-      // No VERSIONS_AUDIT_FILE_ORGS → Mode A
       await putObjectWithVersion(
         {},
         {
@@ -2831,8 +2710,7 @@ describe('Version Put', () => {
       assert.strictEqual(daVersionWrites.length, 0, 'binary files must never write to .da-versions/');
     });
 
-    // Mode B (audit-file): plain edit — audit entry written, no snapshot object written
-    it('Mode B: plain edit writes audit entry but no snapshot to .da-versions/', async () => {
+    it('plain edit writes audit entry but no snapshot to .da-versions/', async () => {
       const auditCalls = [];
       const snapshotWrites = [];
 
@@ -2871,9 +2749,8 @@ describe('Version Put', () => {
         },
       });
 
-      // VERSIONS_AUDIT_FILE_ORGS contains org → Mode B; no label → plain edit
       await putObjectWithVersion(
-        { VERSIONS_AUDIT_FILE_ORGS: 'myorg' },
+        {},
         {
           org: 'myorg', ext: 'html', site: 'myrepo', users: [{ email: 'u@x.com' }],
         },
@@ -2888,8 +2765,7 @@ describe('Version Put', () => {
       assert.strictEqual(snapshotToDaVersions.length, 0, 'plain edit must not write a snapshot object');
     });
 
-    // Mode B (audit-file): labeled version — snapshot stored under repo-scoped new path
-    it('Mode B: labeled version snapshot stored under repo-scoped new path', async () => {
+    it('labeled version snapshot stored under repo-scoped new path', async () => {
       const snapshotWrites = [];
 
       const mockGetObject = async () => ({
@@ -2923,9 +2799,8 @@ describe('Version Put', () => {
         '../../../src/storage/version/audit.js': { writeAuditEntry: async () => {} },
       });
 
-      // VERSIONS_AUDIT_FILE_ORGS contains org → Mode B; label provided → labeled version
       await putObjectWithVersion(
-        { VERSIONS_AUDIT_FILE_ORGS: 'myorg' },
+        {},
         {
           org: 'myorg', ext: 'html', site: 'myrepo', users: [{ email: 'u@x.com' }],
         },
@@ -3023,7 +2898,7 @@ describe('Version Put', () => {
         org: 'o', ext: 'html', site: 'repo', users: [{ email: 'u@x.com' }],
       };
       const update = { org: 'o', key: 'repo/doc.html', type: 'text/html' };
-      const resp = await putObjectWithVersion({ VERSIONS_AUDIT_FILE_ORGS: 'o' }, daCtx, update, true);
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
 
       // audit failure must not bubble up; main put succeeded
       assert.strictEqual(resp.status, 200);

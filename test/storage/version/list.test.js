@@ -15,64 +15,48 @@ import esmock from 'esmock';
 
 describe('Version List', () => {
   it('should return 404 when current object does not exist', async () => {
-    const mockGetObject = async () => ({
-      status: 404,
-      metadata: {},
-    });
-
+    const mockGetObject = async () => ({ status: 404, metadata: {} });
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
     });
-
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'org', key: 'file.html' });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'org', key: 'repo/file.html' });
     assert.strictEqual(result, 404);
   });
 
   it('should return 404 when current object has no id', async () => {
-    const mockGetObject = async () => ({
-      status: 200,
-      metadata: {},
-    });
-
+    const mockGetObject = async () => ({ status: 200, metadata: {} });
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
     });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'org', key: 'repo/file.html' });
+    assert.strictEqual(result, 404);
+  });
 
+  it('should return 404 when key has no repo prefix', async () => {
+    const mockGetObject = async () => ({ status: 200, metadata: { id: 'test-id' } });
+    const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+    });
     const result = await listObjectVersions({}, { bucket: 'test', org: 'org', key: 'file.html' });
     assert.strictEqual(result, 404);
   });
 
-  it('should return error when list objects fails', async () => {
-    const mockGetObject = async () => ({
-      status: 200,
-      metadata: { id: 'test-id-123' },
-    });
-
-    const mockListObjects = async () => ({
-      status: 500,
-      body: '[]',
-    });
-
+  it('should degrade gracefully when list objects fails (legacy merge returns audit result)', async () => {
+    const mockGetObject = async () => ({ status: 200, metadata: { id: 'test-id-123' } });
+    const mockListObjects = async () => ({ status: 500, body: '[]' });
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
-
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'org', key: 'file.html' });
-    assert.strictEqual(result.status, 500);
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'org', key: 'repo/file.html' });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.body, '[]');
   });
 
   it('should list versions with basic metadata', async () => {
     const mockGetObject = async (env, { key }, metadataOnly) => {
-      if (key === 'file.html') {
+      if (key === 'repo/file.html') {
         return {
           status: 200,
           metadata: { id: 'test-id-123' },
@@ -84,7 +68,7 @@ describe('Version List', () => {
         metadata: {
           timestamp: '1234567890',
           users: '[{"email":"user@example.com"}]',
-          path: 'file.html',
+          path: 'repo/file.html',
         },
         contentLength: 0,
       };
@@ -98,28 +82,25 @@ describe('Version List', () => {
     });
 
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
 
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'org', key: 'file.html' });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'org', key: 'repo/file.html' });
     assert.strictEqual(result.status, 200);
 
     const versions = JSON.parse(result.body);
     assert.strictEqual(versions.length, 1);
     assert.deepStrictEqual(versions[0].users, [{ email: 'user@example.com' }]);
     assert.strictEqual(versions[0].timestamp, 1234567890);
-    assert.strictEqual(versions[0].path, 'file.html');
+    assert.strictEqual(versions[0].path, 'repo/file.html');
     assert.strictEqual(versions[0].url, undefined); // No URL when contentLength is 0
   });
 
   it('should include URL when version has content', async () => {
     const mockGetObject = async (env, { key }, metadataOnly) => {
-      if (key === 'file.html') {
+      if (key === 'repo/file.html') {
         return {
           status: 200,
           metadata: { id: 'test-id-456' },
@@ -131,7 +112,7 @@ describe('Version List', () => {
         metadata: {
           timestamp: '1234567890',
           users: '[{"email":"user@example.com"}]',
-          path: 'file.html',
+          path: 'repo/file.html',
           label: 'Important Version',
         },
         contentLength: 100,
@@ -146,15 +127,12 @@ describe('Version List', () => {
     });
 
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
 
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'file.html' });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'repo/file.html' });
     assert.strictEqual(result.status, 200);
 
     const versions = JSON.parse(result.body);
@@ -166,7 +144,7 @@ describe('Version List', () => {
   it('should filter out failed version requests', async () => {
     let callCount = 0;
     const mockGetObject = async (env, { key }, metadataOnly) => {
-      if (key === 'file.html') {
+      if (key === 'repo/file.html') {
         return {
           status: 200,
           metadata: { id: 'test-id-789' },
@@ -186,7 +164,7 @@ describe('Version List', () => {
         metadata: {
           timestamp: `123456789${callCount}`,
           users: '[{"email":"user@example.com"}]',
-          path: 'file.html',
+          path: 'repo/file.html',
         },
         contentLength: 10,
       };
@@ -202,15 +180,12 @@ describe('Version List', () => {
     });
 
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
 
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'file.html' });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'repo/file.html' });
     assert.strictEqual(result.status, 200);
 
     const versions = JSON.parse(result.body);
@@ -221,7 +196,7 @@ describe('Version List', () => {
   it('should handle batch processing for many versions', async () => {
     const getObjectCalls = [];
     const mockGetObject = async (env, { key }, metadataOnly) => {
-      if (key === 'file.html') {
+      if (key === 'repo/file.html') {
         return {
           status: 200,
           metadata: { id: 'test-id-batch' },
@@ -233,7 +208,7 @@ describe('Version List', () => {
         metadata: {
           timestamp: '1234567890',
           users: '[{"email":"user@example.com"}]',
-          path: 'file.html',
+          path: 'repo/file.html',
         },
         contentLength: 10,
       };
@@ -251,15 +226,12 @@ describe('Version List', () => {
     });
 
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
 
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'file.html' });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'repo/file.html' });
     assert.strictEqual(result.status, 200);
 
     const resultVersions = JSON.parse(result.body);
@@ -271,7 +243,7 @@ describe('Version List', () => {
 
   it('should handle versions missing metadata fields gracefully', async () => {
     const mockGetObject = async (env, { key }, metadataOnly) => {
-      if (key === 'file.html') {
+      if (key === 'repo/file.html') {
         return {
           status: 200,
           metadata: { id: 'test-id-missing' },
@@ -297,15 +269,12 @@ describe('Version List', () => {
     });
 
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
 
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'file.html' });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'repo/file.html' });
     assert.strictEqual(result.status, 200);
 
     const versions = JSON.parse(result.body);
@@ -328,15 +297,12 @@ describe('Version List', () => {
     });
 
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
 
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'file.html' });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'repo/file.html' });
     assert.strictEqual(result.status, 200);
 
     const versions = JSON.parse(result.body);
@@ -345,7 +311,7 @@ describe('Version List', () => {
 
   it('should handle all versions failing', async () => {
     const mockGetObject = async (env, { key }, metadataOnly) => {
-      if (key === 'file.html') {
+      if (key === 'repo/file.html') {
         return {
           status: 200,
           metadata: { id: 'test-id-allfail' },
@@ -367,15 +333,12 @@ describe('Version List', () => {
     });
 
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
 
-    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'file.html' });
+    const result = await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'repo/file.html' });
     assert.strictEqual(result.status, 200);
 
     const versions = JSON.parse(result.body);
@@ -399,26 +362,21 @@ describe('Version List', () => {
     };
 
     const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-      '../../../src/storage/object/get.js': {
-        default: mockGetObject,
-      },
-      '../../../src/storage/object/list.js': {
-        default: mockListObjects,
-      },
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/object/list.js': { default: mockListObjects },
+      '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
     });
 
-    await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'file.html' });
+    await listObjectVersions({}, { bucket: 'test', org: 'testorg', key: 'repo/file.html' });
 
     // Verify MAX_VERSIONS (500) is passed to listObjects
     assert.strictEqual(maxVersionsParam, 500);
   });
 
-  describe('backward compat: not migrated but new audit entries in new path', () => {
-    it('when new path has only audit.txt (no snapshots), legacy mode shows legacy snapshots only', async () => {
+  describe('audit file mode with legacy merge', () => {
+    it('merges audit entries and legacy snapshots for a repo key', async () => {
       const listObjectCalls = [];
-      const getObjectCalls = [];
       const mockGetObject = async (env, { key }) => {
-        getObjectCalls.push(key);
         if (key === 'myrepo/docs/file.html') {
           return { status: 200, metadata: { id: 'file-id-bcompat' } };
         }
@@ -448,10 +406,9 @@ describe('Version List', () => {
         return { status: 404, body: '[]' };
       };
 
-      const newAuditLines = [
+      const mockReadAuditLines = async () => [
         { timestamp: 5000, users: [{ email: 'new@example.com' }], path: 'myrepo/docs/file.html' },
       ];
-      const mockReadAuditLines = async () => newAuditLines;
 
       const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
         '../../../src/storage/object/get.js': { default: mockGetObject },
@@ -466,13 +423,13 @@ describe('Version List', () => {
 
       assert.strictEqual(result.status, 200);
       const versions = JSON.parse(result.body);
-      assert.strictEqual(versions.length, 1, 'audit.txt not listed without VERSIONS_AUDIT_FILE_ORGS');
-      assert.ok(versions[0].url);
-      assert.strictEqual(versions[0].timestamp, 1000);
+      assert.strictEqual(versions.length, 2, 'audit entry and legacy snapshot must both be returned');
+      assert.strictEqual(versions[0].timestamp, 5000, 'most recent (audit) entry first');
+      assert.strictEqual(versions[1].timestamp, 1000, 'legacy entry second');
       assert.ok(listObjectCalls.some((k) => k.startsWith('.da-versions/')), 'legacy prefix listed for merge');
     });
 
-    it('when new path list returns 404, uses legacy only', async () => {
+    it('empty audit falls back to legacy entries only', async () => {
       const mockGetObject = async (env, { key }) => {
         if (key === 'repo/path.html') {
           return { status: 200, metadata: { id: 'id-404' } };
@@ -488,9 +445,6 @@ describe('Version List', () => {
       };
 
       const mockListObjects = async (env, { key }) => {
-        if (key === 'repo/.da-versions/id-404') {
-          return { status: 404, body: '[]' };
-        }
         if (key === '.da-versions/id-404') {
           return {
             status: 200,
@@ -503,6 +457,7 @@ describe('Version List', () => {
       const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
         '../../../src/storage/object/get.js': { default: mockGetObject },
         '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
       });
 
       const result = await listObjectVersions(
@@ -516,7 +471,7 @@ describe('Version List', () => {
       assert.ok(versions[0].url);
     });
 
-    it('without VERSIONS_AUDIT_FILE_ORGS, repo/.da-versions snapshots are not listed', async () => {
+    it('empty audit and empty legacy returns empty list', async () => {
       const listKeys = [];
       const mockGetObject = async (env, { key }) => {
         if (key === 'repo/doc.html') {
@@ -536,6 +491,7 @@ describe('Version List', () => {
       const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
         '../../../src/storage/object/get.js': { default: mockGetObject },
         '../../../src/storage/object/list.js': { default: mockListObjects },
+        '../../../src/storage/version/audit.js': { readAuditLines: async () => [] },
       });
 
       const result = await listObjectVersions(
@@ -546,11 +502,10 @@ describe('Version List', () => {
       assert.strictEqual(result.status, 200);
       const versions = JSON.parse(result.body);
       assert.strictEqual(versions.length, 0);
-      assert.ok(!listKeys.some((k) => k.includes('repo/.da-versions')));
     });
   });
 
-  describe('VERSIONS_AUDIT_FILE_ORGS (new mode)', () => {
+  describe('audit file mode', () => {
     it('audit file + SKIP_LEGACY: audit only, no org/.da-versions list', async () => {
       const listObjectCalls = [];
       const mockGetObject = async (env, { key }) => {
@@ -577,10 +532,7 @@ describe('Version List', () => {
       });
 
       const result = await listObjectVersions(
-        {
-          VERSIONS_AUDIT_FILE_ORGS: 'testorg',
-          VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg',
-        },
+        { VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg' },
         { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
       );
 
@@ -609,10 +561,7 @@ describe('Version List', () => {
       });
 
       const result = await listObjectVersions(
-        {
-          VERSIONS_AUDIT_FILE_ORGS: 'testorg',
-          VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg',
-        },
+        { VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg' },
         { bucket: 'bkt', org: 'testorg', key: 'repo/path.html' },
       );
 
@@ -620,7 +569,7 @@ describe('Version List', () => {
       assert.strictEqual(result.body, '[]');
     });
 
-    it('audit file without skip: merges org/.da-versions with audit entries', async () => {
+    it('merges org/.da-versions with audit entries when skip-legacy not set', async () => {
       const listObjectCalls = [];
       const mockGetObject = async (env, { key }) => {
         if (key === 'myrepo/docs/file.html') {
@@ -659,7 +608,7 @@ describe('Version List', () => {
       });
 
       const result = await listObjectVersions(
-        { VERSIONS_AUDIT_FILE_ORGS: 'testorg' },
+        {},
         { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
       );
 
@@ -668,7 +617,7 @@ describe('Version List', () => {
       assert.strictEqual(versions.length, 2);
     });
 
-    it('audit file without skip: deduplicates entries with same timestamp as audit', async () => {
+    it('deduplicates entries with same timestamp as audit', async () => {
       const mockGetObject = async (env, { key }) => {
         if (key === 'myrepo/docs/file.html') {
           return { status: 200, metadata: { id: 'fid-dedup' } };
@@ -708,65 +657,13 @@ describe('Version List', () => {
       });
 
       const result = await listObjectVersions(
-        { VERSIONS_AUDIT_FILE_ORGS: 'testorg' },
+        {},
         { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
       );
 
       const versions = JSON.parse(result.body);
       assert.strictEqual(versions.length, 1, 'duplicate entry (same timestamp) must appear only once');
       assert.strictEqual(versions[0].timestamp, 1000);
-    });
-
-    it('org not in new mode: merges legacy with new when new has no snapshots', async () => {
-      const listObjectCalls = [];
-      const mockGetObject = async (env, { key }) => {
-        if (key === 'myrepo/docs/file.html') {
-          return { status: 200, metadata: { id: 'file-id-true' } };
-        }
-        if (key === '.da-versions/file-id-true/snap1.html') {
-          return {
-            status: 200,
-            metadata: {
-              timestamp: '1000',
-              users: '[{"email":"legacy@example.com"}]',
-              path: 'myrepo/docs/file.html',
-            },
-            contentLength: 100,
-          };
-        }
-        return { status: 404 };
-      };
-
-      const mockListObjects = async (env, { key }) => {
-        listObjectCalls.push(key);
-        if (key === 'myrepo/.da-versions/file-id-true') {
-          return { status: 200, body: JSON.stringify([{ name: 'audit', ext: 'txt' }]) };
-        }
-        if (key === '.da-versions/file-id-true') {
-          return { status: 200, body: JSON.stringify([{ name: 'snap1', ext: 'html' }]) };
-        }
-        return { status: 404, body: '[]' };
-      };
-
-      const mockReadAuditLines = async () => [
-        { timestamp: 5000, users: [{ email: 'new@example.com' }], path: 'myrepo/docs/file.html' },
-      ];
-
-      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-        '../../../src/storage/object/get.js': { default: mockGetObject },
-        '../../../src/storage/object/list.js': { default: mockListObjects },
-        '../../../src/storage/version/audit.js': { readAuditLines: mockReadAuditLines },
-      });
-
-      const result = await listObjectVersions(
-        {},
-        { bucket: 'bkt', org: 'testorg', key: 'myrepo/docs/file.html' },
-      );
-
-      assert.strictEqual(result.status, 200);
-      const versions = JSON.parse(result.body);
-      assert.strictEqual(versions.length, 1, 'new path has no snapshot files; legacy only');
-      assert.ok(listObjectCalls.some((k) => k.startsWith('.da-versions/')));
     });
 
     it('readAuditLines throws: falls back to empty audit entries and proceeds', async () => {
@@ -789,7 +686,7 @@ describe('Version List', () => {
       });
 
       const result = await listObjectVersions(
-        { VERSIONS_AUDIT_FILE_ORGS: 'testorg' },
+        {},
         { bucket: 'b', org: 'testorg', key: 'repo/doc.html' },
       );
 
@@ -827,10 +724,7 @@ describe('Version List', () => {
       });
 
       const result = await listObjectVersions(
-        {
-          VERSIONS_AUDIT_FILE_ORGS: 'acme',
-          VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'acme',
-        },
+        { VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'acme' },
         { bucket: 'b', org: 'acme', key: 'r/doc.html' },
       );
 
@@ -864,7 +758,7 @@ describe('Version List', () => {
       });
 
       const result = await listObjectVersions(
-        { VERSIONS_AUDIT_FILE_ORGS: 'testorg', VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg' },
+        { VERSIONS_AUDIT_SKIP_LEGACY_ORGS: 'testorg' },
         { bucket: 'b', org: 'testorg', key: 'myrepo/doc.html' },
       );
 
@@ -872,50 +766,6 @@ describe('Version List', () => {
       assert.strictEqual(versions.length, 500, 'result must be capped at MAX_VERSIONS (500)');
       assert.strictEqual(versions[0].timestamp, 600, 'most recent entry first');
       assert.strictEqual(versions[499].timestamp, 101, 'oldest included entry');
-    });
-
-    it('when org not in VERSIONS_AUDIT_FILE_ORGS, only org/.da-versions (not repo path)', async () => {
-      const listKeys = [];
-      const mockGetObject = async (env, { key }) => {
-        if (key === 'r/doc.html') {
-          return { status: 200, metadata: { id: 'fid2' } };
-        }
-        if (key === '.da-versions/fid2/leg.html') {
-          return {
-            status: 200,
-            metadata: {
-              timestamp: '50',
-              users: '[{"email":"s@b.com"}]',
-              path: 'r/doc.html',
-            },
-            contentLength: 10,
-          };
-        }
-        return { status: 404 };
-      };
-      const mockListObjects = async (env, { key }) => {
-        listKeys.push(key);
-        if (key === '.da-versions/fid2') {
-          return { status: 200, body: JSON.stringify([{ name: 'leg', ext: 'html' }]) };
-        }
-        return { status: 404 };
-      };
-
-      const { listObjectVersions } = await esmock('../../../src/storage/version/list.js', {
-        '../../../src/storage/object/get.js': { default: mockGetObject },
-        '../../../src/storage/object/list.js': { default: mockListObjects },
-      });
-
-      const result = await listObjectVersions(
-        { VERSIONS_AUDIT_FILE_ORGS: 'other-org' },
-        { bucket: 'b', org: 'acme', key: 'r/doc.html' },
-      );
-
-      assert.ok(listKeys.some((k) => k === '.da-versions/fid2'));
-      assert.ok(!listKeys.some((k) => k.startsWith('r/')));
-      const versions = JSON.parse(result.body);
-      assert.strictEqual(versions.length, 1);
-      assert.strictEqual(versions[0].url, '/versionsource/acme/fid2/leg.html');
     });
   });
 });
