@@ -252,7 +252,7 @@ describe('Conditional Headers', () => {
       const clientConditionals = { ifMatch: '"wrongetag"' };
 
       const resp = await putObjectWithVersion(
-        { VERSIONS_AUDIT_FILE_ORGS: ORG },
+        {},
         daCtx,
         update,
         false,

@@ -24,14 +24,8 @@ function orgListFromEnv(env, name) {
   return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
 }
 
-/** Org uses audit.txt as the version list source (new feature). */
-function orgUsesAuditFileList(env, org) {
-  return orgListFromEnv(env, 'VERSIONS_AUDIT_FILE_ORGS').has(org);
-}
-
 /**
- * With audit-file feature: skip reading org/.da-versions (after migration).
- * Only applies when org is also in VERSIONS_AUDIT_FILE_ORGS.
+ * Skip reading org/.da-versions (after migration is complete for this org).
  */
 function orgSkipsLegacy(env, org) {
   return orgListFromEnv(env, 'VERSIONS_AUDIT_SKIP_LEGACY_ORGS').has(org);
@@ -127,56 +121,45 @@ function mergeLegacyAndNewResult(legacyResult, newResult) {
 
 export async function listObjectVersions(env, { bucket, org, key }) {
   const current = await getObject(env, { bucket, org, key }, true);
-  if (current.status === 404 || !current.metadata.id) {
+  const repo = key.includes('/') ? key.split('/')[0] : '';
+
+  if (current.status === 404 || !current.metadata.id || !repo) {
     return 404;
   }
 
   const fileId = current.metadata.id;
-  const repo = key.includes('/') ? key.split('/')[0] : '';
-
-  if (repo && orgUsesAuditFileList(env, org)) {
-    let auditLines = [];
-    try {
-      auditLines = await readAuditLines(env, { bucket, org }, repo, fileId);
-    } catch {
-      // no audit
-    }
-    const ext = fileExt(key);
-    const auditEntries = buildEntriesFromAudit(auditLines, repo, org, fileId, ext);
-    auditEntries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    auditEntries.splice(MAX_VERSIONS);
-    const auditResult = {
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(auditEntries),
-    };
-    if (orgSkipsLegacy(env, org)) {
-      versionListModeLog({
-        mode: 'audit_file',
-        org,
-        key,
-        fileId,
-        legacy: 'skipped',
-      });
-      return auditResult;
-    }
-    const legacyResult = await listFromLegacyStructure(env, { bucket, org, key }, fileId);
+  let auditLines = [];
+  try {
+    auditLines = await readAuditLines(env, { bucket, org }, repo, fileId);
+  } catch {
+    // no audit
+  }
+  const ext = fileExt(key);
+  const auditEntries = buildEntriesFromAudit(auditLines, repo, org, fileId, ext);
+  auditEntries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  auditEntries.splice(MAX_VERSIONS);
+  const auditResult = {
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(auditEntries),
+  };
+  if (orgSkipsLegacy(env, org)) {
     versionListModeLog({
       mode: 'audit_file',
       org,
       key,
       fileId,
-      legacy: 'merged',
+      legacy: 'skipped',
     });
-    return mergeLegacyAndNewResult(legacyResult, auditResult);
+    return auditResult;
   }
-
+  const legacyResult = await listFromLegacyStructure(env, { bucket, org, key }, fileId);
   versionListModeLog({
-    mode: 'legacy',
+    mode: 'audit_file',
     org,
     key,
     fileId,
-    detail: 'org_root_da_versions_only',
+    legacy: 'merged',
   });
-  return listFromLegacyStructure(env, { bucket, org, key }, fileId);
+  return mergeLegacyAndNewResult(legacyResult, auditResult);
 }
