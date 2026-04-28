@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/adobe/da-admin/compare/v1.5.0...v1.6.0) (2026-04-28)
+
+
+### Features
+
+* no legacy versions support ([#263](https://github.com/adobe/da-admin/issues/263)) ([0d5455c](https://github.com/adobe/da-admin/commit/0d5455cbe8fb4b14677159101df5eb6abaccb4bd))
+
 # [1.5.0](https://github.com/adobe/da-admin/compare/v1.4.0...v1.5.0) (2026-04-27)
 
 
