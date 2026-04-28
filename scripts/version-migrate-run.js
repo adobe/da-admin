@@ -18,11 +18,14 @@ import {
   GetObjectCommand,
   CopyObjectCommand,
   PutObjectCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 
+const args = process.argv.slice(2);
+const execute = args.includes('-x');
+const positional = args.filter((a) => !a.startsWith('-'));
 const Bucket = process.env.AEM_BUCKET_NAME;
-const Org = process.env.ORG || process.argv[2];
-const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
+const Org = process.env.ORG || positional[0];
 
 /** Must match src/storage/version/audit.js AUDIT_TIME_WINDOW_MS for consistent dedup. */
 const AUDIT_WINDOW_MS = 30 * 60 * 1000;
@@ -62,10 +65,10 @@ function checkRepoExists(repo) {
 }
 
 /** Process N file IDs in parallel. */
-const CONCURRENCY = parseInt(process.env.MIGRATE_RUN_CONCURRENCY || '15', 10);
+const CONCURRENCY = parseInt(process.env.MIGRATE_RUN_CONCURRENCY || '30', 10);
 
-const RETRY_ATTEMPTS = 3;
-const RETRY_DELAY_MS = 2000;
+const RETRY_ATTEMPTS = 100;
+const RETRY_DELAY_MS = 20000;
 
 async function withRetry(fn, label) {
   for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt += 1) {
@@ -264,6 +267,7 @@ async function migrateFileId(fileId) {
   const snapshots = [];
   const auditEntries = [];
   const snapshotAuditEntries = [];
+  const auditSourceKeys = [];
 
   for (const Key of objects) {
     const head = await client.send(new HeadObjectCommand({ Bucket, Key }));
@@ -290,6 +294,7 @@ async function migrateFileId(fileId) {
         });
       } else {
         auditEntries.push({ timestamp, users, path });
+        auditSourceKeys.push(Key);
       }
     }
   }
@@ -316,6 +321,7 @@ async function migrateFileId(fileId) {
 
   const allLegacyAudit = [...auditEntries, ...snapshotAuditEntries];
   let auditLines = 0;
+  let deletedAuditKeys = 0;
   if (allLegacyAudit.length && repo) {
     const dedupedLegacy = dedupeAuditEntries(allLegacyAudit);
     const existingInNew = await readExistingAuditInNewPath(repo, fileId);
@@ -329,7 +335,7 @@ async function migrateFileId(fileId) {
     const deduped = dedupeAuditEntries(combined);
     const normalized = deduped.map((e) => normalizeAuditEntry(e, repo));
     auditLines = normalized.length;
-    if (!DRY_RUN) {
+    if (execute) {
       // Split into chunks of AUDIT_MAX_ENTRIES; all but the last become archive files.
       for (let i = 0; i < normalized.length; i += AUDIT_MAX_ENTRIES) {
         const chunk = normalized.slice(i, i + AUDIT_MAX_ENTRIES);
@@ -346,10 +352,16 @@ async function migrateFileId(fileId) {
           ContentType: 'text/plain; charset=utf-8',
         }));
       }
+      // Audit successfully written — delete the source zero-size entries.
+      for (const Key of auditSourceKeys) {
+        await client.send(new DeleteObjectCommand({ Bucket, Key }));
+        deletedAuditKeys += 1;
+      }
     }
   }
 
-  if (!DRY_RUN) {
+  let deletedSnapshots = 0;
+  if (execute) {
     for (const s of snapshots) {
       const destRepo = s.repo || repo;
       if (destRepo) {
@@ -359,6 +371,9 @@ async function migrateFileId(fileId) {
           CopySource: s.copySource,
           Key: destKey,
         }));
+        // Snapshot successfully copied — delete the source file.
+        await client.send(new DeleteObjectCommand({ Bucket, Key: s.Key }));
+        deletedSnapshots += 1;
       }
     }
   }
@@ -372,31 +387,48 @@ async function migrateFileId(fileId) {
     snapshots: snapshots.length,
     audit: auditEntries.length,
     auditLines,
+    deleted: deletedAuditKeys + deletedSnapshots,
+    wouldDelete: auditSourceKeys.length + snapshots.length,
     repo: repo || '(none)',
   };
 }
 
+function wallTs(epochMs = Date.now()) {
+  return new Date(epochMs).toTimeString().slice(0, 8);
+}
+
+function dur(ms) {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60000)}m${String(Math.round((ms % 60000) / 1000)).padStart(2, '0')}s`;
+}
+
 async function main() {
   if (!Bucket || !Org) {
-    console.error('Set AEM_BUCKET_NAME and ORG (or pass org as first arg)');
+    console.error('Usage: node scripts/version-migrate-run.js <org> [-x]');
+    console.error('  Set AEM_BUCKET_NAME env var. ORG env var overrides positional arg.');
+    console.error('  -x  Execute (copy snapshots, write audit, delete source files). Default: dry-run.');
     process.exit(1);
   }
-  console.log(`Org: ${Org}, Bucket: ${Bucket}, DRY_RUN: ${DRY_RUN}`);
+  const scriptStart = Date.now();
+  console.log(`[${wallTs(scriptStart)}] Org: ${Org}, Bucket: ${Bucket}, execute: ${execute}`);
 
   const fileIds = await listFileIds();
-  console.log(`File IDs to process: ${fileIds.length} (concurrency: ${CONCURRENCY})`);
+  console.log(`[${wallTs()}] File IDs to process: ${fileIds.length} (concurrency: ${CONCURRENCY})`);
   console.log('');
 
   const total = fileIds.length;
   let completed = 0;
   const startMs = Date.now();
   const results = await runWithConcurrency(CONCURRENCY, fileIds, async (fileId) => {
+    const fileStart = Date.now();
     try {
       const result = await withRetry(() => migrateFileId(fileId), fileId);
       completed += 1;
       const idx = completed;
       const pathHint = result.path ? ` (${result.path})` : '';
-      console.log(`${idx} / ${total} - ${fileId}${pathHint}: ${result.snapshots} snapshots, ${result.auditLines} audit lines -> repo ${result.repo}`);
+      const timing = `[+${dur(Date.now() - startMs)} | ${dur(Date.now() - fileStart)}]`;
+      console.log(`${timing} ${idx} / ${total} - ${fileId}${pathHint}: ${result.snapshots} snapshots, ${result.auditLines} audit lines -> repo ${result.repo}`);
       if (result.auditLines > AUDIT_MAX_ENTRIES) {
         console.log(`[HIGH_AUDIT] ${fileId}${pathHint}: ${result.auditLines} audit lines (> ${AUDIT_MAX_ENTRIES}) -> repo ${result.repo}`);
       }
@@ -404,7 +436,8 @@ async function main() {
     } catch (e) {
       completed += 1;
       const idx = completed;
-      console.error(`${idx} / ${total} - ${fileId}: ERROR - ${e.message}`);
+      const timing = `[+${dur(Date.now() - startMs)} | ${dur(Date.now() - fileStart)}]`;
+      console.error(`${timing} ${idx} / ${total} - ${fileId}: ERROR - ${e.message}`);
       console.error(e);
       console.log(`[FAILED] ${fileId}`);
       return {
@@ -418,10 +451,11 @@ async function main() {
   const ok = results.filter((r) => !r.error && !r.skipped);
   const elapsedSec = (Date.now() - startMs) / 1000;
 
-  if (DRY_RUN && ok.length > 0) {
+  if (!execute && ok.length > 0) {
     const totalSnapshots = ok.reduce((sum, r) => sum + r.snapshots, 0);
     const totalAuditLines = ok.reduce((sum, r) => sum + (r.auditLines || 0), 0);
     const filesWithAudit = ok.filter((r) => (r.auditLines || 0) > 0).length;
+    const totalWouldDelete = ok.reduce((sum, r) => sum + (r.wouldDelete || 0), 0);
     console.log('');
     console.log('--- DRY RUN summary (no changes were made) ---');
     const skippedRepos = [...new Set(skipped.map((r) => r.repo))].sort();
@@ -429,9 +463,10 @@ async function main() {
     console.log(`  Repos not found:        ${skipped.length} file ID(s) skipped${skippedRepos.length ? ` (${skippedRepos.join(', ')})` : ''}`);
     console.log(`  Snapshots would copy:   ${totalSnapshots}`);
     console.log(`  audit.txt would write:  ${filesWithAudit} file(s), ${totalAuditLines} total lines (after dedup + merge)`);
+    console.log(`  Source files to delete: ${totalWouldDelete} (after successful writes)`);
     const idsPerSec = ok.length / elapsedSec;
-    console.log(`  Timing: ${elapsedSec.toFixed(1)}s total | ${idsPerSec.toFixed(1)} file IDs/s`);
-    console.log('  Compare with Analyse: "With content" ≈ snapshots above; run without DRY_RUN to apply.');
+    console.log(`  Timing: ${dur(Date.now() - scriptStart)} total | ${idsPerSec.toFixed(1)} IDs/s | started ${wallTs(scriptStart)}, ended ${wallTs()}`);
+    console.log('  Pass -x to execute (copies, audit writes, and source deletions).');
   } else if (errors.length > 0 || skipped.length > 0) {
     console.log('');
     const skippedRepos = [...new Set(skipped.map((r) => r.repo))].sort();
@@ -444,13 +479,16 @@ async function main() {
     errors.forEach((r) => console.log(`[FAILED] ${r.fileId}`));
   }
 
-  if (ok.length > 0 && !DRY_RUN) {
+  if (ok.length > 0 && execute) {
     const totalSnapshots = ok.reduce((sum, r) => sum + r.snapshots, 0);
     const totalAuditLines = ok.reduce((sum, r) => sum + (r.auditLines || 0), 0);
+    const totalDeleted = ok.reduce((sum, r) => sum + (r.deleted || 0), 0);
     console.log('');
     const skippedRepos = [...new Set(skipped.map((r) => r.repo))].sort();
     const skippedSuffix = skipped.length > 0 ? ` | ${skipped.length} skipped (repo gone${skippedRepos.length ? `: ${skippedRepos.join(', ')}` : ''})` : '';
-    console.log(`Completed in ${elapsedSec.toFixed(1)}s | ${(ok.length / elapsedSec).toFixed(1)} file IDs/s | ${totalSnapshots} snapshots copied, ${totalAuditLines} audit lines written${skippedSuffix}`);
+    console.log(`[${wallTs()}] Completed in ${dur(Date.now() - scriptStart)} | ${(ok.length / elapsedSec).toFixed(1)} IDs/s | ${totalSnapshots} snapshots copied, ${totalAuditLines} audit lines written, ${totalDeleted} source files deleted${skippedSuffix}`);
+  } else {
+    console.log(`[${wallTs()}] Done in ${dur(Date.now() - scriptStart)}.`);
   }
 }
 
