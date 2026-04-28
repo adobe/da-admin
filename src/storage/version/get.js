@@ -10,33 +10,23 @@
  * governing permissions and limitations under the License.
  */
 import getObject from '../object/get.js';
-import { versionKeyNew, versionKeyLegacy } from './paths.js';
+import { versionKeyNew } from './paths.js';
 
 /**
- * GET version: try new path then legacy.
- * daCtx.key can be "repo/fileId/versionId.ext" or "fileId/versionId.ext".
+ * GET version: resolve new repo-scoped path and fetch.
+ * daCtx.key must be "repo/fileId/versionId.ext".
  */
 export async function getObjectVersion(env, { bucket, org, key }, head, conditionalHeaders) {
   const parts = key.split('/');
-  if (parts.length >= 3) {
-    const [repo, fileId, ...rest] = parts;
-    const versionFile = rest.join('/');
-    const ext = versionFile.split('.').pop();
-    const versionId = versionFile.slice(0, -(ext.length + 1));
-    const newKey = versionKeyNew(repo, fileId, versionId, ext);
-    const resp = await getObject(env, { bucket, org, key: newKey }, head, conditionalHeaders);
-    if (resp.status !== 404) {
-      return resp;
-    }
-    // Legacy path; kept during migration, will be removed when all orgs use new structure.
-    const legacyKey = versionKeyLegacy(fileId, versionId, ext);
-    return getObject(env, { bucket, org, key: legacyKey }, head, conditionalHeaders);
-  }
-
-  // Short key (fileId/versionId.ext): legacy-only path.
-  const [fileId, versionFile] = parts;
+  if (parts.length < 3) return { status: 404 };
+  const [repo, fileId, ...rest] = parts;
+  const versionFile = rest.join('/');
   const ext = versionFile.split('.').pop();
   const versionId = versionFile.slice(0, -(ext.length + 1));
-  const legacyKey = versionKeyLegacy(fileId, versionId, ext);
-  return getObject(env, { bucket, org, key: legacyKey }, head, conditionalHeaders);
+  return getObject(
+    env,
+    { bucket, org, key: versionKeyNew(repo, fileId, versionId, ext) },
+    head,
+    conditionalHeaders,
+  );
 }

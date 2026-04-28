@@ -23,26 +23,6 @@ export function versionKeyNew(repo, fileId, versionId, ext) {
 }
 
 /**
- * Legacy structure: versions at org root. Path for a version object.
- * @param {string} fileId
- * @param {string} versionId
- * @param {string} ext
- * @returns {string} key (.da-versions/fileId/versionId.ext)
- */
-export function versionKeyLegacy(fileId, versionId, ext) {
-  return `.da-versions/${fileId}/${versionId}.${ext}`;
-}
-
-/**
- * Legacy structure: listing prefix for all versions of a file.
- * @param {string} fileId
- * @returns {string} key (.da-versions/fileId)
- */
-export function versionPrefixLegacy(fileId) {
-  return `.da-versions/${fileId}`;
-}
-
-/**
  * New structure: audit file path for a file (under repo).
  * @param {string} repo
  * @param {string} fileId
