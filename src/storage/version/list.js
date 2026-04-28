@@ -9,39 +9,15 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import processQueue from '@adobe/helix-shared-process-queue';
 import getObject from '../object/get.js';
-import listObjects from '../object/list.js';
 import { readAuditLines } from './audit.js';
-import { versionKeyLegacy, versionPrefixLegacy } from './paths.js';
 
 const MAX_VERSIONS = 500;
-const CONCURRENCY = 50;
-
-function orgListFromEnv(env, name) {
-  const raw = env?.[name];
-  if (!raw || typeof raw !== 'string') return new Set();
-  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
-}
-
-/**
- * Skip reading org/.da-versions (after migration is complete for this org).
- */
-function orgSkipsLegacy(env, org) {
-  return orgListFromEnv(env, 'VERSIONS_AUDIT_SKIP_LEGACY_ORGS').has(org);
-}
-
-function versionListModeLog(payload) {
-  console.log('[versionlist]', JSON.stringify(payload));
-}
 
 function fileExt(key) {
   return (key && key.includes('.')) ? key.split('.').pop() : 'html';
 }
 
-/**
- * Build list entries from audit.txt lines.
- */
 function buildEntriesFromAudit(lines, repo, org, fileId, ext) {
   return lines.map(({
     users, timestamp, path, versionLabel, versionId,
@@ -56,67 +32,6 @@ function buildEntriesFromAudit(lines, repo, org, fileId, ext) {
     }
     return entry;
   });
-}
-
-/**
- * Legacy: list org/.da-versions/fileId/, HEAD each.
- */
-async function listFromLegacyStructure(env, { bucket, org, key: _ }, fileId) {
-  const prefix = versionPrefixLegacy(fileId);
-  const resp = await listObjects(env, { bucket, org, key: prefix }, MAX_VERSIONS);
-  if (resp.status !== 200) {
-    return resp;
-  }
-  const list = JSON.parse(resp.body);
-
-  const versions = await processQueue(list, async (entry) => {
-    const entryResp = await getObject(env, {
-      bucket,
-      org,
-      key: versionKeyLegacy(fileId, entry.name, entry.ext),
-    }, true);
-
-    if (entryResp.status !== 200 || !entryResp.metadata) {
-      return undefined;
-    }
-
-    const timestamp = parseInt(entryResp.metadata.timestamp || '0', 10);
-    const users = JSON.parse(entryResp.metadata.users || '[{"email":"anonymous"}]');
-    const { label, path } = entryResp.metadata;
-
-    if (entryResp.contentLength > 0) {
-      return {
-        url: `/versionsource/${org}/${fileId}/${entry.name}.${entry.ext}`,
-        users,
-        timestamp,
-        path,
-        label,
-      };
-    }
-    return { users, timestamp, path };
-  }, CONCURRENCY);
-
-  const filteredVersions = versions.filter((v) => v !== undefined);
-
-  return {
-    status: resp.status,
-    contentType: resp.contentType,
-    body: JSON.stringify(filteredVersions),
-  };
-}
-
-function mergeLegacyAndNewResult(legacyResult, newResult) {
-  if (legacyResult.status !== 200 || !legacyResult.body) return newResult;
-  const legacyEntries = JSON.parse(legacyResult.body);
-  const newEntries = JSON.parse(newResult.body);
-  const seen = new Set(newEntries.map((e) => e.timestamp));
-  const merged = [...newEntries, ...legacyEntries.filter((e) => !seen.has(e.timestamp))];
-  merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-  return {
-    status: 200,
-    contentType: newResult.contentType || legacyResult.contentType,
-    body: JSON.stringify(merged),
-  };
 }
 
 export async function listObjectVersions(env, { bucket, org, key }) {
@@ -138,28 +53,9 @@ export async function listObjectVersions(env, { bucket, org, key }) {
   const auditEntries = buildEntriesFromAudit(auditLines, repo, org, fileId, ext);
   auditEntries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
   auditEntries.splice(MAX_VERSIONS);
-  const auditResult = {
+  return {
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify(auditEntries),
   };
-  if (orgSkipsLegacy(env, org)) {
-    versionListModeLog({
-      mode: 'audit_file',
-      org,
-      key,
-      fileId,
-      legacy: 'skipped',
-    });
-    return auditResult;
-  }
-  const legacyResult = await listFromLegacyStructure(env, { bucket, org, key }, fileId);
-  versionListModeLog({
-    mode: 'audit_file',
-    org,
-    key,
-    fileId,
-    legacy: 'merged',
-  });
-  return mergeLegacyAndNewResult(legacyResult, auditResult);
 }

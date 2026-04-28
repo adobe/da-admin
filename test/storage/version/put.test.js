@@ -806,6 +806,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'test-bucket',
       Org: 'test-org',
+      Repo: 'myrepo',
       Body: 'test content',
       ID: 'test-id',
       Version: 'test-version',
@@ -820,7 +821,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'test-bucket');
-    assert.strictEqual(putCommand.input.Key, 'test-org/.da-versions/test-id/test-version.html');
+    assert.strictEqual(putCommand.input.Key, 'test-org/myrepo/.da-versions/test-id/test-version.html');
     assert.strictEqual(putCommand.input.Body, 'test content');
     assert.strictEqual(putCommand.input.ContentLength, 12);
     assert.strictEqual(putCommand.input.ContentType, 'text/html');
@@ -901,6 +902,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'media-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: jpegFile,
       ID: 'jpeg-id-123',
       Version: 'jpeg-version-1',
@@ -915,7 +917,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/jpeg-id-123/jpeg-version-1.jpg');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/jpeg-id-123/jpeg-version-1.jpg');
     assert.strictEqual(putCommand.input.Body, jpegFile);
     assert.strictEqual(putCommand.input.ContentType, 'image/jpeg');
     assert.strictEqual(putCommand.input.Metadata.Users, '["user@example.com"]');
@@ -946,6 +948,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'media-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: pngFile,
       ID: 'png-id-456',
       Version: 'png-version-1',
@@ -960,7 +963,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/png-id-456/png-version-1.png');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/png-id-456/png-version-1.png');
     assert.strictEqual(putCommand.input.Body, pngFile);
     assert.strictEqual(putCommand.input.ContentType, 'image/png');
   });
@@ -989,6 +992,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'media-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: mp4File,
       ID: 'video-id-789',
       Version: 'video-version-1',
@@ -1003,7 +1007,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/video-id-789/video-version-1.mp4');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/video-id-789/video-version-1.mp4');
     assert.strictEqual(putCommand.input.Body, mp4File);
     assert.strictEqual(putCommand.input.ContentType, 'video/mp4');
   });
@@ -1032,6 +1036,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'media-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: svgFile,
       ID: 'svg-id-abc',
       Version: 'svg-version-1',
@@ -1046,7 +1051,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/svg-id-abc/svg-version-1.svg');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/svg-id-abc/svg-version-1.svg');
     assert.strictEqual(putCommand.input.Body, svgFile);
     assert.strictEqual(putCommand.input.ContentType, 'image/svg+xml');
   });
@@ -1150,6 +1155,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'docs-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: pdfFile,
       ID: 'pdf-id-123',
       Version: 'pdf-version-1',
@@ -1164,7 +1170,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'docs-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/pdf-id-123/pdf-version-1.pdf');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/pdf-id-123/pdf-version-1.pdf');
     assert.strictEqual(putCommand.input.Body, pdfFile);
     assert.strictEqual(putCommand.input.ContentType, 'application/pdf');
   });
@@ -1193,6 +1199,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'files-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: zipFile,
       ID: 'zip-id-456',
       Version: 'zip-version-1',
@@ -1207,7 +1214,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'files-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/zip-id-456/zip-version-1.zip');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/zip-id-456/zip-version-1.zip');
     assert.strictEqual(putCommand.input.Body, zipFile);
     assert.strictEqual(putCommand.input.ContentType, 'application/zip');
   });
@@ -1236,6 +1243,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'storage-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: binaryFile,
       ID: 'binary-id-789',
       Version: 'binary-version-1',
@@ -1250,7 +1258,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'storage-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/binary-id-789/binary-version-1.bin');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/binary-id-789/binary-version-1.bin');
     assert.strictEqual(putCommand.input.Body, binaryFile);
     assert.strictEqual(putCommand.input.ContentType, 'application/octet-stream');
   });
@@ -1279,6 +1287,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'media-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: mp3File,
       ID: 'audio-id-abc',
       Version: 'audio-version-1',
@@ -1293,7 +1302,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'media-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/audio-id-abc/audio-version-1.mp3');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/audio-id-abc/audio-version-1.mp3');
     assert.strictEqual(putCommand.input.Body, mp3File);
     assert.strictEqual(putCommand.input.ContentType, 'audio/mpeg');
   });
@@ -1326,6 +1335,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'content-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: htmlFile,
       ID: 'html-id-def',
       Version: 'html-version-1',
@@ -1340,7 +1350,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'content-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/html-id-def/html-version-1.html');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/html-id-def/html-version-1.html');
     assert.strictEqual(putCommand.input.Body, htmlFile);
     assert.strictEqual(putCommand.input.ContentType, 'text/html');
   });
@@ -1373,6 +1383,7 @@ describe('Version Put', () => {
     const testParams = {
       Bucket: 'data-bucket',
       Org: 'testorg',
+      Repo: 'myrepo',
       Body: jsonFile,
       ID: 'json-id-ghi',
       Version: 'json-version-1',
@@ -1387,7 +1398,7 @@ describe('Version Put', () => {
     assert.strictEqual(sentCommands.length, 1);
     const putCommand = sentCommands[0];
     assert.strictEqual(putCommand.input.Bucket, 'data-bucket');
-    assert.strictEqual(putCommand.input.Key, 'testorg/.da-versions/json-id-ghi/json-version-1.json');
+    assert.strictEqual(putCommand.input.Key, 'testorg/myrepo/.da-versions/json-id-ghi/json-version-1.json');
     assert.strictEqual(putCommand.input.Body, jsonFile);
     assert.strictEqual(putCommand.input.ContentType, 'application/json');
   });

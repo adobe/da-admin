@@ -17,7 +17,6 @@ describe('getObjectVersion', () => {
     const getObjectCalls = [];
     const mockGetObject = async (env, { key }) => {
       getObjectCalls.push(key);
-      // new path always succeeds
       return { status: 200, body: 'content', contentType: 'text/html' };
     };
 
@@ -29,42 +28,17 @@ describe('getObjectVersion', () => {
 
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.body, 'content');
-    assert.strictEqual(getObjectCalls.length, 1, 'only new path tried when it succeeds');
+    assert.strictEqual(getObjectCalls.length, 1, 'only new path tried');
     assert.ok(getObjectCalls[0].includes('myrepo/.da-versions/'), 'new path uses repo prefix');
     assert.ok(getObjectCalls[0].includes('file-id'), 'new path includes fileId');
     assert.ok(getObjectCalls[0].includes('v-uuid.html'), 'new path includes version file');
   });
 
-  it('falls through to legacy path when new path returns 404', async () => {
+  it('returns 404 when key has fewer than 3 parts', async () => {
     const getObjectCalls = [];
     const mockGetObject = async (env, { key }) => {
       getObjectCalls.push(key);
-      if (key.startsWith('repo/')) {
-        // new path 404
-        return { status: 404 };
-      }
-      // legacy path succeeds
-      return { status: 200, body: 'legacy-content' };
-    };
-
-    const { getObjectVersion } = await esmock('../../../src/storage/version/get.js', {
-      '../../../src/storage/object/get.js': { default: mockGetObject },
-    });
-
-    const result = await getObjectVersion({}, { bucket: 'bkt', org: 'org1', key: 'repo/file-id/v1.html' });
-
-    assert.strictEqual(result.status, 200);
-    assert.strictEqual(result.body, 'legacy-content');
-    assert.strictEqual(getObjectCalls.length, 2, 'tried new path then legacy path');
-    assert.ok(getObjectCalls[1].startsWith('.da-versions/'), 'second call is legacy path');
-    assert.strictEqual(getObjectCalls[1], '.da-versions/file-id/v1.html');
-  });
-
-  it('uses only legacy path when key has fewer than 3 parts', async () => {
-    const getObjectCalls = [];
-    const mockGetObject = async (env, { key }) => {
-      getObjectCalls.push(key);
-      return { status: 200, body: 'legacy-only' };
+      return { status: 200, body: 'content' };
     };
 
     const { getObjectVersion } = await esmock('../../../src/storage/version/get.js', {
@@ -73,9 +47,8 @@ describe('getObjectVersion', () => {
 
     const result = await getObjectVersion({}, { bucket: 'bkt', org: 'org1', key: 'file-id/v1.html' });
 
-    assert.strictEqual(result.status, 200);
-    assert.strictEqual(getObjectCalls.length, 1, 'only legacy path tried for short key');
-    assert.strictEqual(getObjectCalls[0], '.da-versions/file-id/v1.html');
+    assert.strictEqual(result.status, 404);
+    assert.strictEqual(getObjectCalls.length, 0, 'no object fetch for short key');
   });
 
   it('passes head and conditionalHeaders to getObject', async () => {
@@ -96,7 +69,7 @@ describe('getObjectVersion', () => {
     assert.deepStrictEqual(getObjectCalls[0].conditionalHeaders, headers);
   });
 
-  it('returns 404 from legacy when both paths return 404', async () => {
+  it('returns 404 when version is not found', async () => {
     const mockGetObject = async () => ({ status: 404 });
 
     const { getObjectVersion } = await esmock('../../../src/storage/version/get.js', {
