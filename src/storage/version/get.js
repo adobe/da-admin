@@ -10,10 +10,10 @@
  * governing permissions and limitations under the License.
  */
 import getObject from '../object/get.js';
-import { versionKeyNew } from './paths.js';
+import { versionKey } from './paths.js';
 
 /**
- * GET version: resolve new repo-scoped path and fetch.
+ * GET version: resolve repo-scoped path and fetch.
  * daCtx.key must be "repo/fileId/versionId.ext".
  */
 export async function getObjectVersion(env, { bucket, org, key }, head, conditionalHeaders) {
@@ -25,7 +25,7 @@ export async function getObjectVersion(env, { bucket, org, key }, head, conditio
   const versionId = versionFile.slice(0, -(ext.length + 1));
   return getObject(
     env,
-    { bucket, org, key: versionKeyNew(repo, fileId, versionId, ext) },
+    { bucket, org, key: versionKey(repo, fileId, versionId, ext) },
     head,
     conditionalHeaders,
   );

@@ -11,19 +11,19 @@
  */
 
 /**
- * New structure: versions live under repo. Path for a version object.
+ * Path for a version object under repo.
  * @param {string} repo
  * @param {string} fileId
  * @param {string} versionId
  * @param {string} ext
  * @returns {string} key (repo/.da-versions/fileId/versionId.ext)
  */
-export function versionKeyNew(repo, fileId, versionId, ext) {
+export function versionKey(repo, fileId, versionId, ext) {
   return `${repo}/.da-versions/${fileId}/${versionId}.${ext}`;
 }
 
 /**
- * New structure: audit file path for a file (under repo).
+ * audit file path for a file (under repo).
  * @param {string} repo
  * @param {string} fileId
  * @returns {string} key (repo/.da-versions/fileId/audit.txt)
@@ -33,7 +33,7 @@ export function auditKey(repo, fileId) {
 }
 
 /**
- * New structure: archive audit file path.
+ * archive audit file path.
  * @param {string} repo
  * @param {string} fileId
  * @param {string|number} timestamp - last entry timestamp in the archived file

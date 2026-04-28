@@ -11,22 +11,22 @@
  */
 import assert from 'node:assert';
 import {
-  versionKeyNew,
+  versionKey,
   auditKey,
   auditArchiveKey,
   auditDirPrefix,
 } from '../../../src/storage/version/paths.js';
 
 describe('Version Paths', () => {
-  describe('versionKeyNew', () => {
+  describe('versionKey', () => {
     it('returns repo-scoped path under .da-versions', () => {
-      const key = versionKeyNew('myrepo', 'file-id-123', 'v-uuid', 'html');
+      const key = versionKey('myrepo', 'file-id-123', 'v-uuid', 'html');
       assert.strictEqual(key, 'myrepo/.da-versions/file-id-123/v-uuid.html');
     });
 
     it('handles different extensions', () => {
-      assert.strictEqual(versionKeyNew('r', 'fid', 'vid', 'mp4'), 'r/.da-versions/fid/vid.mp4');
-      assert.strictEqual(versionKeyNew('r', 'fid', 'vid', 'png'), 'r/.da-versions/fid/vid.png');
+      assert.strictEqual(versionKey('r', 'fid', 'vid', 'mp4'), 'r/.da-versions/fid/vid.mp4');
+      assert.strictEqual(versionKey('r', 'fid', 'vid', 'png'), 'r/.da-versions/fid/vid.png');
     });
   });
 
