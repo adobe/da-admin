@@ -101,6 +101,11 @@ export async function putObjectWithVersion(
 ) {
   const config = getS3Config(env);
   const current = await getObject(env, update, false);
+  // Buffer current.body so it survives AWS SDK internal retries inside putVersion.
+  // A ReadableStream can only be consumed once; ArrayBuffer can be reused freely.
+  if (current.body instanceof ReadableStream) {
+    current.body = await new Response(current.body).arrayBuffer();
+  }
 
   let ID = current.metadata?.id;
   if (!ID) {

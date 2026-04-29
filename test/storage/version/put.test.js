@@ -525,7 +525,6 @@ describe('Version Put', () => {
     const resp = await postObjectVersion(req, env, ctx);
     assert.equal(201, resp.status);
     assert.equal(1, s3INMSent.length);
-    assert(s3INMSent[0].input.Body instanceof ReadableStream);
     assert.equal('mybucket', s3INMSent[0].input.Bucket);
     assert.equal('q/r/t', s3INMSent[0].input.Metadata.Path);
     assert(s3INMSent[0].input.Metadata.Timestamp > 0);
@@ -3066,6 +3065,79 @@ describe('Version Put', () => {
       const resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
 
       assert.strictEqual(resp.status, 500, 'must return 500 when version was not created');
+    });
+
+    it('returns 201 when version client body is a ReadableStream that would be disturbed by SDK retry', async () => {
+      // Regression test: putVersion passes current.body (a ReadableStream from getObject) to
+      // PutObjectCommand. The AWS SDK retries on network failures using the same stream — but a
+      // ReadableStream can only be consumed once. Cloudflare throws "non-retryable streaming
+      // request" on the retry, causing putVersion to fail with 500 and the overall operation to
+      // return 500 instead of 201.
+      //
+      // The fix buffers current.body to ArrayBuffer before passing it to putVersion so the SDK
+      // can retry freely. The mock enforces the invariant by throwing when it receives a
+      // ReadableStream (simulating Cloudflare's disturbed-stream error).
+      let versionCallCount = 0;
+      const versionClient = {
+        async send(cmd) {
+          versionCallCount += 1;
+          if (cmd.input.Body instanceof ReadableStream) {
+            // Simulate Cloudflare's "non-retryable streaming request" error that fires when
+            // the AWS SDK retries a PUT and the stream body is already consumed.
+            throw new TypeError('An error was encountered in a non-retryable streaming request.');
+          }
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+
+      const mainClient = {
+        async send() { return { $metadata: { httpStatusCode: 200 } }; },
+      };
+
+      const mockGetObject = async (env, update, head) => {
+        if (head) {
+          return {
+            body: '',
+            status: 200,
+            contentType: 'text/html',
+            contentLength: 10,
+            metadata: {
+              id: 'doc-id', version: 'v1', timestamp: '123', users: '[]', path: '/doc.html',
+            },
+            etag: '"etag1"',
+          };
+        }
+        return {
+          body: ReadableStream.from([new TextEncoder().encode('doccontent')]),
+          status: 200,
+          contentType: 'text/html',
+          contentLength: 10,
+          metadata: {
+            id: 'doc-id', version: 'v1', timestamp: '123', users: '[]', path: '/doc.html',
+          },
+          etag: '"etag1"',
+        };
+      };
+
+      const { postObjectVersionWithLabel } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => versionClient,
+          ifMatch: () => mainClient,
+        },
+        '../../../src/storage/version/audit.js': {
+          writeAuditEntry: async () => ({ status: 200 }),
+        },
+        '../../../src/storage/utils/config.js': { default: () => ({}) },
+      });
+
+      const daCtx = {
+        bucket: 'b', org: 'o', key: 'doc.html', ext: 'html', users: [],
+      };
+      const resp = await postObjectVersionWithLabel('my-label', {}, daCtx);
+
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(versionCallCount, 1, 'putVersion must be called exactly once');
     });
   });
 });
