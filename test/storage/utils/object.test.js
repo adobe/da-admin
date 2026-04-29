@@ -46,6 +46,22 @@ describe('Storage Object Utils tests', () => {
     assert.strictEqual(called.length, 0, 'should not have invalidated anything');
   });
 
+  it('does not throw when collab response has null body', async () => {
+    // Regression test: notifyCollab calls resp.body.cancel() unconditionally. When the collab
+    // service returns a response with no body (null), this throws TypeError: Cannot read
+    // properties of null (reading 'cancel'). In copyFile this fires in a finally block,
+    // which cancels the return value and causes the move to fail with partial_failure 500 —
+    // leaving the file duplicated at both source and destination.
+    const env = {
+      dacollab: {
+        fetch: async () => ({ body: null }),
+      },
+    };
+    await assert.doesNotReject(
+      notifyCollab('syncadmin', 'https://admin.da.live/source/a/b/c.html', env),
+    );
+  });
+
   it('Should invalidate (with shared secret', async () => {
     const called = [];
     const env = {
