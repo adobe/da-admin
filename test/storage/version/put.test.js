@@ -12,7 +12,7 @@
 /* eslint-disable no-unused-vars,camelcase */
 import assert from 'node:assert';
 import esmock from 'esmock';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 
 describe('Version Put', () => {
   it('Test putObjectWithVersion retry on new document', async () => {
@@ -469,7 +469,7 @@ describe('Version Put', () => {
     // eslint-disable-next-line consistent-return
     const mockGetObject = async (e, u, h) => {
       if (e === env && !h) {
-        const body = ReadableStream.from('doccontent');
+        const body = ReadableStream.from([new TextEncoder().encode('doccontent')]);
         return {
           body,
           contentType: 'text/html',
@@ -526,7 +526,8 @@ describe('Version Put', () => {
     assert.equal(10, s3INMSent[0].input.ContentLength);
 
     assert.equal(1, s3Sent.length);
-    assert(s3Sent[0].input.Body instanceof ReadableStream);
+    // body is buffered to ArrayBuffer so it survives retries inside putObjectWithVersion
+    assert(s3Sent[0].input.Body instanceof ArrayBuffer);
     assert.equal('mybucket', s3Sent[0].input.Bucket);
     assert.equal('org123/q/r/t', s3Sent[0].input.Key);
     assert.equal('q/r/t', s3Sent[0].input.Metadata.Path);
@@ -2263,7 +2264,7 @@ describe('Version Put', () => {
     };
 
     const mockGetObject = async () => ({
-      body: ReadableStream.from('doccontent'),
+      body: ReadableStream.from([new TextEncoder().encode('doccontent')]),
       contentType: 'text/html',
       contentLength: 10,
       metadata: { id: 'doc-id', version: 'ver-1' },
@@ -2301,7 +2302,7 @@ describe('Version Put', () => {
     };
 
     const mockGetObject = async () => ({
-      body: ReadableStream.from('doccontent'),
+      body: ReadableStream.from([new TextEncoder().encode('doccontent')]),
       contentType: 'text/html',
       contentLength: 10,
       metadata: { id: 'doc-id', version: 'ver-1' },
@@ -2962,6 +2963,62 @@ describe('Version Put', () => {
   });
 
   describe('postObjectVersionWithLabel', () => {
+    it('returns 201 when main PUT 412s once then succeeds (ReadableStream body must survive retry)', async () => {
+      // Regression test for: ReadableStream disturbed on putObjectWithVersion retry.
+      // The real S3/R2 SDK consumes the request body before returning 412. When
+      // putObjectWithVersion retries with the same update.body ReadableStream, the
+      // stream is already disturbed, causing a TypeError and a 500 response.
+      //
+      // The fix buffers the stream to ArrayBuffer before the first PUT so the body
+      // survives retries. The mock enforces this by throwing when it sees a
+      // ReadableStream on the retry (simulating Cloudflare's "disturbed" error).
+      const req = { json: async () => ({ label: 'my-label' }) };
+      const env = {};
+      const ctx = {
+        bucket: 'mybucket', org: 'org123', key: 'doc.html', ext: 'html', users: [],
+      };
+
+      const mockGetObject = async () => ({
+        body: ReadableStream.from([new TextEncoder().encode('doccontent')]),
+        contentType: 'text/html',
+        contentLength: 10,
+        status: 200,
+        metadata: { id: 'doc-id', version: 'v1' },
+      });
+
+      let mainCallCount = 0;
+      const mainClient = {
+        async send(cmd) {
+          mainCallCount += 1;
+          if (mainCallCount === 1) {
+            const err = new Error('412');
+            err.$metadata = { httpStatusCode: 412 };
+            throw err;
+          }
+          // On retry: a ReadableStream body means it was not buffered — the real
+          // Cloudflare runtime would throw "disturbed" here. Enforce that invariant.
+          if (cmd.input.Body instanceof ReadableStream) {
+            throw new TypeError('This ReadableStream is disturbed (has already been read from), and cannot be used as a body.');
+          }
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+      const versionClient = {
+        async send() { return { $metadata: { httpStatusCode: 200 } }; },
+      };
+
+      const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => versionClient,
+          ifMatch: () => mainClient,
+        },
+      });
+
+      const resp = await postObjectVersion(req, env, ctx);
+      assert.equal(201, resp.status);
+    });
+
     it('returns 500 when versionCreated is false (version already exists / 412)', async () => {
       const mockGetObject = async () => ({
         body: 'doc content',

@@ -35,6 +35,8 @@ export function getContentLength(body) {
     return new Blob([body]).size;
   } else if (body instanceof File) {
     return body.size;
+  } else if (body instanceof ArrayBuffer) {
+    return body.byteLength;
   }
   return undefined;
 }
@@ -323,10 +325,13 @@ export async function putObjectWithVersion(
 
 export async function postObjectVersionWithLabel(label, env, daCtx) {
   const { body, contentLength, contentType } = await getObject(env, daCtx);
+  // Buffer the ReadableStream so the body survives retries inside putObjectWithVersion.
+  // A ReadableStream can only be consumed once; ArrayBuffer can be reused freely.
+  const bodyBuffer = body instanceof ReadableStream ? await new Response(body).arrayBuffer() : body;
   const { bucket, org, key } = daCtx;
 
   const resp = await putObjectWithVersion(env, daCtx, {
-    bucket, org, key, body, contentLength, type: contentType, label,
+    bucket, org, key, body: bodyBuffer, contentLength, type: contentType, label,
   }, true);
 
   if (resp.status !== 200) return { status: resp.status };
