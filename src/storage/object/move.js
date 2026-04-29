@@ -76,12 +76,18 @@ export default async function moveObject(env, daCtx, details) {
       const settled = await Promise.allSettled(movedLoad);
       const failed = settled.filter((r) => r.status === 'rejected');
       if (failed.length) {
+        failed.forEach((r) => {
+          // eslint-disable-next-line no-console
+          console.error('Move partial failure', r.reason);
+        });
         return { body: JSON.stringify({ error: 'partial_failure', failed: failed.length }), status: 500 };
       }
       results.push(...settled.map((r) => r.value));
 
       ContinuationToken = NextContinuationToken;
     } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('Move failed', e);
       return { body: JSON.stringify({ error: 'move_failed' }), status: 500 };
     }
   } while (ContinuationToken);

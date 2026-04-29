@@ -167,6 +167,89 @@ describe('Move', () => {
     assert.strictEqual(deleteObjectCalled.length, 1, 'b.html should still be deleted despite a.html failing');
   });
 
+  it('logs the error when S3 list throws (move_failed path produces empty Cloudflare Logs)', async () => {
+    // Regression: move_failed returns 500 with no console.error, so Cloudflare Logs is empty
+    // and the root cause is invisible in production.
+    mockSendFn = () => {
+      throw new Error('R2 503 ServiceUnavailable');
+    };
+
+    const moveObject = await esmock('../../../src/storage/object/move.js', {
+      '@aws-sdk/client-s3': { S3Client: MockS3Client },
+      '../../../src/storage/object/copy.js': { copyFile: () => {} },
+      '../../../src/storage/object/delete.js': { deleteObject: () => {} },
+    });
+
+    const errors = [];
+    const origError = console.error;
+    console.error = (...args) => {
+      errors.push(args);
+    };
+    try {
+      await moveObject(
+        {},
+        {
+          org: 'myorg', aclCtx: { pathLookup: new Map() }, users: [], key: 'q.html',
+        },
+        { source: 'somewhere', destination: 'somedest' },
+      );
+    } finally {
+      console.error = origError;
+    }
+
+    assert(errors.length > 0, 'move_failed must log the error so it appears in Cloudflare Logs');
+    assert(
+      errors[0].some((a) => a instanceof Error || typeof a === 'string'),
+      'logged value must include the error or a message',
+    );
+  });
+
+  it('logs the error when a file copy rejects (partial_failure path produces empty Cloudflare Logs)', async () => {
+    // Regression: partial_failure returns 500 with no console.error, so Cloudflare Logs is empty
+    // and the root cause is invisible in production.
+    mockSendFn = () => ({ Contents: [] });
+
+    const moveObject = await esmock('../../../src/storage/object/move.js', {
+      '@aws-sdk/client-s3': { S3Client: MockS3Client },
+      '../../../src/storage/object/copy.js': {
+        copyFile: () => {
+          throw new Error('R2 503 ServiceUnavailable');
+        },
+      },
+      '../../../src/storage/object/delete.js': { deleteObject: () => ({ status: 204 }) },
+    });
+
+    const pathLookup = new Map();
+    pathLookup.set('blah@foo.org', [
+      { path: '/somewhere/+**', actions: ['read', 'write'] },
+      { path: '/somedest/+**', actions: ['read', 'write'] },
+    ]);
+    const ctx = {
+      org: 'myorg',
+      aclCtx: { pathLookup },
+      users: [{ email: 'blah@foo.org' }],
+      isFile: true,
+      key: 'q.html',
+    };
+
+    const errors = [];
+    const origError = console.error;
+    console.error = (...args) => {
+      errors.push(args);
+    };
+    try {
+      await moveObject({}, ctx, { source: 'somewhere/a.html', destination: 'somedest/a.html' });
+    } finally {
+      console.error = origError;
+    }
+
+    assert(errors.length > 0, 'partial_failure must log the error so it appears in Cloudflare Logs');
+    assert(
+      errors[0].some((a) => a instanceof Error || typeof a === 'string'),
+      'logged value must include the error or a message',
+    );
+  });
+
   it('Does not re-process page 1 keys on page 2 iteration', async () => {
     let callCount = 0;
     mockSendFn = () => {
