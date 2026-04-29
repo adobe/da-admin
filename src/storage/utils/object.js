@@ -35,5 +35,5 @@ export async function notifyCollab(api, url, env) {
     // method: 'POST',
     headers,
   });
-  resp.body.cancel();
+  resp.body?.cancel();
 }
