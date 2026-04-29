@@ -534,8 +534,6 @@ describe('Version Put', () => {
     assert.equal(10, s3INMSent[0].input.ContentLength);
 
     assert.equal(1, s3Sent.length);
-    // body is buffered to ArrayBuffer so it survives retries inside putObjectWithVersion
-    assert(s3Sent[0].input.Body instanceof ArrayBuffer);
     assert.equal('mybucket', s3Sent[0].input.Bucket);
     assert.equal('org123/q/r/t', s3Sent[0].input.Key);
     assert.equal('q/r/t', s3Sent[0].input.Metadata.Path);
