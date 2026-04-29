@@ -94,11 +94,15 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
           env,
           { bucket: daCtx.bucket, org: daCtx.org, key: sourceKey },
         );
+        // Buffer the ReadableStream so the body survives retries inside putObjectWithVersion.
+        const originalBody = original.body instanceof ReadableStream
+          ? await new Response(original.body).arrayBuffer()
+          : original.body;
         return /* await */ putObjectWithVersion(env, daCtx, {
           bucket: daCtx.bucket,
           org: daCtx.org,
           key: Key,
-          body: original.body,
+          body: originalBody,
           contentLength: original.contentLength,
           type: original.contentType,
         });

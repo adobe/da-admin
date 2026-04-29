@@ -598,6 +598,104 @@ describe('Object copy', () => {
       assert.strictEqual(puwv[0].u.type, 'text/html');
     });
 
+    it('buffers ReadableStream body to ArrayBuffer before calling putObjectWithVersion (stream must survive retry)', async () => {
+      // Regression test for: ReadableStream disturbed on putObjectWithVersion retry.
+      // copyFile fetches original.body (a ReadableStream) and passes it to
+      // putObjectWithVersion. If the main PUT fails with 412 and retries, the stream
+      // is already consumed in the Cloudflare runtime ("disturbed") and the retry
+      // returns 500. The fix buffers the stream to ArrayBuffer before the call so
+      // the body can survive retries.
+      const error = { $metadata: { httpStatusCode: 412 } };
+
+      const mockS3Client = class {
+        // eslint-disable-next-line class-methods-use-this
+        send() { throw error; }
+
+        middlewareStack = { add: () => {} };
+      };
+
+      const mockGetObject = async (e, u, h) => {
+        if (u.key === 'xsrc/abc/def.html' && !h) {
+          return {
+            body: ReadableStream.from([new TextEncoder().encode('original body')]),
+            contentLength: 13,
+            contentType: 'text/html',
+          };
+        }
+      };
+
+      const puwv = [];
+      const mockPutObjectWithVersion = async (e, c, u) => {
+        puwv.push({ e, c, u });
+        return { status: 200 };
+      };
+
+      // eslint-disable-next-line no-shadow
+      const { copyFile } = await esmock('../../../src/storage/object/copy.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/version/put.js': { putObjectWithVersion: mockPutObjectWithVersion },
+        '@aws-sdk/client-s3': { S3Client: mockS3Client },
+      });
+
+      const env = { dacollab: { fetch: () => ({ body: { cancel: () => {} } }) } };
+      const daCtx = { bucket: 'mybucket', org: 'xorg' };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
+      const details = { source: 'xsrc', destination: 'xdst' };
+
+      await copyFile({}, env, daCtx, 'xsrc/abc/def.html', details, false);
+
+      assert.strictEqual(puwv.length, 1);
+      // The body must be an ArrayBuffer so it survives retries inside putObjectWithVersion.
+      // A ReadableStream here means the stream was not buffered and would be disturbed on retry.
+      assert(puwv[0].u.body instanceof ArrayBuffer, 'body must be buffered to ArrayBuffer before putObjectWithVersion');
+      assert.strictEqual(puwv[0].u.contentLength, 13);
+    });
+
+    it('passes non-ReadableStream body through unchanged to putObjectWithVersion', async () => {
+      const error = { $metadata: { httpStatusCode: 412 } };
+
+      const mockS3Client = class {
+        // eslint-disable-next-line class-methods-use-this
+        send() { throw error; }
+
+        middlewareStack = { add: () => {} };
+      };
+
+      const preBuffered = new TextEncoder().encode('pre-buffered').buffer;
+      const mockGetObject = async (e, u, h) => {
+        if (u.key === 'xsrc/abc/def.html' && !h) {
+          return {
+            body: preBuffered,
+            contentLength: preBuffered.byteLength,
+            contentType: 'text/html',
+          };
+        }
+      };
+
+      const puwv = [];
+      const mockPutObjectWithVersion = async (e, c, u) => {
+        puwv.push({ e, c, u });
+        return { status: 200 };
+      };
+
+      // eslint-disable-next-line no-shadow
+      const { copyFile } = await esmock('../../../src/storage/object/copy.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/version/put.js': { putObjectWithVersion: mockPutObjectWithVersion },
+        '@aws-sdk/client-s3': { S3Client: mockS3Client },
+      });
+
+      const env = { dacollab: { fetch: () => ({ body: { cancel: () => {} } }) } };
+      const daCtx = { bucket: 'mybucket', org: 'xorg' };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
+      const details = { source: 'xsrc', destination: 'xdst' };
+
+      await copyFile({}, env, daCtx, 'xsrc/abc/def.html', details, false);
+
+      assert.strictEqual(puwv.length, 1);
+      assert.strictEqual(puwv[0].u.body, preBuffered, 'non-ReadableStream body must be passed through unchanged');
+    });
+
     it('Copy content when origin does not exists', async () => {
       const error = {
         $metadata: { httpStatusCode: 404, hi: 'ha' },
