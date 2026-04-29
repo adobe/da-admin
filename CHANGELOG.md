@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/adobe/da-admin/compare/v1.6.0...v1.6.1) (2026-04-29)
+
+
+### Bug Fixes
+
+* log errors on move failures so they appear in Cloudflare Logs ([#266](https://github.com/adobe/da-admin/issues/266)) ([84ac28f](https://github.com/adobe/da-admin/commit/84ac28f56bd06fc1d12fbe7899ad0ed96a39190c))
+
 # [1.6.0](https://github.com/adobe/da-admin/compare/v1.5.0...v1.6.0) (2026-04-28)
 
 
