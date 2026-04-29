@@ -13,8 +13,16 @@
 import assert from 'node:assert';
 import esmock from 'esmock';
 import { PutObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
+import { getContentLength } from '../../../src/storage/version/put.js';
 
 describe('Version Put', () => {
+  describe('getContentLength', () => {
+    it('returns byteLength for ArrayBuffer body', () => {
+      const buf = new ArrayBuffer(17);
+      assert.strictEqual(getContentLength(buf), 17);
+    });
+  });
+
   it('Test putObjectWithVersion retry on new document', async () => {
     const getObjectCalls = [];
     const mockGetObject = async (e, u, nb) => {
