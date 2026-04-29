@@ -13,7 +13,7 @@
 const jwtVerify = (token) => {
   // eslint-disable-next-line prefer-const
   let [email, created_at = 0, expires_in = 0] = token.split(':');
-  created_at += Math.floor(new Date().getTime() / 1000);
+  created_at += new Date().getTime();
   expires_in += created_at;
   return {
     payload: {

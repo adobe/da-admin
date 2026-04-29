@@ -61,7 +61,14 @@ export async function setUser(userId, expiration, reqHeaders, env) {
     orgs,
   });
 
-  await env.DA_AUTH.put(userId, value, { expiration });
+  try {
+    await env.DA_AUTH.put(userId, value, { expiration });
+  } catch (e) {
+    // KV rejects expiration timestamps < 60s in the future (near-expiry tokens).
+    // Log and continue — user is still authenticated, just not cached.
+    // eslint-disable-next-line no-console
+    console.error('Failed to cache user in KV', e);
+  }
   return value;
 }
 
@@ -147,7 +154,7 @@ export async function getUsers(req, env) {
     if (type !== 'access_token') return { email: 'anonymous' };
 
     const expires = Number(createdAt) + Number(expiresIn);
-    const now = Math.floor(new Date().getTime() / 1000);
+    const now = Date.now();
 
     if (expires < now) return { email: 'anonymous' };
     // Find the user in recent sessions
