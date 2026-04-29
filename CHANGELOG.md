@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/adobe/da-admin/compare/v1.6.3...v1.7.0) (2026-04-29)
+
+
+### Features
+
+* add x-error header ([#269](https://github.com/adobe/da-admin/issues/269)) ([9183c18](https://github.com/adobe/da-admin/commit/9183c18e18107079c15bd9d41a44d4f7d30b056b))
+
 ## [1.6.3](https://github.com/adobe/da-admin/compare/v1.6.2...v1.6.3) (2026-04-29)
 
 
