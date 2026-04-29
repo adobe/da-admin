@@ -147,7 +147,7 @@ export async function getUsers(req, env) {
     if (type !== 'access_token') return { email: 'anonymous' };
 
     const expires = Number(createdAt) + Number(expiresIn);
-    const now = Math.floor(new Date().getTime() / 1000);
+    const now = Date.now();
 
     if (expires < now) return { email: 'anonymous' };
     // Find the user in recent sessions

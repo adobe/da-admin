@@ -50,8 +50,8 @@ async function generateToken(kid, privateKey) {
   return new SignJWT({
     user_id: 'mocked_example_com',
     type: 'access_token',
-    created_at: Date.now() / 1000,
-    expires_in: 60,
+    created_at: Date.now(),
+    expires_in: 60000,
   })
     .setProtectedHeader({
       alg: 'RS256',

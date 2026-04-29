@@ -60,6 +60,39 @@ describe('DA auth', () => {
       assert.strictEqual(users[0].email, 'anonymous');
     });
 
+    it('anonymous if token expired with realistic IMS ms-scale timestamps', async () => {
+      // IMS JWT fields: created_at and expires_in are in milliseconds.
+      // Bug: auth.js computes `now` in seconds; ms-scale `expires` is always larger,
+      // so expired tokens are never rejected.
+      // Token issued 2h ago, valid for only 1h — clearly expired.
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+
+      const { getUsers: getUsersMsExpired } = await esmock('../../src/utils/auth.js', {
+        jose: {
+          createRemoteJWKSet: () => null,
+          jwksCache: 'cache-key',
+          jwtVerify: () => ({
+            payload: {
+              type: 'access_token',
+              user_id: 'user@example.com',
+              created_at: Date.now() - TWO_HOURS_MS,
+              expires_in: ONE_HOUR_MS,
+            },
+          }),
+        },
+      });
+
+      const req = new Request('https://da.live/source/cq/test', {
+        headers: new Headers({ Authorization: 'Bearer sometoken' }),
+      });
+
+      await withMockedFetch(async () => {
+        const users = await getUsersMsExpired(req, env);
+        assert.strictEqual(users[0].email, 'anonymous');
+      });
+    });
+
     it('authorized if email matches', async () => {
       await withMockedFetch(async () => {
         const users = await getUsers(reqs.site, env);
