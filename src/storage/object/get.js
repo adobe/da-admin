@@ -89,7 +89,10 @@ export default async function getObject(
           etag: e.ETag || conditionalHeaders?.ifNoneMatch,
         };
       }
-      return { body: '', status, contentLength: 0 };
+      const error = status >= 500 ? e.message : undefined;
+      return {
+        body: '', status, contentLength: 0, ...(error ? { error } : {}),
+      };
     }
   }
   // HEAD request path - uses presigned URL with fetch
@@ -141,6 +144,9 @@ export default async function getObject(
     if (status === 304 || status === 412) {
       return { body: '', status, contentLength: 0 };
     }
-    return { body: '', status, contentLength: 0 };
+    const error = status >= 500 ? e.message : undefined;
+    return {
+      body: '', status, contentLength: 0, ...(error ? { error } : {}),
+    };
   }
 }

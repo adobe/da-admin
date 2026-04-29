@@ -69,7 +69,7 @@ export async function putVersion(config, {
     // Cancel the body stream if it wasn't consumed (e.g. R2 rejected via 100-continue on 412).
     // Without this, Cloudflare Workers logs "non-retryable streaming request" warnings.
     if (Body?.cancel) Body.cancel();
-    return { status };
+    return { status, ...(status >= 500 ? { error: e.message } : {}) };
   }
 }
 
@@ -189,7 +189,7 @@ export async function putObjectWithVersion(
 
       // eslint-disable-next-line no-console
       if (status >= 500) console.error('Failed to put object (in object with version)', e);
-      return { status, metadata: { id: ID } };
+      return { status, metadata: { id: ID }, ...(status >= 500 ? { error: e.message } : {}) };
     }
   }
 
@@ -319,7 +319,7 @@ export async function putObjectWithVersion(
 
     // eslint-disable-next-line no-console
     if (status >= 500) console.error('Failed to version (in object with version)', e);
-    return { status, metadata: { id: ID } };
+    return { status, metadata: { id: ID }, ...(status >= 500 ? { error: e.message } : {}) };
   }
 }
 
@@ -335,7 +335,7 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
   }, true);
 
   if (resp.status !== 200) return { status: resp.status };
-  if (!resp.versionCreated) return { status: 500 };
+  if (!resp.versionCreated) return { status: 500, error: 'Version was not created' };
   return { status: 201 };
 }
 

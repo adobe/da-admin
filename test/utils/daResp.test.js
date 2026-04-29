@@ -28,7 +28,7 @@ describe('DA Resp', () => {
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
-    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag', resp.headers.get('Access-Control-Expose-Headers'));
+    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag, x-error', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('text/plain; charset=utf-8', resp.headers.get('Content-Type'));
     assert.strictEqual('777', resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/bar.html=read,write', resp.headers.get('X-da-actions'));
@@ -49,7 +49,7 @@ describe('DA Resp', () => {
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
-    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag', resp.headers.get('Access-Control-Expose-Headers'));
+    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag, x-error', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('application/json', resp.headers.get('Content-Type'));
     assert(!resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/blah.html=read', resp.headers.get('X-da-actions'));
@@ -69,6 +69,13 @@ describe('DA Resp', () => {
     assert(resp.headers.get('X-da-child-actions') === null);
     assert(resp.headers.get('X-da-acltrace') === null);
     assert(resp.headers.get('X-da-id') === null);
+    assert(resp.headers.get('x-error') === null);
+  });
+
+  it('test 500 with error message', () => {
+    const resp = daResp({ status: 500, error: 'Something went wrong' });
+    assert.strictEqual(500, resp.status);
+    assert.strictEqual('Something went wrong', resp.headers.get('x-error'));
   });
 
   it('normalizes text/html to include charset=utf-8', () => {
@@ -136,7 +143,7 @@ describe('DA Resp', () => {
     const ctx = { key: 'foo/bar.html', aclCtx };
     const resp = daResp({ status: 200, body: 'foobar' }, ctx);
     assert.strictEqual(200, resp.status);
-    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag', resp.headers.get('Access-Control-Expose-Headers'));
+    assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag, x-error', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('/haha/hoho/**=read,write', resp.headers.get('X-da-child-actions'));
   });
 });
