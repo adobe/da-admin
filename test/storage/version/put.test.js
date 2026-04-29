@@ -228,6 +228,7 @@ describe('Version Put', () => {
     const mockCtx = { users: [{ email: 'blah@acme.com' }] };
     const resp = await putObjectWithVersion(mockEnv, mockCtx, mockUpdate, true);
     assert.equal(500, resp.status);
+    assert.strictEqual(resp.error, 'testing 123');
   });
 
   it('Put Object With Version store content', async () => {
@@ -787,9 +788,11 @@ describe('Version Put', () => {
     s3Client = s3client2;
     const resp2 = await putVersion({}, { Body: 'hello' });
     assert.equal(500, resp2.status);
+    assert.strictEqual(resp2.error, 'Test error2');
     s3Client = s3client3;
     const resp3 = await putVersion({}, { Body: 'hello' });
     assert.equal(500, resp3.status);
+    assert.strictEqual(resp3.error, 'Test error3');
   });
 
   it('Test putVersion preserves ContentType', async () => {
@@ -2297,6 +2300,7 @@ describe('Version Put', () => {
 
     const resp = await postObjectVersion(req, env, ctx);
     assert.equal(500, resp.status);
+    assert.strictEqual(resp.error, 'Version was not created');
   });
 
   it('postObjectVersion returns 201 when version is successfully created', async () => {
@@ -2964,6 +2968,7 @@ describe('Version Put', () => {
 
       // No label means shouldCreateVersionObject is false → versionCreated stays false → 500
       assert.strictEqual(resp.status, 500);
+      assert.strictEqual(resp.error, 'Version was not created');
     });
   });
 
@@ -3065,6 +3070,7 @@ describe('Version Put', () => {
       const resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
 
       assert.strictEqual(resp.status, 500, 'must return 500 when version was not created');
+      assert.strictEqual(resp.error, 'Version was not created');
     });
 
     it('returns 201 when version client body is a ReadableStream that would be disturbed by SDK retry', async () => {

@@ -511,6 +511,7 @@ describe('Version Audit', () => {
       });
 
       assert.strictEqual(result.status, 500);
+      assert.strictEqual(result.error, 'server error');
     });
 
     it('appends three entries when edit then version then edit (version breaks time window)', async () => {
@@ -851,6 +852,7 @@ describe('Version Audit', () => {
       });
 
       assert.strictEqual(result.status, 500, 'persistent 412 must surface as 500 after one retry');
+      assert.strictEqual(result.error, 'precondition failed');
     });
   });
 });

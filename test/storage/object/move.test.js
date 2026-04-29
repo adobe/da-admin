@@ -118,6 +118,7 @@ describe('Move', () => {
     const resp = await moveObject({}, ctx, { source: 'somewhere', destination: 'somedest' });
 
     assert.strictEqual(resp.status, 500);
+    assert.strictEqual(resp.error, 'R2 throttled');
     const body = JSON.parse(resp.body);
     assert.strictEqual(body.error, 'move_failed');
   });
@@ -161,6 +162,7 @@ describe('Move', () => {
 
     // a.html (from initialKeys) throws, b.html succeeds — one failure, one success
     assert.strictEqual(resp.status, 500);
+    assert.strictEqual(resp.error, 'R2 throttled');
     const body = JSON.parse(resp.body);
     assert.strictEqual(body.error, 'partial_failure');
     assert.strictEqual(body.failed, 1);

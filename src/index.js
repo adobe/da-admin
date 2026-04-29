@@ -36,7 +36,7 @@ export default {
         return daResp({ status: 400 });
       }
       console.error('Error computing context', e);
-      return daResp({ status: 500 });
+      return daResp({ status: 500, error: e.message });
     }
 
     const { users, authorized, key } = daCtx;

@@ -80,7 +80,7 @@ export default async function moveObject(env, daCtx, details) {
           // eslint-disable-next-line no-console
           console.error('Move partial failure', r.reason);
         });
-        return { body: JSON.stringify({ error: 'partial_failure', failed: failed.length }), status: 500 };
+        return { body: JSON.stringify({ error: 'partial_failure', failed: failed.length }), status: 500, error: failed[0]?.reason?.message };
       }
       results.push(...settled.map((r) => r.value));
 
@@ -88,7 +88,7 @@ export default async function moveObject(env, daCtx, details) {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('Move failed', e);
-      return { body: JSON.stringify({ error: 'move_failed' }), status: 500 };
+      return { body: JSON.stringify({ error: 'move_failed' }), status: 500, error: e.message };
     }
   } while (ContinuationToken);
 
