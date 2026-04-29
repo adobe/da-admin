@@ -1,3 +1,11 @@
+## [1.6.3](https://github.com/adobe/da-admin/compare/v1.6.2...v1.6.3) (2026-04-29)
+
+
+### Bug Fixes
+
+* buffer current.body to ArrayBuffer before putVersion to survive SDK retries ([#268](https://github.com/adobe/da-admin/issues/268)) ([47562f1](https://github.com/adobe/da-admin/commit/47562f1f4433269a75f78f14e4d4a52335313898))
+* guard against null body in notifyCollab to prevent move partial_failure ([#267](https://github.com/adobe/da-admin/issues/267)) ([b21c4eb](https://github.com/adobe/da-admin/commit/b21c4ebadafd0a26ff04ad07aff5d5c05b3fe58b))
+
 ## [1.6.2](https://github.com/adobe/da-admin/compare/v1.6.1...v1.6.2) (2026-04-29)
 
 
