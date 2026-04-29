@@ -61,7 +61,14 @@ export async function setUser(userId, expiration, reqHeaders, env) {
     orgs,
   });
 
-  await env.DA_AUTH.put(userId, value, { expiration });
+  try {
+    await env.DA_AUTH.put(userId, value, { expiration });
+  } catch (e) {
+    // KV rejects expiration timestamps < 60s in the future (near-expiry tokens).
+    // Log and continue — user is still authenticated, just not cached.
+    // eslint-disable-next-line no-console
+    console.error('Failed to cache user in KV', e);
+  }
   return value;
 }
 

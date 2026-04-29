@@ -151,6 +151,29 @@ describe('DA auth', () => {
       ];
       assert.deepStrictEqual(expectedOrgs, userValue.orgs);
     });
+
+    it('returns user value when KV PUT fails for near-expiry token', async () => {
+      // Near-expiry tokens have < 60s remaining; KV rejects the expiration timestamp.
+      // Bug: the thrown error propagates up through getUsers -> getDaCtx -> 500.
+      // Fix: setUser must catch the KV PUT failure and still return the user value.
+      const headers = new Headers({ Authorization: 'Bearer aparker@geometrixx.info' });
+      const kvPutError = new Error(
+        'KV PUT failed: 400 Invalid expiration of 1777144621.'
+        + ' Expiration times must be at least 60 seconds in the future.',
+      );
+      const failEnv = {
+        ...env,
+        DA_AUTH: { ...env.DA_AUTH, put: () => { throw kvPutError; } },
+      };
+
+      let userValue;
+      await withMockedFetch(async () => {
+        const userValStr = await setUser('aparker@geometrixx.info', 100, headers, failEnv);
+        userValue = JSON.parse(userValStr);
+      });
+
+      assert.strictEqual(userValue.email, 'aparker@geometrixx.info');
+    });
   });
 
   describe('path authorization', async () => {
