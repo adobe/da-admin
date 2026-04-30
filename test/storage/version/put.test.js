@@ -2228,7 +2228,7 @@ describe('Version Put', () => {
     assert.strictEqual(true, resp.versionCreated);
   });
 
-  it('putObjectWithVersion sets versionCreated false when version already existed (putVersion 412)', async () => {
+  it('putObjectWithVersion sets versionCreated true when version already existed (putVersion 412 = concurrent race)', async () => {
     const mockGetObject = async () => ({
       body: 'content',
       contentType: 'text/html',
@@ -2261,10 +2261,10 @@ describe('Version Put', () => {
       org: 'o', key: 'a.html', body: 'new', label: 'My version',
     }, true);
     assert.equal(200, resp.status);
-    assert.strictEqual(false, resp.versionCreated);
+    assert.strictEqual(true, resp.versionCreated);
   });
 
-  it('postObjectVersion returns 500 when version was not created (putVersion 412)', async () => {
+  it('postObjectVersion returns 201 when version already exists in R2 (putVersion 412 concurrent race)', async () => {
     const req = { json: async () => ({ label: 'my-label' }) };
     const env = {};
     const ctx = {
@@ -2299,8 +2299,7 @@ describe('Version Put', () => {
     });
 
     const resp = await postObjectVersion(req, env, ctx);
-    assert.equal(500, resp.status);
-    assert.strictEqual(resp.error, 'Version was not created');
+    assert.equal(201, resp.status);
   });
 
   it('postObjectVersion returns 201 when version is successfully created', async () => {
@@ -3029,7 +3028,7 @@ describe('Version Put', () => {
       assert.equal(201, resp.status);
     });
 
-    it('returns 500 when versionCreated is false (version already exists / 412)', async () => {
+    it('returns 201 when version PUT gets 412 (concurrent race — version already exists in R2)', async () => {
       const mockGetObject = async () => ({
         body: 'doc content',
         contentType: 'text/html',
@@ -3043,7 +3042,8 @@ describe('Version Put', () => {
           return { $metadata: { httpStatusCode: 200 } };
         },
       };
-      // version put throws 412 → putVersion returns { status: 412 } → versionCreated stays false
+      // Concurrent request already created the version object; R2 returns 412 on our PUT.
+      // The version IS persisted — this request should still return 201, not 500.
       const versionClient = {
         async send() {
           const err = new Error('precondition failed');
@@ -3069,8 +3069,7 @@ describe('Version Put', () => {
       };
       const resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
 
-      assert.strictEqual(resp.status, 500, 'must return 500 when version was not created');
-      assert.strictEqual(resp.error, 'Version was not created');
+      assert.strictEqual(resp.status, 201, 'must return 201 when version already exists (concurrent 412)');
     });
 
     it('returns 201 when version client body is a ReadableStream that would be disturbed by SDK retry', async () => {

@@ -242,7 +242,9 @@ export async function putObjectWithVersion(
     if (versionResp.status !== 200 && versionResp.status !== 412) {
       return { status: versionResp.status, metadata: { id: ID } };
     }
-    versionCreated = versionResp.status === 200;
+    // 412 means the version key already exists — a concurrent request created it first.
+    // The version IS persisted in R2, so treat it as created.
+    versionCreated = versionResp.status === 200 || versionResp.status === 412;
   }
 
   // Audit: one entry per versionable PUT; versionLabel + versionId when labelled version created.
