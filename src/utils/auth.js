@@ -238,7 +238,14 @@ export async function getAclCtx(env, org, users, key, api) {
     };
   }
 
-  const props = await env.DA_CONFIG?.get(org, { type: 'json' });
+  let props;
+  try {
+    props = await env.DA_CONFIG?.get(org, { type: 'json' });
+  } catch {
+    // KV rejects keys longer than 512 bytes (e.g. IMS auth fragments leaking into the URL path).
+    // Treat as no config found — deny all access rather than propagating a 500.
+    return { pathLookup, actionSet: new Set() };
+  }
 
   if (props && props[':type'] === 'sheet' && props[':sheetname'] === 'permissions') {
     // It's a single-sheet, move the data to the right place

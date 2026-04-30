@@ -557,6 +557,26 @@ describe('DA auth', () => {
         users, org: 'test', aclCtx, key: '',
       }, '/some/deep/path', 'write'));
     });
+
+    it('returns empty action set when DA_CONFIG KV GET throws 414 key-too-long error', async () => {
+      // IMS auth redirect fragments (access_token=..., ld_hash=...) leak into the URL path,
+      // producing an org segment >512 bytes. KV rejects the lookup with a 414 error;
+      // without a guard this unhandled exception propagates to a 500 response.
+      const longOrg = 'a'.repeat(513);
+      const kv414Error = new Error(
+        `KV GET failed: 414 UTF-8 encoded length of ${longOrg.length} exceeds key length limit of 512.`,
+      );
+      const failEnv = {
+        DA_CONFIG: {
+          get: () => {
+            throw kv414Error;
+          },
+        },
+      };
+      const users = [{ email: 'user@example.com' }];
+      const aclCtx = await getAclCtx(failEnv, longOrg, users, '/test');
+      assert.strictEqual(aclCtx.actionSet.size, 0, 'oversized org name must produce empty action set, not throw');
+    });
   });
 
   describe('persmissions single sheet', () => {
