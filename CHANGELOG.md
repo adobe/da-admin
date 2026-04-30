@@ -1,3 +1,11 @@
+## [1.7.1](https://github.com/adobe/da-admin/compare/v1.7.0...v1.7.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* handle KV 414 error when IMS auth fragment leaks into org path ([#270](https://github.com/adobe/da-admin/issues/270)) ([db2b4c8](https://github.com/adobe/da-admin/commit/db2b4c8249234eb5c45329629e71bbb7ca1a7efc))
+* treat putVersion 412 as version-already-exists, not failure ([#271](https://github.com/adobe/da-admin/issues/271)) ([e92b916](https://github.com/adobe/da-admin/commit/e92b9166b577caf9ae1ce78c9f96a0927c458d80))
+
 # [1.7.0](https://github.com/adobe/da-admin/compare/v1.6.3...v1.7.0) (2026-04-29)
 
 
