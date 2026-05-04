@@ -23,8 +23,6 @@ import getObject from '../object/get.js';
 import { writeAuditEntry } from './audit.js';
 import { versionKey } from './paths.js';
 
-const AUDIT_WRITE_RETRIES = 3;
-
 export function getContentLength(body) {
   if (body === undefined) {
     return undefined;
@@ -255,25 +253,13 @@ export async function putObjectWithVersion(
     const pathForAudit = (daCtx.site && Path.startsWith(`${daCtx.site}/`))
       ? Path.slice(daCtx.site.length)
       : Path;
-    let auditErr;
-    for (let i = 0; i < AUDIT_WRITE_RETRIES; i += 1) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
-          timestamp: Timestamp,
-          users: Users,
-          path: pathForAudit,
-          versionLabel,
-          versionId,
-        });
-        auditErr = null;
-        break;
-      } catch (e) { auditErr = e; }
-    }
-    if (auditErr) {
-      // eslint-disable-next-line no-console
-      console.error(`Failed to write audit entry after ${AUDIT_WRITE_RETRIES} retries`, auditErr);
-    }
+    await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
+      timestamp: Timestamp,
+      users: Users,
+      path: pathForAudit,
+      versionLabel,
+      versionId,
+    });
   }
 
   const metadata = {

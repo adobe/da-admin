@@ -2554,11 +2554,11 @@ describe('Version Put', () => {
       );
     });
 
-    it('retries writeAuditEntry on transient failure and succeeds on second attempt', async () => {
+    it('calls writeAuditEntry once and succeeds (retries are handled inside writeAuditEntry)', async () => {
       let callCount = 0;
       const mockWriteAuditEntry = async () => {
         callCount += 1;
-        if (callCount < 2) throw new Error('transient R2 error');
+        return { status: 200 };
       };
 
       const mockS3Client = { send: () => ({ $metadata: { httpStatusCode: 200 } }) };
@@ -2589,15 +2589,15 @@ describe('Version Put', () => {
         true,
       );
 
-      assert.strictEqual(resp.status, 200, 'document write must succeed despite transient audit error');
-      assert.strictEqual(callCount, 2, 'writeAuditEntry must be retried once after first failure');
+      assert.strictEqual(resp.status, 200, 'document write must succeed');
+      assert.strictEqual(callCount, 1, 'put.js must call writeAuditEntry exactly once (retries are handled inside writeAuditEntry)');
     });
 
-    it('logs error and continues when writeAuditEntry fails all retries', async () => {
+    it('writeAuditEntry returning status 500 does not affect main put result', async () => {
       let callCount = 0;
       const mockWriteAuditEntry = async () => {
         callCount += 1;
-        throw new Error('persistent R2 error');
+        return { status: 500, error: 'persistent R2 error' };
       };
 
       const mockS3Client = { send: () => ({ $metadata: { httpStatusCode: 200 } }) };
@@ -2617,31 +2617,19 @@ describe('Version Put', () => {
         '../../../src/storage/version/audit.js': { writeAuditEntry: mockWriteAuditEntry },
       });
 
-      const errors = [];
-      const origError = console.error;
-      console.error = (...args) => errors.push(args.map(String).join(' '));
-      let resp;
-      try {
-        resp = await putObjectWithVersion(
-          {},
-          {
-            org: 'o', ext: 'html', site: 'repo', users: [],
-          },
-          {
-            org: 'o', key: 'repo/p.html', body: 'edit', type: 'text/html',
-          },
-          true,
-        );
-      } finally {
-        console.error = origError;
-      }
-
-      assert.strictEqual(resp.status, 200, 'document write must succeed even when audit write is permanently failing');
-      assert.strictEqual(callCount, 3, 'writeAuditEntry must be attempted 3 times before giving up');
-      assert.ok(
-        errors.some((e) => e.includes('after 3 retries')),
-        'error after all retries exhausted must be logged with retry count',
+      const resp = await putObjectWithVersion(
+        {},
+        {
+          org: 'o', ext: 'html', site: 'repo', users: [],
+        },
+        {
+          org: 'o', key: 'repo/p.html', body: 'edit', type: 'text/html',
+        },
+        true,
       );
+
+      assert.strictEqual(resp.status, 200, 'document write must succeed even when audit returns 500');
+      assert.strictEqual(callCount, 1, 'writeAuditEntry must be called exactly once');
     });
 
     it('does not write audit for non-versionable type (e.g. PDF)', async () => {
@@ -2888,7 +2876,7 @@ describe('Version Put', () => {
       assert.strictEqual(resp.metadata.id, 'file-id-err');
     });
 
-    it('swallows writeAuditEntry error and still returns main put result', async () => {
+    it('writeAuditEntry returning status 500 does not prevent main put result', async () => {
       const mockGetObject = async () => ({
         status: 200,
         body: 'doc',
@@ -2910,7 +2898,7 @@ describe('Version Put', () => {
           ifMatch: () => s3Client,
         },
         '../../../src/storage/version/audit.js': {
-          writeAuditEntry: async () => { throw new Error('audit service unavailable'); },
+          writeAuditEntry: async () => ({ status: 500, error: 'audit service unavailable' }),
         },
       });
 
@@ -2920,7 +2908,6 @@ describe('Version Put', () => {
       const update = { org: 'o', key: 'repo/doc.html', type: 'text/html' };
       const resp = await putObjectWithVersion({}, daCtx, update, true);
 
-      // audit failure must not bubble up; main put succeeded
       assert.strictEqual(resp.status, 200);
       assert.strictEqual(resp.metadata.id, 'audit-err-id');
     });
