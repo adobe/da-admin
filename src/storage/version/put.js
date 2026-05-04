@@ -354,5 +354,6 @@ export async function postObjectVersion(req, env, daCtx) {
     // no body
   }
   const label = reqJSON?.label;
-  return /* await */ postObjectVersionWithLabel(label, env, daCtx);
+  if (!label) return { status: 400, error: 'label is required' };
+  return postObjectVersionWithLabel(label, env, daCtx);
 }
