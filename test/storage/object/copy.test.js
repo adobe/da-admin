@@ -696,6 +696,50 @@ describe('Object copy', () => {
       assert.strictEqual(puwv[0].u.body, preBuffered, 'non-ReadableStream body must be passed through unchanged');
     });
 
+    it('returns 404 when CopyObjectCommand throws NoSuchKey with no $metadata.httpStatusCode', async () => {
+      const error = new Error('The specified key does not exist.');
+      error.name = 'NoSuchKey';
+
+      const mockS3Client = class {
+        // eslint-disable-next-line class-methods-use-this
+        send() {
+          throw error;
+        }
+
+        middlewareStack = { add: () => {} };
+      };
+
+      const mockGetObject = async (env, { bucket, org, key }, head) => {
+        if (head && bucket === 'test-bucket' && org === 'testorg' && key === 'src/missing.html') {
+          return { contentType: 'text/html', status: 200, contentLength: 0 };
+        }
+        return null;
+      };
+
+      // eslint-disable-next-line no-shadow
+      const { copyFile } = await esmock('../../../src/storage/object/copy.js', {
+        '@aws-sdk/client-s3': {
+          S3Client: mockS3Client,
+        },
+        '../../../src/storage/object/get.js': {
+          default: mockGetObject,
+        },
+      });
+
+      const env = { dacollab: { fetch: () => ({ body: { cancel: () => {} } }) } };
+      const daCtx = {
+        bucket: 'test-bucket',
+        org: 'testorg',
+        origin: 'https://test.com',
+        users: [{ email: 'test@example.com' }],
+      };
+      daCtx.aclCtx = await getAclCtx(env, daCtx.org, daCtx.users, '/');
+      const details = { source: 'src', destination: 'dst' };
+
+      const resp = await copyFile({}, env, daCtx, 'src/missing.html', details, true);
+      assert.deepStrictEqual(resp, { $metadata: { httpStatusCode: 404 } });
+    });
+
     it('Copy content when origin does not exists', async () => {
       const error = {
         $metadata: { httpStatusCode: 404, hi: 'ha' },

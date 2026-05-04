@@ -115,8 +115,8 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
       const client = new S3Client(config);
       // This is a move so copy to the new location
       return /* await */ client.send(new CopyObjectCommand(input));
-    } else if (e.$metadata?.httpStatusCode === 404) {
-      return { $metadata: e.$metadata };
+    } else if (e.$metadata?.httpStatusCode === 404 || e.name === 'NoSuchKey') {
+      return { $metadata: { httpStatusCode: 404 } };
     }
     throw e;
   } finally {
