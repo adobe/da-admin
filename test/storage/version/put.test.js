@@ -2927,7 +2927,37 @@ describe('Version Put', () => {
   });
 
   describe('postObjectVersion with no JSON body', () => {
-    it('handles req.json() throwing (no body) and creates version with undefined label', async () => {
+    it('returns 400 when req.json() throws (no body)', async () => {
+      const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {});
+
+      const req = {
+        json: () => {
+          throw new Error('no body');
+        },
+      };
+      const daCtx = {
+        bucket: 'b', org: 'o', key: 'r/doc.html', ext: 'html', users: [],
+      };
+      const resp = await postObjectVersion(req, {}, daCtx);
+
+      assert.strictEqual(resp.status, 400);
+      assert.strictEqual(resp.error, 'label is required');
+    });
+
+    it('returns 400 when request body has label: null', async () => {
+      const { postObjectVersion } = await esmock('../../../src/storage/version/put.js', {});
+
+      const req = { json: async () => ({ label: null }) };
+      const daCtx = {
+        bucket: 'b', org: 'o', key: 'r/doc.html', ext: 'html', users: [],
+      };
+      const resp = await postObjectVersion(req, {}, daCtx);
+
+      assert.strictEqual(resp.status, 400);
+      assert.strictEqual(resp.error, 'label is required');
+    });
+
+    it('returns 201 when a valid label is provided', async () => {
       const mockGetObject = async () => ({
         body: 'content',
         contentType: 'text/html',
@@ -2954,20 +2984,13 @@ describe('Version Put', () => {
         '../../../src/storage/utils/config.js': { default: () => ({}) },
       });
 
-      // req.json() throws → label is undefined → postObjectVersionWithLabel(undefined, ...)
-      const req = {
-        json: () => {
-          throw new Error('no body');
-        },
-      };
+      const req = { json: async () => ({ label: 'My snapshot' }) };
       const daCtx = {
         bucket: 'b', org: 'o', key: 'r/doc.html', ext: 'html', users: [],
       };
       const resp = await postObjectVersion(req, {}, daCtx);
 
-      // No label means shouldCreateVersionObject is false → versionCreated stays false → 500
-      assert.strictEqual(resp.status, 500);
-      assert.strictEqual(resp.error, 'Version was not created');
+      assert.strictEqual(resp.status, 201);
     });
   });
 
