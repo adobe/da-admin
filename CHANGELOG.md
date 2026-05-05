@@ -1,3 +1,12 @@
+## [1.7.2](https://github.com/adobe/da-admin/compare/v1.7.1...v1.7.2) (2026-05-05)
+
+
+### Bug Fixes
+
+* handle NoSuchKey error name in copyFile catch block ([#272](https://github.com/adobe/da-admin/issues/272)) ([939b491](https://github.com/adobe/da-admin/commit/939b49187ac317482406aa946d7b032c5dfa265a))
+* increase writeAuditEntry 412 retries to 5 and remove dead retry loop in put.js ([#274](https://github.com/adobe/da-admin/issues/274)) ([2aca684](https://github.com/adobe/da-admin/commit/2aca684844fff0e8a4f8787f90e2f69a796afbde))
+* return 400 when label is missing in POST /versionsource ([#273](https://github.com/adobe/da-admin/issues/273)) ([36acb2b](https://github.com/adobe/da-admin/commit/36acb2b9f3dffb8c4185da01e7983e79f111d62a))
+
 ## [1.7.1](https://github.com/adobe/da-admin/compare/v1.7.0...v1.7.1) (2026-04-30)
 
 
