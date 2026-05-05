@@ -252,6 +252,40 @@ describe('Move', () => {
     );
   });
 
+  it('Returns 204 (not 500) when some source keys do not exist (NoSuchKey)', async () => {
+    mockSendFn = () => ({ Contents: [{ Key: 'myorg/somewhere/b.html' }] });
+
+    const copyFileCalled = [];
+    const copyFile = (c, e, x, k) => {
+      copyFileCalled.push(k);
+      return { $metadata: { httpStatusCode: 404 } };
+    };
+
+    const moveObject = await esmock('../../../src/storage/object/move.js', {
+      '@aws-sdk/client-s3': { S3Client: MockS3Client },
+      '../../../src/storage/object/copy.js': { copyFile },
+      '../../../src/storage/object/delete.js': { deleteObject: () => ({ status: 204 }) },
+    });
+
+    const pathLookup = new Map();
+    pathLookup.set('blah@foo.org', [
+      { path: '/somewhere/+**', actions: ['read', 'write'] },
+      { path: '/somedest/+**', actions: ['read', 'write'] },
+    ]);
+    const ctx = {
+      org: 'myorg',
+      aclCtx: { pathLookup },
+      users: [{ email: 'blah@foo.org' }],
+      isFile: false,
+      key: 'q.html',
+    };
+    const resp = await moveObject({}, ctx, { source: 'somewhere', destination: 'somedest' });
+
+    assert.strictEqual(resp.status, 204);
+    assert(copyFileCalled.includes('somewhere'), 'copyFile must be called for the source key');
+    assert(copyFileCalled.includes('somewhere/b.html'), 'copyFile must be called for listed keys');
+  });
+
   it('Does not re-process page 1 keys on page 2 iteration', async () => {
     let callCount = 0;
     mockSendFn = () => {
