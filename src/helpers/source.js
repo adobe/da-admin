@@ -87,7 +87,7 @@ export async function putHelper(req, env, daCtx) {
 
 export async function getFileBody(data) {
   await data.text();
-  return { body: data, type: data.type };
+  return { body: data, type: normalizeCharset(data.type) };
 }
 
 export function getObjectBody(data) {
