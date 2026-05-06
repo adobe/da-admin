@@ -94,11 +94,15 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
           env,
           { bucket: daCtx.bucket, org: daCtx.org, key: sourceKey },
         );
+        // Buffer the ReadableStream so the body survives retries inside putObjectWithVersion.
+        const originalBody = original.body instanceof ReadableStream
+          ? await new Response(original.body).arrayBuffer()
+          : original.body;
         return /* await */ putObjectWithVersion(env, daCtx, {
           bucket: daCtx.bucket,
           org: daCtx.org,
           key: Key,
-          body: original.body,
+          body: originalBody,
           contentLength: original.contentLength,
           type: original.contentType,
         });
@@ -111,8 +115,8 @@ export const copyFile = async (config, env, daCtx, sourceKey, details, isRename)
       const client = new S3Client(config);
       // This is a move so copy to the new location
       return /* await */ client.send(new CopyObjectCommand(input));
-    } else if (e.$metadata?.httpStatusCode === 404) {
-      return { $metadata: e.$metadata };
+    } else if (e.$metadata?.httpStatusCode === 404 || e.name === 'NoSuchKey') {
+      return { $metadata: { httpStatusCode: 404 } };
     }
     throw e;
   } finally {

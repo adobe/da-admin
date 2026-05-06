@@ -10,7 +10,23 @@
  * governing permissions and limitations under the License.
  */
 import getObject from '../object/get.js';
+import { versionKey } from './paths.js';
 
+/**
+ * GET version: resolve repo-scoped path and fetch.
+ * daCtx.key must be "repo/fileId/versionId.ext".
+ */
 export async function getObjectVersion(env, { bucket, org, key }, head, conditionalHeaders) {
-  return getObject(env, { bucket, org, key: `.da-versions/${key}` }, head, conditionalHeaders);
+  const parts = key.split('/');
+  if (parts.length < 3) return { status: 404 };
+  const [repo, fileId, ...rest] = parts;
+  const versionFile = rest.join('/');
+  const ext = versionFile.split('.').pop();
+  const versionId = versionFile.slice(0, -(ext.length + 1));
+  return getObject(
+    env,
+    { bucket, org, key: versionKey(repo, fileId, versionId, ext) },
+    head,
+    conditionalHeaders,
+  );
 }

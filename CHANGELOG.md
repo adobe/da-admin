@@ -1,3 +1,99 @@
+## [1.7.2](https://github.com/adobe/da-admin/compare/v1.7.1...v1.7.2) (2026-05-05)
+
+
+### Bug Fixes
+
+* handle NoSuchKey error name in copyFile catch block ([#272](https://github.com/adobe/da-admin/issues/272)) ([939b491](https://github.com/adobe/da-admin/commit/939b49187ac317482406aa946d7b032c5dfa265a))
+* increase writeAuditEntry 412 retries to 5 and remove dead retry loop in put.js ([#274](https://github.com/adobe/da-admin/issues/274)) ([2aca684](https://github.com/adobe/da-admin/commit/2aca684844fff0e8a4f8787f90e2f69a796afbde))
+* return 400 when label is missing in POST /versionsource ([#273](https://github.com/adobe/da-admin/issues/273)) ([36acb2b](https://github.com/adobe/da-admin/commit/36acb2b9f3dffb8c4185da01e7983e79f111d62a))
+
+## [1.7.1](https://github.com/adobe/da-admin/compare/v1.7.0...v1.7.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* handle KV 414 error when IMS auth fragment leaks into org path ([#270](https://github.com/adobe/da-admin/issues/270)) ([db2b4c8](https://github.com/adobe/da-admin/commit/db2b4c8249234eb5c45329629e71bbb7ca1a7efc))
+* treat putVersion 412 as version-already-exists, not failure ([#271](https://github.com/adobe/da-admin/issues/271)) ([e92b916](https://github.com/adobe/da-admin/commit/e92b9166b577caf9ae1ce78c9f96a0927c458d80))
+
+# [1.7.0](https://github.com/adobe/da-admin/compare/v1.6.3...v1.7.0) (2026-04-29)
+
+
+### Features
+
+* add x-error header ([#269](https://github.com/adobe/da-admin/issues/269)) ([9183c18](https://github.com/adobe/da-admin/commit/9183c18e18107079c15bd9d41a44d4f7d30b056b))
+
+## [1.6.3](https://github.com/adobe/da-admin/compare/v1.6.2...v1.6.3) (2026-04-29)
+
+
+### Bug Fixes
+
+* buffer current.body to ArrayBuffer before putVersion to survive SDK retries ([#268](https://github.com/adobe/da-admin/issues/268)) ([47562f1](https://github.com/adobe/da-admin/commit/47562f1f4433269a75f78f14e4d4a52335313898))
+* guard against null body in notifyCollab to prevent move partial_failure ([#267](https://github.com/adobe/da-admin/issues/267)) ([b21c4eb](https://github.com/adobe/da-admin/commit/b21c4ebadafd0a26ff04ad07aff5d5c05b3fe58b))
+
+## [1.6.2](https://github.com/adobe/da-admin/compare/v1.6.1...v1.6.2) (2026-04-29)
+
+
+### Bug Fixes
+
+* consumed body on retry ([#264](https://github.com/adobe/da-admin/issues/264)) ([fffb056](https://github.com/adobe/da-admin/commit/fffb056f63ba064a949c69484d31a3e5c52df6a7))
+* reject expired IMS tokens by comparing expiry in milliseconds ([#265](https://github.com/adobe/da-admin/issues/265)) ([09e44e9](https://github.com/adobe/da-admin/commit/09e44e9debb633f8019e3342977d7a82bc0d991a))
+
+## [1.6.1](https://github.com/adobe/da-admin/compare/v1.6.0...v1.6.1) (2026-04-29)
+
+
+### Bug Fixes
+
+* log errors on move failures so they appear in Cloudflare Logs ([#266](https://github.com/adobe/da-admin/issues/266)) ([84ac28f](https://github.com/adobe/da-admin/commit/84ac28f56bd06fc1d12fbe7899ad0ed96a39190c))
+
+# [1.6.0](https://github.com/adobe/da-admin/compare/v1.5.0...v1.6.0) (2026-04-28)
+
+
+### Features
+
+* no legacy versions support ([#263](https://github.com/adobe/da-admin/issues/263)) ([0d5455c](https://github.com/adobe/da-admin/commit/0d5455cbe8fb4b14677159101df5eb6abaccb4bd))
+
+# [1.5.0](https://github.com/adobe/da-admin/compare/v1.4.0...v1.5.0) (2026-04-27)
+
+
+### Features
+
+* all orgs write to audit.txt ([#262](https://github.com/adobe/da-admin/issues/262)) ([8dc7659](https://github.com/adobe/da-admin/commit/8dc765968a0a10199ba5452ff0ecfffb38dea896))
+
+# [1.4.0](https://github.com/adobe/da-admin/compare/v1.3.1...v1.4.0) (2026-04-23)
+
+
+### Features
+
+* add a retry to compensate R2 transient failure ([#257](https://github.com/adobe/da-admin/issues/257)) ([eb25f6d](https://github.com/adobe/da-admin/commit/eb25f6d258157af0fcfd6bc9219a1f907c211f51))
+
+## [1.3.1](https://github.com/adobe/da-admin/compare/v1.3.0...v1.3.1) (2026-04-03)
+
+
+### Bug Fixes
+
+* normalize charset=utf-8 for text content types and support raw-body HTML PUTs ([#256](https://github.com/adobe/da-admin/issues/256)) ([29b4f4b](https://github.com/adobe/da-admin/commit/29b4f4b4cb35421be1389c3e2f42f1ced82895b2))
+
+# [1.3.0](https://github.com/adobe/da-admin/compare/v1.2.0...v1.3.0) (2026-04-02)
+
+
+### Features
+
+* restructure versions ([#253](https://github.com/adobe/da-admin/issues/253)) ([f583359](https://github.com/adobe/da-admin/commit/f58335943319553726ac9e01a76dd2828ed7ed7a))
+
+# [1.2.0](https://github.com/adobe/da-admin/compare/v1.1.7...v1.2.0) (2026-03-31)
+
+
+### Features
+
+* improve error handling ([#255](https://github.com/adobe/da-admin/issues/255)) ([3fc681c](https://github.com/adobe/da-admin/commit/3fc681c13561d30b5b182c8d1f6ff491b82eea7f))
+
+## [1.1.7](https://github.com/adobe/da-admin/compare/v1.1.6...v1.1.7) (2026-03-12)
+
+
+### Bug Fixes
+
+* **versionsource:** surface version creation failures and fix streaming warning ([#250](https://github.com/adobe/da-admin/issues/250)) ([4ee0dbe](https://github.com/adobe/da-admin/commit/4ee0dbec72a350cb92c2403db58137e7189402c5))
+
 ## [1.1.6](https://github.com/adobe/da-admin/compare/v1.1.5...v1.1.6) (2026-02-25)
 
 

@@ -60,6 +60,39 @@ describe('DA auth', () => {
       assert.strictEqual(users[0].email, 'anonymous');
     });
 
+    it('anonymous if token expired with realistic IMS ms-scale timestamps', async () => {
+      // IMS JWT fields: created_at and expires_in are in milliseconds.
+      // Bug: auth.js computes `now` in seconds; ms-scale `expires` is always larger,
+      // so expired tokens are never rejected.
+      // Token issued 2h ago, valid for only 1h — clearly expired.
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+
+      const { getUsers: getUsersMsExpired } = await esmock('../../src/utils/auth.js', {
+        jose: {
+          createRemoteJWKSet: () => null,
+          jwksCache: 'cache-key',
+          jwtVerify: () => ({
+            payload: {
+              type: 'access_token',
+              user_id: 'user@example.com',
+              created_at: Date.now() - TWO_HOURS_MS,
+              expires_in: ONE_HOUR_MS,
+            },
+          }),
+        },
+      });
+
+      const req = new Request('https://da.live/source/cq/test', {
+        headers: new Headers({ Authorization: 'Bearer sometoken' }),
+      });
+
+      await withMockedFetch(async () => {
+        const users = await getUsersMsExpired(req, env);
+        assert.strictEqual(users[0].email, 'anonymous');
+      });
+    });
+
     it('authorized if email matches', async () => {
       await withMockedFetch(async () => {
         const users = await getUsers(reqs.site, env);
@@ -117,6 +150,29 @@ describe('DA auth', () => {
         },
       ];
       assert.deepStrictEqual(expectedOrgs, userValue.orgs);
+    });
+
+    it('returns user value when KV PUT fails for near-expiry token', async () => {
+      // Near-expiry tokens have < 60s remaining; KV rejects the expiration timestamp.
+      // Bug: the thrown error propagates up through getUsers -> getDaCtx -> 500.
+      // Fix: setUser must catch the KV PUT failure and still return the user value.
+      const headers = new Headers({ Authorization: 'Bearer aparker@geometrixx.info' });
+      const kvPutError = new Error(
+        'KV PUT failed: 400 Invalid expiration of 1777144621.'
+        + ' Expiration times must be at least 60 seconds in the future.',
+      );
+      const failEnv = {
+        ...env,
+        DA_AUTH: { ...env.DA_AUTH, put: () => { throw kvPutError; } },
+      };
+
+      let userValue;
+      await withMockedFetch(async () => {
+        const userValStr = await setUser('aparker@geometrixx.info', 100, headers, failEnv);
+        userValue = JSON.parse(userValStr);
+      });
+
+      assert.strictEqual(userValue.email, 'aparker@geometrixx.info');
     });
   });
 
@@ -500,6 +556,26 @@ describe('DA auth', () => {
       assert(hasPermission({
         users, org: 'test', aclCtx, key: '',
       }, '/some/deep/path', 'write'));
+    });
+
+    it('returns empty action set when DA_CONFIG KV GET throws 414 key-too-long error', async () => {
+      // IMS auth redirect fragments (access_token=..., ld_hash=...) leak into the URL path,
+      // producing an org segment >512 bytes. KV rejects the lookup with a 414 error;
+      // without a guard this unhandled exception propagates to a 500 response.
+      const longOrg = 'a'.repeat(513);
+      const kv414Error = new Error(
+        `KV GET failed: 414 UTF-8 encoded length of ${longOrg.length} exceeds key length limit of 512.`,
+      );
+      const failEnv = {
+        DA_CONFIG: {
+          get: () => {
+            throw kv414Error;
+          },
+        },
+      };
+      const users = [{ email: 'user@example.com' }];
+      const aclCtx = await getAclCtx(failEnv, longOrg, users, '/test');
+      assert.strictEqual(aclCtx.actionSet.size, 0, 'oversized org name must produce empty action set, not throw');
     });
   });
 

@@ -9,6 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import normalizeCharset from './charset.js';
+
 /**
  * Creates a response
  * @param status
@@ -28,13 +30,14 @@ export default function daResp({
   metadata,
   etag,
   continuationToken,
+  error,
 }, ctx = null) {
   const headers = new Headers();
   headers.append('Access-Control-Allow-Origin', '*');
   headers.append('Access-Control-Allow-Methods', 'HEAD, GET, PUT, POST, DELETE');
   headers.append('Access-Control-Allow-Headers', '*');
-  headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag');
-  headers.append('Content-Type', contentType);
+  headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag, x-error');
+  headers.append('Content-Type', normalizeCharset(contentType));
   if (contentLength) {
     headers.append('Content-Length', contentLength);
   }
@@ -51,6 +54,10 @@ export default function daResp({
   }
   if (continuationToken) {
     headers.append('da-continuation-token', continuationToken);
+  }
+
+  if (status >= 500 && error) {
+    headers.append('x-error', error);
   }
 
   if (ctx?.aclCtx && status < 500) {

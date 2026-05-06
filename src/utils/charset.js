@@ -9,20 +9,9 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-/* eslint-disable no-unused-vars,camelcase */
-const jwtVerify = (token) => {
-  // eslint-disable-next-line prefer-const
-  let [email, created_at = 0, expires_in = 0] = token.split(':');
-  created_at += new Date().getTime();
-  expires_in += created_at;
-  return {
-    payload: {
-      type: 'access_token',
-      user_id: email,
-      created_at,
-      expires_in: expires_in || created_at + 1000,
-    },
-  };
-};
-
-export default { jwtVerify };
+export default function normalizeCharset(type) {
+  if (type && type.startsWith('text/') && !type.includes('charset')) {
+    return `${type}; charset=utf-8`;
+  }
+  return type;
+}

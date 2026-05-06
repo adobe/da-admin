@@ -20,6 +20,8 @@ import {
   getUsersForMetadata, ifMatch, ifNoneMatch,
 } from '../utils/version.js';
 import getObject from '../object/get.js';
+import { writeAuditEntry } from './audit.js';
+import { versionKey } from './paths.js';
 
 export function getContentLength(body) {
   if (body === undefined) {
@@ -31,18 +33,28 @@ export function getContentLength(body) {
     return new Blob([body]).size;
   } else if (body instanceof File) {
     return body.size;
+  } else if (body instanceof ArrayBuffer) {
+    return body.byteLength;
   }
   return undefined;
 }
 
+/**
+ * @param {object} config - S3 config
+ * @param {object} params - Bucket, Org, Repo (optional), Body, ID, Version, Ext,
+ *   Metadata, ContentLength, ContentType
+ * @param {boolean} [noneMatch=true]
+ * @returns {Promise<{ status: number }>}
+ */
 export async function putVersion(config, {
-  Bucket, Org, Body, ID, Version, Ext, Metadata, ContentLength, ContentType,
+  Bucket, Org, Repo, Body, ID, Version, Ext, Metadata, ContentLength, ContentType,
 }, noneMatch = true) {
   const length = ContentLength ?? getContentLength(Body);
 
   const client = noneMatch ? ifNoneMatch(config) : new S3Client(config);
+  const key = `${Org}/${versionKey(Repo, ID, Version, Ext)}`;
   const input = {
-    Bucket, Key: `${Org}/.da-versions/${ID}/${Version}.${Ext}`, Body, Metadata, ContentLength: length, ContentType,
+    Bucket, Key: key, Body, Metadata, ContentLength: length, ContentType,
   };
   const command = new PutObjectCommand(input);
   try {
@@ -52,7 +64,10 @@ export async function putVersion(config, {
     const status = e.$metadata?.httpStatusCode || 500;
     // eslint-disable-next-line no-console
     if (status >= 500) console.error('Fail to put version', e);
-    return { status };
+    // Cancel the body stream if it wasn't consumed (e.g. R2 rejected via 100-continue on 412).
+    // Without this, Cloudflare Workers logs "non-retryable streaming request" warnings.
+    if (Body?.cancel) Body.cancel();
+    return { status, ...(status >= 500 ? { error: e.message } : {}) };
   }
 }
 
@@ -83,10 +98,12 @@ export async function putObjectWithVersion(
   clientConditionals = null,
 ) {
   const config = getS3Config(env);
-  // While we are automatically storing the body once for the 'Collab Parse' changes, we never
-  // do a HEAD, because we may need the content. Once we don't need to do this automatic store
-  // any more, we can change the 'false' argument in the next line back to !body.
   const current = await getObject(env, update, false);
+  // Buffer current.body so it survives AWS SDK internal retries inside putVersion.
+  // A ReadableStream can only be consumed once; ArrayBuffer can be reused freely.
+  if (current.body instanceof ReadableStream) {
+    current.body = await new Response(current.body).arrayBuffer();
+  }
 
   let ID = current.metadata?.id;
   if (!ID) {
@@ -103,7 +120,7 @@ export async function putObjectWithVersion(
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
   const input = buildInput(update);
   const Timestamp = `${Date.now()}`;
-  const Path = update.key;
+  const Path = update.key ?? daCtx.key ?? '';
 
   // Validate conflicting conditionals - both headers present is unusual for PUT
   let effectiveConditionals = clientConditionals;
@@ -175,33 +192,37 @@ export async function putObjectWithVersion(
 
       // eslint-disable-next-line no-console
       if (status >= 500) console.error('Failed to put object (in object with version)', e);
-      return { status, metadata: { id: ID } };
+      return { status, metadata: { id: ID }, ...(status >= 500 ? { error: e.message } : {}) };
     }
   }
 
   const pps = current.metadata?.preparsingstore || '0';
-  let storeBody = !body && pps === '0';
-  let Preparsingstore = storeBody ? Timestamp : pps;
-  let Label = storeBody ? 'Collab Parse' : update.label;
+  let storeBody = false;
+  let versionCreated = false;
+  let Label = update.label;
 
-  if (createVersion) {
-    if (daCtx.method === 'PUT'
-      && daCtx.ext === 'html'
-      && current.contentLength > EMPTY_DOC_SIZE
-      && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
-      // we are about to empty the document body
-      // this should almost never happen but it does in some unexpectedcases
-      // we want then to store a version of the full document as a Restore Point
-      // eslint-disable-next-line no-console
-      console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
-      storeBody = true;
-      Label = 'Restore Point';
-      Preparsingstore = Timestamp;
-    }
+  // Restore Point: we are about to empty the document body; store current content as a snapshot
+  if (daCtx.method === 'PUT'
+    && daCtx.ext === 'html'
+    && current.contentLength > EMPTY_DOC_SIZE
+    && (!update.body || update.body.size <= EMPTY_DOC_SIZE)) {
+    // eslint-disable-next-line no-console
+    console.warn(`Empty body, creating a restore point (${current.contentLength} / ${update.body?.size})`);
+    storeBody = true;
+    Label = 'Restore Point';
+  }
 
+  const Preparsingstore = storeBody ? Timestamp : pps;
+
+  // Only create version for explicit label (POST /versionsource) or Restore Point. No Collab Parse.
+  const shouldCreateVersionObject = createVersion
+    && (update.label != null || Label === 'Restore Point');
+
+  if (shouldCreateVersionObject) {
     const versionResp = await putVersion(config, {
       Bucket: input.Bucket,
       Org: daCtx.org,
+      Repo: daCtx.site || undefined,
       Body: (body || storeBody ? current.body : ''),
       ContentLength: (body || storeBody ? current.contentLength : undefined),
       ContentType: current.contentType,
@@ -219,6 +240,26 @@ export async function putObjectWithVersion(
     if (versionResp.status !== 200 && versionResp.status !== 412) {
       return { status: versionResp.status, metadata: { id: ID } };
     }
+    // 412 means the version key already exists — a concurrent request created it first.
+    // The version IS persisted in R2, so treat it as created.
+    versionCreated = versionResp.status === 200 || versionResp.status === 412;
+  }
+
+  // Audit: one entry per versionable PUT; versionLabel + versionId when labelled version created.
+  // Store path without repo prefix and versionId without extension for readability.
+  if (createVersion) {
+    const versionId = versionCreated ? Version : undefined;
+    const versionLabel = versionCreated ? (Label ?? '') : undefined;
+    const pathForAudit = (daCtx.site && Path.startsWith(`${daCtx.site}/`))
+      ? Path.slice(daCtx.site.length)
+      : Path;
+    await writeAuditEntry(env, { bucket: input.Bucket, org: daCtx.org }, daCtx.site, ID, {
+      timestamp: Timestamp,
+      users: Users,
+      path: pathForAudit,
+      versionLabel,
+      versionId,
+    });
   }
 
   const metadata = {
@@ -249,6 +290,7 @@ export async function putObjectWithVersion(
       status: resp.$metadata.httpStatusCode,
       metadata: { id: ID },
       etag: resp.ETag,
+      versionCreated,
     };
   } catch (e) {
     const status = e.$metadata?.httpStatusCode || 500;
@@ -270,19 +312,24 @@ export async function putObjectWithVersion(
 
     // eslint-disable-next-line no-console
     if (status >= 500) console.error('Failed to version (in object with version)', e);
-    return { status, metadata: { id: ID } };
+    return { status, metadata: { id: ID }, ...(status >= 500 ? { error: e.message } : {}) };
   }
 }
 
 export async function postObjectVersionWithLabel(label, env, daCtx) {
   const { body, contentLength, contentType } = await getObject(env, daCtx);
+  // Buffer the ReadableStream so the body survives retries inside putObjectWithVersion.
+  // A ReadableStream can only be consumed once; ArrayBuffer can be reused freely.
+  const bodyBuffer = body instanceof ReadableStream ? await new Response(body).arrayBuffer() : body;
   const { bucket, org, key } = daCtx;
 
   const resp = await putObjectWithVersion(env, daCtx, {
-    bucket, org, key, body, contentLength, type: contentType, label,
+    bucket, org, key, body: bodyBuffer, contentLength, type: contentType, label,
   }, true);
 
-  return { status: resp.status === 200 ? 201 : resp.status };
+  if (resp.status !== 200) return { status: resp.status };
+  if (!resp.versionCreated) return { status: 500, error: 'Version was not created' };
+  return { status: 201 };
 }
 
 export async function postObjectVersion(req, env, daCtx) {
@@ -293,5 +340,6 @@ export async function postObjectVersion(req, env, daCtx) {
     // no body
   }
   const label = reqJSON?.label;
-  return /* await */ postObjectVersionWithLabel(label, env, daCtx);
+  if (!label) return { status: 400, error: 'label is required' };
+  return postObjectVersionWithLabel(label, env, daCtx);
 }
