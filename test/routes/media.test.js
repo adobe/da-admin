@@ -31,6 +31,32 @@ describe('Media Route', () => {
     assert.strictEqual(resp.status, 403);
   });
 
+  it('returns 400 when putHelper returns no data', async () => {
+    const hasPermission = () => true;
+    const putHelper = async () => ({});
+
+    const postMedia = await esmock('../../src/routes/media.js', {
+      '../../src/utils/auth.js': { hasPermission },
+      '../../src/helpers/source.js': { putHelper },
+    });
+
+    const resp = await postMedia.default({ req: {}, env: {}, daCtx: { key: '/test/image.jpg' } });
+    assert.strictEqual(resp.status, 400);
+  });
+
+  it('returns 400 when putHelper returns null', async () => {
+    const hasPermission = () => true;
+    const putHelper = async () => null;
+
+    const postMedia = await esmock('../../src/routes/media.js', {
+      '../../src/utils/auth.js': { hasPermission },
+      '../../src/helpers/source.js': { putHelper },
+    });
+
+    const resp = await postMedia.default({ req: {}, env: {}, daCtx: { key: '/test/image.jpg' } });
+    assert.strictEqual(resp.status, 400);
+  });
+
   it('returns 400 for unsupported media type', async () => {
     const hasPermission = () => true;
     const putHelper = async () => ({ data: { type: 'text/plain' } });

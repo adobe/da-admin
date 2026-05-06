@@ -18,6 +18,7 @@ export default async function postMedia({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
 
   const obj = await putHelper(req, env, daCtx);
+  if (!obj?.data) return { status: 400 };
   const { body, type: contentType } = await getFileBody(obj.data);
 
   if (!MEDIA_TYPES.includes(contentType)) return { status: 400 };
