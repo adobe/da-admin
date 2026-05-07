@@ -70,7 +70,7 @@ async function rawBodyPutHandler(req, contentType) {
   return { data };
 }
 
-export default async function putHelper(req, env, daCtx) {
+export async function putHelper(req, env, daCtx) {
   const rawContentType = req.headers.get('content-type');
   if (!rawContentType) return null;
 
@@ -83,4 +83,14 @@ export default async function putHelper(req, env, daCtx) {
   }
 
   return undefined;
+}
+
+export async function getFileBody(data) {
+  await data.text();
+  return { body: data, type: normalizeCharset(data.type) };
+}
+
+export function getObjectBody(data) {
+  // TODO: This will not correctly handle HTML as data
+  return { body: JSON.stringify(data), type: 'application/json' };
 }

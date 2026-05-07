@@ -15,6 +15,7 @@ import { postVersionSource } from '../routes/version.js';
 import copyHandler from '../routes/copy.js';
 import logout from '../routes/logout.js';
 import moveRoute from '../routes/move.js';
+import postMedia from '../routes/media.js';
 
 export default async function postHandler({ req, env, daCtx }) {
   const { path } = daCtx;
@@ -25,6 +26,7 @@ export default async function postHandler({ req, env, daCtx }) {
   if (path.startsWith('/copy')) return copyHandler({ req, env, daCtx });
   if (path.startsWith('/move')) return moveRoute({ req, env, daCtx });
   if (path.startsWith('/logout')) return logout({ env, daCtx });
+  if (path.startsWith('/media')) return postMedia({ req, env, daCtx });
 
   return undefined;
 }

@@ -18,6 +18,16 @@ export const SUPPORTED_TYPES = [
   'image/gif',
   'image/png',
   'image/svg+xml',
+  'image/webp',
+  'video/mp4',
+];
+
+export const MEDIA_TYPES = [
+  'image/jpeg',
+  'image/gif',
+  'image/png',
+  'image/svg+xml',
+  'image/webp',
   'video/mp4',
 ];
 

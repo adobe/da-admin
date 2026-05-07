@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'node:assert';
-import putHelper from '../../src/helpers/source.js';
+import { putHelper } from '../../src/helpers/source.js';
 
 import env from '../utils/mocks/env.js';
 
