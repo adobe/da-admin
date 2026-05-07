@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/adobe/da-admin/compare/v1.7.2...v1.7.3) (2026-05-07)
+
+
+### Bug Fixes
+
+* **copy:** return 400 instead of 500 when /copy POST body is not form-encoded ([#275](https://github.com/adobe/da-admin/issues/275)) ([a951f0c](https://github.com/adobe/da-admin/commit/a951f0c6ab9ecd0c85bf966fa8bf89f74d5029a2))
+
 ## [1.7.2](https://github.com/adobe/da-admin/compare/v1.7.1...v1.7.2) (2026-05-05)
 
 
