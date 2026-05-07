@@ -70,6 +70,35 @@ describe('Copy Route', () => {
     assert.strictEqual(false, copyCalled[0].m);
   });
 
+  it('Test copyHandler returns 400 when request body is not form-encoded', async () => {
+    const copyCalled = [];
+    const copyObject = (e, c, d, m) => {
+      copyCalled.push({
+        e, c, d, m,
+      });
+      return { status: 200 };
+    };
+
+    const copyHandler = await esmock('../../src/routes/copy.js', {
+      '../../src/storage/object/copy.js': {
+        default: copyObject,
+      },
+      '../../src/utils/auth.js': { hasPermission: () => true },
+    });
+
+    const req = {
+      formData: () => {
+        throw new TypeError('Unrecognized Content-Type header value. FormData can only parse the following MIME types: multipart/form-data, application/x-www-form-urlencoded');
+      },
+    };
+
+    const resp = await copyHandler({ req, env: {}, daCtx: { key: 'my/src.html' } });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(copyCalled.length, 0);
+    const body = JSON.parse(resp.body);
+    assert.match(body.error, /Content-Type/i);
+  });
+
   it('Test copyHandler - no destination provided', async () => {
     const copyCalled = [];
     const copyObject = (e, c, d, m) => {
