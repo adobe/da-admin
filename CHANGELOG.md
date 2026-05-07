@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/adobe/da-admin/compare/v1.7.3...v1.8.0) (2026-05-07)
+
+
+### Features
+
+* add media route with media bus upload ([#178](https://github.com/adobe/da-admin/issues/178)) ([060765c](https://github.com/adobe/da-admin/commit/060765c73b26ed261341ad5171ead90efa2e5a6f))
+
 ## [1.7.3](https://github.com/adobe/da-admin/compare/v1.7.2...v1.7.3) (2026-05-07)
 
 
