@@ -14,8 +14,18 @@ const NO_DEST_ERROR = {
   status: 400,
 };
 
+const BAD_CONTENT_TYPE_ERROR = {
+  body: JSON.stringify({ error: 'Invalid Content-Type. Expected multipart/form-data or application/x-www-form-urlencoded.' }),
+  status: 400,
+};
+
 export default async function copyHelper(req, daCtx) {
-  const formData = await req.formData();
+  let formData;
+  try {
+    formData = await req.formData();
+  } catch {
+    return { error: BAD_CONTENT_TYPE_ERROR };
+  }
   if (!formData) return {};
   const fullDest = formData.get('destination');
   if (!fullDest) return { error: NO_DEST_ERROR };
