@@ -295,18 +295,15 @@ export async function putObjectWithVersion(
   } catch (e) {
     const status = e.$metadata?.httpStatusCode || 500;
     if (status === 412) {
-      // Only retry if no client conditionals (internal operation) and under retry limit
-      if (!effectiveConditionals?.ifMatch) {
-        return putObjectWithVersion(
-          env,
-          daCtx,
-          update,
-          body,
-          guid,
-          clientConditionals,
-        );
+      // Retry when no client conditional (internal operation) or when the client sent
+      // If-Match: * (wildcard — asserts existence only, already verified above; a concurrent
+      // write changed the ETag, so re-fetch and retry like the no-conditional path).
+      // A specific ETag means the client explicitly requires that version, so propagate 412.
+      const shouldRetry = !effectiveConditionals?.ifMatch
+        || effectiveConditionals.ifMatch === '*';
+      if (shouldRetry) {
+        return putObjectWithVersion(env, daCtx, update, body, guid, clientConditionals);
       }
-      // Client conditional failed or max retries exceeded, return 412
       return { status: 412, metadata: { id: ID } };
     }
 
