@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/adobe/da-admin/compare/v1.8.0...v1.8.1) (2026-05-12)
+
+
+### Bug Fixes
+
+* retry on R2 ETag mismatch when client sends If-Match: * ([#276](https://github.com/adobe/da-admin/issues/276)) ([3634d98](https://github.com/adobe/da-admin/commit/3634d98f9b7ff48aab713fa216b0bc77e49f6987))
+
 # [1.8.0](https://github.com/adobe/da-admin/compare/v1.7.3...v1.8.0) (2026-05-07)
 
 
