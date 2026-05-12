@@ -270,7 +270,10 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0
       return { status: resp?.$metadata?.httpStatusCode ?? 200 };
     } catch (e) {
       if (e?.$metadata?.httpStatusCode === 412 && attempt < 4) {
-        const delay = Math.random() * 50 * (attempt + 1);
+        // Exponential jitter: 0-50, 0-100, 0-200, 0-400 ms worst-case (~750 ms total).
+        // Grown from linear (~500 ms total) after PreconditionFailed burst of 5011/24h
+        // on 2026-05-12. Retry count unchanged. See COR-26.
+        const delay = Math.random() * 50 * 2 ** attempt;
         // eslint-disable-next-line no-await-in-loop -- sequential retry with jitter
         await new Promise((r) => {
           setTimeout(r, delay);

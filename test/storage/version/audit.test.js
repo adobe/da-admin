@@ -863,6 +863,89 @@ describe('Version Audit', () => {
       assert.strictEqual(getCallCount, 5, 'must re-read on each attempt');
     });
 
+    it('uses exponential jitter backoff (0-50, 0-100, 0-200, 0-400 ms) across four 412 retries', async () => {
+      // Stubs setTimeout and Math.random to capture per-retry delays.
+      // Asserts per-attempt exponential upper bounds and that total elapsed sleep
+      // exceeds the prior linear worst-case (500 ms). See COR-26.
+      const originalSetTimeout = globalThis.setTimeout;
+      const originalRandom = Math.random;
+      const delays = [];
+      Math.random = () => 0.999999;
+      globalThis.setTimeout = (fn, ms) => {
+        delays.push(ms);
+        fn();
+        return 0;
+      };
+
+      try {
+        const makeBody = () => new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(''));
+            controller.close();
+          },
+        });
+
+        const { writeAuditEntry } = await esmock(
+          '../../../src/storage/version/audit.js',
+          {
+            '@aws-sdk/client-s3': {
+              S3Client: function S3Client() {
+                this.send = async (cmd) => {
+                  if (cmd instanceof GetObjectCommand) {
+                    return { Body: makeBody(), ETag: '"etag-x"' };
+                  }
+                  if (cmd instanceof PutObjectCommand) {
+                    const err = new Error('precondition failed');
+                    err.$metadata = { httpStatusCode: 412 };
+                    throw err;
+                  }
+                  return { $metadata: { httpStatusCode: 200 } };
+                };
+              },
+              GetObjectCommand,
+              PutObjectCommand,
+            },
+            '../../../src/storage/utils/config.js': { default: () => ({}) },
+          },
+        );
+
+        await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+          timestamp: '5000',
+          users: '[{"email":"u@x.com"}]',
+          path: 'repo/doc.html',
+        });
+      } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        Math.random = originalRandom;
+      }
+
+      assert.strictEqual(delays.length, 4, 'must sleep between each of the 4 retries');
+      const upperBounds = [50, 100, 200, 400];
+      delays.forEach((ms, i) => {
+        assert.ok(
+          ms >= 0 && ms < upperBounds[i],
+          `delay[${i}]=${ms} must be within [0, ${upperBounds[i]})`,
+        );
+      });
+      assert.ok(
+        delays[2] >= 150,
+        `delay[2]=${delays[2]} must exceed the prior linear cap of 150 ms`,
+      );
+      assert.ok(
+        delays[3] >= 200,
+        `delay[3]=${delays[3]} must exceed the prior linear cap of 200 ms`,
+      );
+      const total = delays.reduce((a, b) => a + b, 0);
+      assert.ok(
+        total > 500,
+        `total elapsed sleep ${total} must exceed prior linear worst-case (500 ms)`,
+      );
+      assert.ok(
+        total < 750,
+        `total elapsed sleep ${total} must stay within the new worst-case (~750 ms)`,
+      );
+    });
+
     it('succeeds on the 5th attempt after four 412s', async () => {
       let getCallCount = 0;
       let putCallCount = 0;
