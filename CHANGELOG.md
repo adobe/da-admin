@@ -1,3 +1,10 @@
+## [1.8.2](https://github.com/adobe/da-admin/compare/v1.8.1...v1.8.2) (2026-05-12)
+
+
+### Bug Fixes
+
+* **audit:** grow writeAuditEntry 412 backoff to exponential jitter ([#277](https://github.com/adobe/da-admin/issues/277)) ([17aac95](https://github.com/adobe/da-admin/commit/17aac950191d2917cb87e08e11dfaeac4608d561))
+
 ## [1.8.1](https://github.com/adobe/da-admin/compare/v1.8.0...v1.8.1) (2026-05-12)
 
 
