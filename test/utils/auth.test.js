@@ -558,6 +558,45 @@ describe('DA auth', () => {
       }, '/some/deep/path', 'write'));
     });
 
+    it('test DA_OPS_IMS_BOT_EMAIL permissions', async () => {
+      const botEmail = 'da-ops-bot@adobe.com';
+      const envBot = {
+        ...env2,
+        DA_OPS_IMS_BOT_EMAIL: botEmail,
+      };
+
+      // Bot user identified solely by email — no orgs membership at all.
+      // This is the substantive difference from the DA_OPS_IMS_ORG test:
+      // the bearer is matched on email, independent of IMS org membership.
+      const users = [{ email: botEmail, orgs: [] }];
+      const aclCtx = await getAclCtx(envBot, 'test', users, '/', 'config');
+
+      // Should have write permission on CONFIG because of DA_OPS_IMS_BOT_EMAIL injection
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, 'CONFIG', 'write', true));
+
+      // Should have write permission on / because of DA_OPS_IMS_BOT_EMAIL injection
+      // (path: '/ + **')
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '/', 'write'));
+
+      // Should have write permission on path because of DA_OPS_IMS_BOT_EMAIL injection
+      // (path: '/ + **')
+      assert(hasPermission({
+        users, org: 'test', aclCtx, key: '',
+      }, '/some/deep/path', 'write'));
+
+      // A different email must NOT inherit bot permissions — the rule matches
+      // on the specific email, not on "any user when DA_OPS_IMS_BOT_EMAIL is set".
+      const otherUsers = [{ email: 'not-the-bot@adobe.com', orgs: [] }];
+      const otherCtx = await getAclCtx(envBot, 'test', otherUsers, '/', 'config');
+      assert(!hasPermission({
+        users: otherUsers, org: 'test', aclCtx: otherCtx, key: '',
+      }, '/', 'write'));
+    });
+
     it('returns empty action set when DA_CONFIG KV GET throws 414 key-too-long error', async () => {
       // IMS auth redirect fragments (access_token=..., ld_hash=...) leak into the URL path,
       // producing an org segment >512 bytes. KV rejects the lookup with a 414 error;
