@@ -228,7 +228,10 @@ describe('Conditional Headers', () => {
       assert.strictEqual(resp.status, 200);
     });
 
-    it('returns 412 when ETag does not match and does not retry', async () => {
+    it('returns 412 when ETag does not match and does not retry', async function returnsImmediateOn412NoRetry() {
+      // writeAuditEntry's 6-retry exponential jitter has a worst-case budget of
+      // ~3050 ms, which exceeds mocha's 2000 ms default; bound this test above it.
+      this.timeout(8000);
       const existingEtag = '"existing123"';
       s3Mock
         .on(GetObjectCommand)
@@ -260,10 +263,10 @@ describe('Conditional Headers', () => {
         clientConditionals,
       );
 
-      // Should return 412 and NOT retry
+      // Should return 412 and NOT retry the main PUT
       assert.strictEqual(resp.status, 412);
-      // 5 audit PUT attempts (1 initial + 4 retries on 412) + 1 main PUT = 6 total
-      assert.strictEqual(s3Mock.commandCalls(PutObjectCommand).length, 6);
+      // 7 audit PUT attempts (1 initial + 6 retries on 412) + 1 main PUT = 8 total
+      assert.strictEqual(s3Mock.commandCalls(PutObjectCommand).length, 8);
     });
   });
 
