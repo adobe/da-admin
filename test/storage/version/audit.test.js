@@ -814,7 +814,7 @@ describe('Version Audit', () => {
       assert.strictEqual(lines.length, 2, 'both entries must be present (no collapse across mismatched users)');
     });
 
-    it('returns status 500 when PUT 412 persists across all 5 attempts', async () => {
+    it('returns status 500 when PUT 412 persists across all 7 attempts', async () => {
       let getCallCount = 0;
       let putCallCount = 0;
 
@@ -857,16 +857,16 @@ describe('Version Audit', () => {
         path: 'repo/doc.html',
       });
 
-      assert.strictEqual(result.status, 500, 'persistent 412 must surface as 500 after 5 total attempts');
+      assert.strictEqual(result.status, 500, 'persistent 412 must surface as 500 after 7 total attempts');
       assert.strictEqual(result.error, 'precondition failed');
-      assert.strictEqual(putCallCount, 5, 'must attempt PUT 5 times total (1 initial + 4 retries)');
-      assert.strictEqual(getCallCount, 5, 'must re-read on each attempt');
+      assert.strictEqual(putCallCount, 7, 'must attempt PUT 7 times total (1 initial + 6 retries)');
+      assert.strictEqual(getCallCount, 7, 'must re-read on each attempt');
     });
 
-    it('uses exponential jitter backoff (0-50, 0-100, 0-200, 0-400 ms) across four 412 retries', async () => {
+    it('uses exponential jitter backoff (0-50, 0-100, 0-200, 0-400, 0-800, 0-1600 ms) across six 412 retries', async () => {
       // Stubs setTimeout and Math.random to capture per-retry delays.
-      // Asserts per-attempt exponential upper bounds and that total elapsed sleep
-      // exceeds the prior linear worst-case (500 ms). See COR-26.
+      // Asserts per-attempt exponential upper bounds for the 6-retry ladder
+      // (50, 100, 200, 400, 800, 1600 ms) and total elapsed sleep ~3050 ms.
       const originalSetTimeout = globalThis.setTimeout;
       const originalRandom = Math.random;
       const delays = [];
@@ -919,8 +919,8 @@ describe('Version Audit', () => {
         Math.random = originalRandom;
       }
 
-      assert.strictEqual(delays.length, 4, 'must sleep between each of the 4 retries');
-      const upperBounds = [50, 100, 200, 400];
+      assert.strictEqual(delays.length, 6, 'must sleep between each of the 6 retries');
+      const upperBounds = [50, 100, 200, 400, 800, 1600];
       delays.forEach((ms, i) => {
         assert.ok(
           ms >= 0 && ms < upperBounds[i],
@@ -935,14 +935,18 @@ describe('Version Audit', () => {
         delays[3] >= 200,
         `delay[3]=${delays[3]} must exceed the prior linear cap of 200 ms`,
       );
+      assert.ok(
+        delays[5] >= 800,
+        `delay[5]=${delays[5]} must reach the new 6-retry exponential ceiling (>=800 ms)`,
+      );
       const total = delays.reduce((a, b) => a + b, 0);
       assert.ok(
-        total > 500,
-        `total elapsed sleep ${total} must exceed prior linear worst-case (500 ms)`,
+        total > 1500,
+        `total elapsed sleep ${total} must exceed prior 4-retry worst-case (~750 ms)`,
       );
       assert.ok(
-        total < 750,
-        `total elapsed sleep ${total} must stay within the new worst-case (~750 ms)`,
+        total < 3200,
+        `total elapsed sleep ${total} must stay within the new 6-retry worst-case (~3050 ms)`,
       );
     });
 
