@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/adobe/da-admin/compare/v1.8.2...v1.9.0) (2026-05-20)
+
+
+### Features
+
+* add DA_OPS_IMS_BOT_EMAIL escape hatch for bot write access ([#280](https://github.com/adobe/da-admin/issues/280)) ([faad8c1](https://github.com/adobe/da-admin/commit/faad8c143b0732c83e0e0afb5fbba25b8ef5653c))
+
 ## [1.8.2](https://github.com/adobe/da-admin/compare/v1.8.1...v1.8.2) (2026-05-12)
 
 
