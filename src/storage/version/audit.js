@@ -191,14 +191,14 @@ function usersNormalized(usersJson) {
  * and within AUDIT_TIME_WINDOW_MS and both last and new are edits (no version), replace that
  * line; else append. A version entry always appends and is never replaced (breaks the window).
  *
- * Uses If-Match on the PUT so that a concurrent write causes a 412, which triggers up to 4
- * retries with random jitter to reduce thundering-herd contention (5 total attempts).
+ * Uses If-Match on the PUT so that a concurrent write causes a 412, which triggers up to 6
+ * retries with random jitter to reduce thundering-herd contention (7 total attempts).
  * @param {object} env
  * @param {{ bucket: string, org: string }} ctx - bucket, org
  * @param {string} repo
  * @param {string} fileId
  * @param {object} entry - { timestamp, users, path, versionLabel?, versionId? }
- * @param {number} [attempt=0] - retry counter (max 4 retries)
+ * @param {number} [attempt=0] - retry counter (max 6 retries)
  * @returns {Promise<{ status: number }>}
  */
 export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0) {
@@ -269,10 +269,13 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0
       const resp = await client.send(new PutObjectCommand(putInput));
       return { status: resp?.$metadata?.httpStatusCode ?? 200 };
     } catch (e) {
-      if (e?.$metadata?.httpStatusCode === 412 && attempt < 4) {
-        // Exponential jitter: 0-50, 0-100, 0-200, 0-400 ms worst-case (~750 ms total).
-        // Grown from linear (~500 ms total) after PreconditionFailed burst of 5011/24h
-        // on 2026-05-12. Retry count unchanged. See COR-26.
+      if (e?.$metadata?.httpStatusCode === 412 && attempt < 6) {
+        // Exponential jitter, 6 retries: per-attempt max 50, 100, 200,
+        // 400, 800, 1600 ms (~3050 ms worst-case total). Two prior 4-retry
+        // backoff bumps did not converge because the contention window is
+        // wider than per-write latency — every retry inside a short window
+        // observes the same losing-etag generation. Append-only ledger
+        // (one object per entry) is the next escalation if this still fails.
         const delay = Math.random() * 50 * 2 ** attempt;
         // eslint-disable-next-line no-await-in-loop -- sequential retry with jitter
         await new Promise((r) => {
