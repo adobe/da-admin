@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/adobe/da-admin/compare/v1.9.0...v1.9.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* **audit:** grow writeAuditEntry 412 backoff to 6 retries / ~3050 ms ([#282](https://github.com/adobe/da-admin/issues/282)) ([bc49409](https://github.com/adobe/da-admin/commit/bc494095d872f0367a034776e8c8a5e88f284cde)), closes [#277](https://github.com/adobe/da-admin/issues/277)
+
 # [1.9.0](https://github.com/adobe/da-admin/compare/v1.8.2...v1.9.0) (2026-05-20)
 
 
