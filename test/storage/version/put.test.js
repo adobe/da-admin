@@ -3162,6 +3162,68 @@ describe('Version Put', () => {
       assert.strictEqual(resp.status, 201, 'must return 201 when version already exists (concurrent 412)');
     });
 
+    it('logs diagnostics when versionCreated is false (silent 500 path)', async () => {
+      // Regression: legacy HTML imports can land in storage with no S3
+      // ContentType metadata. shouldCreateVersion(undefined) returns false ->
+      // shouldCreateVersionObject is false -> putObjectWithVersion returns
+      // { status: 200, versionCreated: false } -> postObjectVersionWithLabel
+      // returns a silent 500 with empty Cloudflare Logs (no console.error).
+      // The fix adds a single diagnostic log capturing contentType / hadLabel /
+      // currentStatus so the next daily review can confirm root cause.
+      const mockGetObject = async () => ({
+        body: 'doc content',
+        contentType: undefined,
+        contentLength: 200,
+        status: 200,
+        metadata: { id: 'doc-id', version: 'v1' },
+        etag: '"etag1"',
+      });
+
+      const mainClient = {
+        async send() { return { $metadata: { httpStatusCode: 200 } }; },
+      };
+      const versionClient = {
+        async send() { return { $metadata: { httpStatusCode: 200 } }; },
+      };
+
+      const { postObjectVersionWithLabel } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => versionClient,
+          ifMatch: () => mainClient,
+        },
+        '../../../src/storage/version/audit.js': {
+          writeAuditEntry: async () => ({ status: 200 }),
+        },
+        '../../../src/storage/utils/config.js': { default: () => ({}) },
+      });
+
+      const daCtx = {
+        bucket: 'b', org: 'o', key: 'doc.html', ext: 'html', users: [],
+      };
+
+      const errors = [];
+      const origError = console.error;
+      console.error = (...args) => {
+        errors.push(args);
+      };
+      let resp;
+      try {
+        resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
+      } finally {
+        console.error = origError;
+      }
+
+      assert.strictEqual(resp.status, 500);
+      assert.strictEqual(resp.error, 'Version was not created');
+      assert(errors.length > 0, 'silent-500 path must emit a console.error so Cloudflare Logs is non-empty');
+      const payload = errors[0].find((a) => a && typeof a === 'object');
+      assert(payload, 'log must include a structured diagnostic payload');
+      assert.strictEqual(payload.contentType, undefined, 'payload must record contentType (undefined when source metadata is missing)');
+      assert.strictEqual(payload.hadLabel, true, 'payload must record whether a label was supplied');
+      assert.strictEqual(payload.currentStatus, 200, 'payload must record the source-object status');
+    });
+
     it('returns 201 when version client body is a ReadableStream that would be disturbed by SDK retry', async () => {
       // Regression test: putVersion passes current.body (a ReadableStream from getObject) to
       // PutObjectCommand. The AWS SDK retries on network failures using the same stream — but a
