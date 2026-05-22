@@ -1,3 +1,10 @@
+## [1.9.2](https://github.com/adobe/da-admin/compare/v1.9.1...v1.9.2) (2026-05-22)
+
+
+### Bug Fixes
+
+* **version:** log diagnostics on POST /versionsource silent 500 ([#284](https://github.com/adobe/da-admin/issues/284)) ([f06504b](https://github.com/adobe/da-admin/commit/f06504bb1365923dc8d588f60fe9db1d6bfc0b04))
+
 ## [1.9.1](https://github.com/adobe/da-admin/compare/v1.9.0...v1.9.1) (2026-05-21)
 
 
