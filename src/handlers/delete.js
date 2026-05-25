@@ -10,11 +10,13 @@
  * governing permissions and limitations under the License.
  */
 import { deleteSource } from '../routes/source.js';
+import { deleteComments } from '../routes/comments.js';
 
 export default async function deleteHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
   if (path.startsWith('/source')) return deleteSource({ req, env, daCtx });
+  if (path.startsWith('/comments')) return deleteComments({ req, env, daCtx });
 
   return undefined;
 }

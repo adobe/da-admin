@@ -62,6 +62,33 @@ describe('Post Route', () => {
     assert.strictEqual(mediaCalled[0].daCtx, daCtx);
   });
 
+  it('dispatches /comments to postComments', async () => {
+    const calls = [];
+    const postHandlerMocked = (await esmock('../../src/handlers/post.js', {
+      '../../src/routes/comments.js': {
+        postComments: async (args) => {
+          calls.push(args);
+          return { status: 201 };
+        },
+      },
+      '../../src/routes/source.js': { postSource: async () => ({ status: 200 }) },
+      '../../src/routes/config.js': { postConfig: async () => ({ status: 200 }) },
+      '../../src/routes/version.js': { postVersionSource: async () => ({ status: 200 }) },
+      '../../src/routes/copy.js': { default: async () => ({ status: 200 }) },
+      '../../src/routes/move.js': { default: async () => ({ status: 200 }) },
+      '../../src/routes/logout.js': { default: async () => ({ status: 200 }) },
+      '../../src/routes/media.js': { default: async () => ({ status: 200 }) },
+    })).default;
+
+    const resp = await postHandlerMocked({
+      req: {},
+      env: {},
+      daCtx: { path: '/comments/myorg/mysite/docid123/threads' },
+    });
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual(calls.length, 1);
+  });
+
   it('Test unknown route returns undefined', async () => {
     const req = { method: 'POST' };
     const env = {};

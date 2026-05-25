@@ -58,6 +58,7 @@ export async function setUser(userId, expiration, reqHeaders, env) {
   const value = JSON.stringify({
     email: json.email,
     ident: json.userId,
+    name: json.displayName,
     orgs,
   });
 
