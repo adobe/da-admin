@@ -223,10 +223,11 @@ async function usersHash(usersJson) {
  * @returns {Promise<{ status: number, error?: string }>}
  */
 export async function writeAuditEntry(env, ctx, repo, fileId, entry) {
+  let userHash;
   try {
     const config = getS3Config(env);
     const client = new S3Client(config);
-    const userHash = await usersHash(entry.users);
+    userHash = await usersHash(entry.users);
     const key = `${ctx.org}/${auditUserKey(repo, fileId, userHash)}`;
     const nowMs = parseInt(entry.timestamp, 10) || Date.now();
     const entryUsersNorm = usersNormalized(entry.users);
@@ -291,7 +292,7 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry) {
     return { status: resp?.$metadata?.httpStatusCode ?? 200 };
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.error('writeAuditEntry failed', e);
+    console.error('writeAuditEntry failed', { repo, fileId, userHash: typeof userHash === 'string' ? userHash : undefined }, e);
     return { status: 500, error: e.message };
   }
 }
