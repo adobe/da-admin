@@ -644,61 +644,6 @@ describe('Version Audit', () => {
       assert.strictEqual(putCalls[0].IfMatch, undefined, 'If-Match must be absent for first write');
     });
 
-    it('retries on 412 from PUT and succeeds on a later attempt', async () => {
-      let getCallCount = 0;
-      const putCalls = [];
-
-      const makeBody = () => new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(''));
-          controller.close();
-        },
-      });
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  getCallCount += 1;
-                  return { Body: makeBody(), ETag: `"etag-${getCallCount}"` };
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCalls.push(cmd.input);
-                  if (putCalls.length < 3) {
-                    // First two PUTs: simulate concurrent write → 412
-                    const err = new Error('precondition failed');
-                    err.$metadata = { httpStatusCode: 412 };
-                    throw err;
-                  }
-                  return { $metadata: { httpStatusCode: 200 } };
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '5000',
-        users: '[{"email":"u@x.com"}]',
-        path: 'repo/doc.html',
-      });
-
-      assert.strictEqual(result.status, 200);
-      assert.strictEqual(getCallCount, 3, 'must re-read on each retry');
-      assert.strictEqual(putCalls.length, 3, 'must retry the PUT until success');
-      assert.strictEqual(putCalls[0].IfMatch, '"etag-1"');
-      assert.strictEqual(putCalls[1].IfMatch, '"etag-2"', 'first retry uses fresh ETag');
-      assert.strictEqual(putCalls[2].IfMatch, '"etag-3"', 'second retry uses fresh ETag');
-    });
-
     it('archives existing content and starts fresh when entry count reaches AUDIT_MAX_ENTRIES', async () => {
       const { AUDIT_MAX_ENTRIES } = await import('../../../src/storage/version/audit.js');
 
@@ -744,24 +689,25 @@ describe('Version Audit', () => {
 
       const newEntry = {
         timestamp: String(lastTs + 10000000),
-        users: '[{"email":"other@x.com"}]',
+        users: '[{"email":"u@x.com"}]',
         path: '/doc.html',
       };
 
       const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', newEntry);
 
       assert.strictEqual(result.status, 200);
-      assert.strictEqual(putCalls.length, 2, 'must PUT archive + new audit.txt');
+      assert.strictEqual(putCalls.length, 2, 'must PUT archive + new per-user shard');
 
-      const archivePut = putCalls.find((p) => p.Key.includes('audit-'));
-      const auditPut = putCalls.find((p) => p.Key.endsWith('audit.txt'));
-      assert.ok(archivePut, 'archive PUT must exist');
-      assert.ok(auditPut, 'audit.txt PUT must exist');
+      // Per-user sharding: both PUTs hit audit-{userHash}; archive has -{ts} suffix.
+      const archivePut = putCalls.find((pu) => /audit-[a-f0-9]{16}-\d+\.txt$/.test(pu.Key));
+      const livePut = putCalls.find((pu) => /audit-[a-f0-9]{16}\.txt$/.test(pu.Key));
+      assert.ok(archivePut, 'archive PUT must exist (per-user audit-{hash}-{ts}.txt)');
+      assert.ok(livePut, 'live per-user PUT must exist (audit-{hash}.txt)');
       assert.strictEqual(archivePut.Body, existingText, 'archive must contain the old content');
-      assert.ok(archivePut.Key.includes(`audit-${lastTs}`), 'archive key must use last entry timestamp');
-      const newAuditLines = auditPut.Body.split('\n').filter((l) => l.trim());
-      assert.strictEqual(newAuditLines.length, 1, 'new audit.txt must contain only the new entry');
-      assert.ok(newAuditLines[0].includes(newEntry.timestamp), 'new entry must be present in fresh audit.txt');
+      assert.ok(archivePut.Key.endsWith(`-${lastTs}.txt`), 'archive key must use last entry timestamp');
+      const newAuditLines = livePut.Body.split('\n').filter((l) => l.trim());
+      assert.strictEqual(newAuditLines.length, 1, 'fresh shard must contain only the new entry');
+      assert.ok(newAuditLines[0].includes(newEntry.timestamp), 'new entry must be present in fresh shard');
     });
 
     it('treats malformed users JSON in existing entry as opaque string (no crash)', async () => {
@@ -814,17 +760,8 @@ describe('Version Audit', () => {
       assert.strictEqual(lines.length, 2, 'both entries must be present (no collapse across mismatched users)');
     });
 
-    it('returns status 500 when PUT 412 persists across all 7 attempts', async () => {
-      let getCallCount = 0;
-      let putCallCount = 0;
-
-      const makeBody = () => new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(''));
-          controller.close();
-        },
-      });
-
+    it('two different users write to two different per-user keys (zero cross-user contention)', async () => {
+      const calls = [];
       const { writeAuditEntry } = await esmock(
         '../../../src/storage/version/audit.js',
         {
@@ -832,11 +769,117 @@ describe('Version Audit', () => {
             S3Client: function S3Client() {
               this.send = async (cmd) => {
                 if (cmd instanceof GetObjectCommand) {
-                  getCallCount += 1;
-                  return { Body: makeBody(), ETag: '"etag-x"' };
+                  const err = new Error('not found');
+                  err.name = 'NoSuchKey';
+                  throw err;
                 }
                 if (cmd instanceof PutObjectCommand) {
-                  putCallCount += 1;
+                  calls.push(cmd.input);
+                  return { $metadata: { httpStatusCode: 200 } };
+                }
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+      const base = { timestamp: '1000', path: '/doc.html' };
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', { ...base, users: '[{"email":"a@x.com"}]' });
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', { ...base, users: '[{"email":"b@x.com"}]' });
+      assert.strictEqual(calls.length, 2);
+      assert.notStrictEqual(calls[0].Key, calls[1].Key, 'different users must write to different keys');
+      assert.match(calls[0].Key, /\/audit-[a-f0-9]{16}\.txt$/, 'per-user shard key pattern');
+      assert.match(calls[1].Key, /\/audit-[a-f0-9]{16}\.txt$/, 'per-user shard key pattern');
+    });
+
+    it('same-user concurrent writes land on the same per-user key (dedup applies)', async () => {
+      const calls = [];
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) {
+                  const err = new Error('not found');
+                  err.name = 'NoSuchKey';
+                  throw err;
+                }
+                if (cmd instanceof PutObjectCommand) {
+                  calls.push(cmd.input);
+                  return { $metadata: { httpStatusCode: 200 } };
+                }
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+      const user = '[{"email":"u@x.com"}]';
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', { timestamp: '1000', users: user, path: '/doc.html' });
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', { timestamp: '2000', users: user, path: '/doc.html' });
+      assert.strictEqual(calls.length, 2);
+      assert.strictEqual(calls[0].Key, calls[1].Key, 'same user writes hit the same per-user key');
+    });
+
+    it('anonymous user lands on the audit-anon.txt shard (no hash)', async () => {
+      const calls = [];
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) {
+                  const err = new Error('not found');
+                  err.name = 'NoSuchKey';
+                  throw err;
+                }
+                if (cmd instanceof PutObjectCommand) {
+                  calls.push(cmd.input);
+                  return { $metadata: { httpStatusCode: 200 } };
+                }
+                return { $metadata: { httpStatusCode: 200 } };
+              };
+            },
+            GetObjectCommand,
+            PutObjectCommand,
+          },
+          '../../../src/storage/utils/config.js': { default: () => ({}) },
+        },
+      );
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', { timestamp: '1000', users: '[{"email":"anonymous"}]', path: '/doc.html' });
+      assert.strictEqual(calls.length, 1);
+      assert.ok(calls[0].Key.endsWith('/audit-anon.txt'), 'anonymous identity uses fixed shard');
+    });
+
+    it('returns 500 immediately on PUT 412 with no retry (append-only ledger contract)', async () => {
+      let putCount = 0;
+      const { writeAuditEntry } = await esmock(
+        '../../../src/storage/version/audit.js',
+        {
+          '@aws-sdk/client-s3': {
+            S3Client: function S3Client() {
+              this.send = async (cmd) => {
+                if (cmd instanceof GetObjectCommand) {
+                  return {
+                    Body: new ReadableStream({
+                      start(c) {
+                        c.enqueue(new TextEncoder().encode(''));
+                        c.close();
+                      },
+                    }),
+                    ETag: '"etag-x"',
+                  };
+                }
+                if (cmd instanceof PutObjectCommand) {
+                  putCount += 1;
                   const err = new Error('precondition failed');
                   err.$metadata = { httpStatusCode: 412 };
                   throw err;
@@ -850,155 +893,9 @@ describe('Version Audit', () => {
           '../../../src/storage/utils/config.js': { default: () => ({}) },
         },
       );
-
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '5000',
-        users: '[{"email":"u@x.com"}]',
-        path: 'repo/doc.html',
-      });
-
-      assert.strictEqual(result.status, 500, 'persistent 412 must surface as 500 after 7 total attempts');
-      assert.strictEqual(result.error, 'precondition failed');
-      assert.strictEqual(putCallCount, 7, 'must attempt PUT 7 times total (1 initial + 6 retries)');
-      assert.strictEqual(getCallCount, 7, 'must re-read on each attempt');
-    });
-
-    it('uses exponential jitter backoff (0-50, 0-100, 0-200, 0-400, 0-800, 0-1600 ms) across six 412 retries', async () => {
-      // Stubs setTimeout and Math.random to capture per-retry delays.
-      // Asserts per-attempt exponential upper bounds for the 6-retry ladder
-      // (50, 100, 200, 400, 800, 1600 ms) and total elapsed sleep ~3050 ms.
-      const originalSetTimeout = globalThis.setTimeout;
-      const originalRandom = Math.random;
-      const delays = [];
-      Math.random = () => 0.999999;
-      globalThis.setTimeout = (fn, ms) => {
-        delays.push(ms);
-        fn();
-        return 0;
-      };
-
-      try {
-        const makeBody = () => new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode(''));
-            controller.close();
-          },
-        });
-
-        const { writeAuditEntry } = await esmock(
-          '../../../src/storage/version/audit.js',
-          {
-            '@aws-sdk/client-s3': {
-              S3Client: function S3Client() {
-                this.send = async (cmd) => {
-                  if (cmd instanceof GetObjectCommand) {
-                    return { Body: makeBody(), ETag: '"etag-x"' };
-                  }
-                  if (cmd instanceof PutObjectCommand) {
-                    const err = new Error('precondition failed');
-                    err.$metadata = { httpStatusCode: 412 };
-                    throw err;
-                  }
-                  return { $metadata: { httpStatusCode: 200 } };
-                };
-              },
-              GetObjectCommand,
-              PutObjectCommand,
-            },
-            '../../../src/storage/utils/config.js': { default: () => ({}) },
-          },
-        );
-
-        await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-          timestamp: '5000',
-          users: '[{"email":"u@x.com"}]',
-          path: 'repo/doc.html',
-        });
-      } finally {
-        globalThis.setTimeout = originalSetTimeout;
-        Math.random = originalRandom;
-      }
-
-      assert.strictEqual(delays.length, 6, 'must sleep between each of the 6 retries');
-      const upperBounds = [50, 100, 200, 400, 800, 1600];
-      delays.forEach((ms, i) => {
-        assert.ok(
-          ms >= 0 && ms < upperBounds[i],
-          `delay[${i}]=${ms} must be within [0, ${upperBounds[i]})`,
-        );
-      });
-      assert.ok(
-        delays[2] >= 150,
-        `delay[2]=${delays[2]} must exceed the prior linear cap of 150 ms`,
-      );
-      assert.ok(
-        delays[3] >= 200,
-        `delay[3]=${delays[3]} must exceed the prior linear cap of 200 ms`,
-      );
-      assert.ok(
-        delays[5] >= 800,
-        `delay[5]=${delays[5]} must reach the new 6-retry exponential ceiling (>=800 ms)`,
-      );
-      const total = delays.reduce((a, b) => a + b, 0);
-      assert.ok(
-        total > 1500,
-        `total elapsed sleep ${total} must exceed prior 4-retry worst-case (~750 ms)`,
-      );
-      assert.ok(
-        total < 3200,
-        `total elapsed sleep ${total} must stay within the new 6-retry worst-case (~3050 ms)`,
-      );
-    });
-
-    it('succeeds on the 5th attempt after four 412s', async () => {
-      let getCallCount = 0;
-      let putCallCount = 0;
-
-      const makeBody = () => new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(''));
-          controller.close();
-        },
-      });
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  getCallCount += 1;
-                  return { Body: makeBody(), ETag: `"etag-${getCallCount}"` };
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCallCount += 1;
-                  if (putCallCount < 5) {
-                    const err = new Error('precondition failed');
-                    err.$metadata = { httpStatusCode: 412 };
-                    throw err;
-                  }
-                  return { $metadata: { httpStatusCode: 200 } };
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '5000',
-        users: '[{"email":"u@x.com"}]',
-        path: 'repo/doc.html',
-      });
-
-      assert.strictEqual(result.status, 200, 'must succeed on the 5th attempt');
-      assert.strictEqual(putCallCount, 5, 'must have attempted PUT 5 times');
-      assert.strictEqual(getCallCount, 5, 'must re-read on each attempt');
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', { timestamp: '1000', users: '[{"email":"u@x.com"}]', path: '/doc.html' });
+      assert.strictEqual(result.status, 500, '412 must surface as 500 immediately');
+      assert.strictEqual(putCount, 1, 'append-only ledger does not retry on 412');
     });
   });
 });

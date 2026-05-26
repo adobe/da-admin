@@ -52,3 +52,28 @@ export function auditArchiveKey(repo, fileId, timestamp) {
 export function auditDirPrefix(repo, fileId) {
   return `${repo}/.da-versions/${fileId}/audit`;
 }
+
+/**
+ * Per-user audit file key. The audit ledger is sharded by hashed user identity so concurrent
+ * writers from different users never collide on the same R2 key (no If-Match contention).
+ * @param {string} repo
+ * @param {string} fileId
+ * @param {string} userHash - SHA-256-derived stable hash of the normalized users field
+ * @returns {string} key (repo/.da-versions/fileId/audit-{userHash}.txt)
+ */
+export function auditUserKey(repo, fileId, userHash) {
+  return `${repo}/.da-versions/${fileId}/audit-${userHash}.txt`;
+}
+
+/**
+ * Per-user archive key — same shape as auditUserKey with a timestamp suffix so that per-user
+ * audit rotation (AUDIT_MAX_ENTRIES) creates a sealed historical object next to the live one.
+ * @param {string} repo
+ * @param {string} fileId
+ * @param {string} userHash
+ * @param {string|number} timestamp - last entry timestamp in the archived file
+ * @returns {string} key (repo/.da-versions/fileId/audit-{userHash}-{ts}.txt)
+ */
+export function auditUserArchiveKey(repo, fileId, userHash, timestamp) {
+  return `${repo}/.da-versions/${fileId}/audit-${userHash}-${timestamp}.txt`;
+}

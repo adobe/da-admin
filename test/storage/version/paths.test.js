@@ -15,6 +15,8 @@ import {
   auditKey,
   auditArchiveKey,
   auditDirPrefix,
+  auditUserKey,
+  auditUserArchiveKey,
 } from '../../../src/storage/version/paths.js';
 
 describe('Version Paths', () => {
@@ -57,9 +59,35 @@ describe('Version Paths', () => {
   });
 
   describe('auditDirPrefix', () => {
-    it('returns prefix that matches audit.txt and audit-*.txt', () => {
+    it('returns prefix that matches audit.txt, audit-*.txt, and per-user audit-{hash}.txt files', () => {
       const prefix = auditDirPrefix('myrepo', 'file-id-xyz');
       assert.strictEqual(prefix, 'myrepo/.da-versions/file-id-xyz/audit');
+    });
+  });
+
+  describe('auditUserKey', () => {
+    it('returns per-user audit shard key under .da-versions', () => {
+      const key = auditUserKey('myrepo', 'file-id-xyz', 'deadbeefcafef00d');
+      assert.strictEqual(key, 'myrepo/.da-versions/file-id-xyz/audit-deadbeefcafef00d.txt');
+    });
+
+    it('lives under the same prefix as auditDirPrefix so ListObjectsV2 picks it up', () => {
+      const repo = 'r';
+      const fileId = 'f';
+      const prefix = auditDirPrefix(repo, fileId);
+      assert.ok(auditUserKey(repo, fileId, 'anon').startsWith(prefix));
+    });
+  });
+
+  describe('auditUserArchiveKey', () => {
+    it('returns per-user archive key with timestamp suffix', () => {
+      const key = auditUserArchiveKey('myrepo', 'fid', 'abc1234567890def', 1234567890);
+      assert.strictEqual(key, 'myrepo/.da-versions/fid/audit-abc1234567890def-1234567890.txt');
+    });
+
+    it('matches the audit prefix (read merges it transparently)', () => {
+      const prefix = auditDirPrefix('r', 'f');
+      assert.ok(auditUserArchiveKey('r', 'f', 'anon', '9999').startsWith(prefix));
     });
   });
 });

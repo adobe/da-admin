@@ -17,7 +17,7 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
-import { auditKey, auditArchiveKey, auditDirPrefix } from './paths.js';
+import { auditDirPrefix, auditUserKey, auditUserArchiveKey } from './paths.js';
 
 /** Same-user edits within this window (ms) collapse into one entry (last timestamp). 30 min. */
 export const AUDIT_TIME_WINDOW_MS = 30 * 60 * 1000;
@@ -187,25 +187,47 @@ function usersNormalized(usersJson) {
 }
 
 /**
- * Append or update last line in audit.txt (read-modify-write). If last line is same user
- * and within AUDIT_TIME_WINDOW_MS and both last and new are edits (no version), replace that
- * line; else append. A version entry always appends and is never replaced (breaks the window).
+ * Derive a stable, privacy-preserving shard key for an audit entry from its users field. Two
+ * writes by the same user(s) land on the same shard (so write-side dedup still applies); two
+ * writes by different users land on different shards (so they never race the same If-Match etag).
  *
- * Uses If-Match on the PUT so that a concurrent write causes a 412, which triggers up to 6
- * retries with random jitter to reduce thundering-herd contention (7 total attempts).
+ * 16 hex chars from SHA-256 are enough to avoid collisions across the realistic per-doc user set
+ * and short enough to keep object keys readable. Anonymous / empty / non-email payloads fall back
+ * to a fixed slug so they share a stable shard.
+ * @param {string} usersJson
+ * @returns {Promise<string>} 16 hex chars, or 'anon' for empty/anonymous identities
+ */
+async function usersHash(usersJson) {
+  const norm = usersNormalized(usersJson);
+  if (!norm || norm === 'anonymous') return 'anon';
+  const data = new TextEncoder().encode(norm);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  const arr = Array.from(new Uint8Array(buf));
+  return arr.map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
+
+/**
+ * Append one audit entry to the per-user audit shard. Each user gets their own
+ * `audit-{userHash}.txt` key under `{org}/{repo}/.da-versions/{fileId}/`, so two users editing
+ * the same doc never compete for the same If-Match etag. Inside a single user shard the
+ * existing same-user same-window collapse rule still applies; the single GET-modify-PUT-
+ * with-If-Match runs without retries because (a) cross-user contention is zero by
+ * construction, and (b) the rare same-user concurrent race folds into one observable entry
+ * via dedup whether the loser is retried or dropped.
+ *
  * @param {object} env
- * @param {{ bucket: string, org: string }} ctx - bucket, org
+ * @param {{ bucket: string, org: string }} ctx
  * @param {string} repo
  * @param {string} fileId
  * @param {object} entry - { timestamp, users, path, versionLabel?, versionId? }
- * @param {number} [attempt=0] - retry counter (max 6 retries)
- * @returns {Promise<{ status: number }>}
+ * @returns {Promise<{ status: number, error?: string }>}
  */
-export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0) {
+export async function writeAuditEntry(env, ctx, repo, fileId, entry) {
   try {
     const config = getS3Config(env);
     const client = new S3Client(config);
-    const key = `${ctx.org}/${auditKey(repo, fileId)}`;
+    const userHash = await usersHash(entry.users);
+    const key = `${ctx.org}/${auditUserKey(repo, fileId, userHash)}`;
     const nowMs = parseInt(entry.timestamp, 10) || Date.now();
     const entryUsersNorm = usersNormalized(entry.users);
 
@@ -250,7 +272,7 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0
       const archiveTs = lastLine?.timestamp || Date.now();
       await client.send(new PutObjectCommand({
         Bucket: ctx.bucket,
-        Key: `${ctx.org}/${auditArchiveKey(repo, fileId, archiveTs)}`,
+        Key: `${ctx.org}/${auditUserArchiveKey(repo, fileId, userHash, archiveTs)}`,
         Body: existingText,
         ContentType: 'text/plain; charset=utf-8',
       }));
@@ -265,26 +287,8 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0
     };
     if (etag) putInput.IfMatch = etag;
 
-    try {
-      const resp = await client.send(new PutObjectCommand(putInput));
-      return { status: resp?.$metadata?.httpStatusCode ?? 200 };
-    } catch (e) {
-      if (e?.$metadata?.httpStatusCode === 412 && attempt < 6) {
-        // Exponential jitter, 6 retries: per-attempt max 50, 100, 200,
-        // 400, 800, 1600 ms (~3050 ms worst-case total). Two prior 4-retry
-        // backoff bumps did not converge because the contention window is
-        // wider than per-write latency — every retry inside a short window
-        // observes the same losing-etag generation. Append-only ledger
-        // (one object per entry) is the next escalation if this still fails.
-        const delay = Math.random() * 50 * 2 ** attempt;
-        // eslint-disable-next-line no-await-in-loop -- sequential retry with jitter
-        await new Promise((r) => {
-          setTimeout(r, delay);
-        });
-        return writeAuditEntry(env, ctx, repo, fileId, entry, attempt + 1);
-      }
-      throw e;
-    }
+    const resp = await client.send(new PutObjectCommand(putInput));
+    return { status: resp?.$metadata?.httpStatusCode ?? 200 };
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('writeAuditEntry failed', e);
