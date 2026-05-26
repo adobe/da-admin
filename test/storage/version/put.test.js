@@ -2634,7 +2634,7 @@ describe('Version Put', () => {
       );
     });
 
-    it('calls writeAuditEntry once and succeeds (retries are handled inside writeAuditEntry)', async () => {
+    it('calls writeAuditEntry exactly once per versionable PUT (append-only ledger: no retries)', async () => {
       let callCount = 0;
       const mockWriteAuditEntry = async () => {
         callCount += 1;
@@ -2670,7 +2670,7 @@ describe('Version Put', () => {
       );
 
       assert.strictEqual(resp.status, 200, 'document write must succeed');
-      assert.strictEqual(callCount, 1, 'put.js must call writeAuditEntry exactly once (retries are handled inside writeAuditEntry)');
+      assert.strictEqual(callCount, 1, 'put.js must call writeAuditEntry exactly once (append-only ledger: a single unconditional PUT inside, no retries)');
     });
 
     it('writeAuditEntry returning status 500 does not affect main put result', async () => {

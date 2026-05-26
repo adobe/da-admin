@@ -44,11 +44,25 @@ export function auditArchiveKey(repo, fileId, timestamp) {
 }
 
 /**
- * Prefix that matches all audit files (audit.txt + audit-*.txt) for a file.
+ * Prefix matching all audit files (audit.txt + audit-*.txt + per-entry objects under audit/).
  * @param {string} repo
  * @param {string} fileId
  * @returns {string} prefix (repo/.da-versions/fileId/audit)
  */
 export function auditDirPrefix(repo, fileId) {
   return `${repo}/.da-versions/${fileId}/audit`;
+}
+
+/**
+ * Per-entry audit object key (append-only ledger). Each audit entry is one S3 object
+ * under {repo}/.da-versions/{fileId}/audit/, eliminating read-modify-write contention on
+ * audit.txt. Uses {ts}-{rand} so concurrent writers at the same millisecond cannot collide.
+ * @param {string} repo
+ * @param {string} fileId
+ * @param {string|number} timestamp - entry timestamp (ms)
+ * @param {string} rand - random suffix for uniqueness
+ * @returns {string} key (repo/.da-versions/fileId/audit/{ts}-{rand}.txt)
+ */
+export function auditEntryKey(repo, fileId, timestamp, rand) {
+  return `${repo}/.da-versions/${fileId}/audit/${timestamp}-${rand}.txt`;
 }

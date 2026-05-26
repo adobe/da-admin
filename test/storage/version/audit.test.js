@@ -13,10 +13,34 @@ import assert from 'node:assert';
 import esmock from 'esmock';
 import { GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
+const AUDIT_MODULE = '../../../src/storage/version/audit.js';
+const CONFIG_MODULE = '../../../src/storage/utils/config.js';
+
+function makeStreamBody(text) {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(text));
+      controller.close();
+    },
+  });
+}
+
+async function mockAudit(sendHandler) {
+  return esmock(AUDIT_MODULE, {
+    '@aws-sdk/client-s3': {
+      S3Client: function S3Client() { this.send = sendHandler; },
+      GetObjectCommand,
+      PutObjectCommand,
+      ListObjectsV2Command,
+    },
+    [CONFIG_MODULE]: { default: () => ({}) },
+  });
+}
+
 describe('Version Audit', () => {
   describe('formatAuditLine / parseAuditLine', () => {
     it('round-trips one entry (edit, no versionLabel/versionId)', async () => {
-      const { formatAuditLine, parseAuditLine } = await import('../../../src/storage/version/audit.js');
+      const { formatAuditLine, parseAuditLine } = await import(AUDIT_MODULE);
       const entry = { timestamp: '1000', users: '[{"email":"a@b.com"}]', path: 'repo/doc.html' };
       const line = formatAuditLine(entry);
       assert.strictEqual(line, '1000\t[{"email":"a@b.com"}]\trepo/doc.html\t\t');
@@ -29,7 +53,7 @@ describe('Version Audit', () => {
     });
 
     it('round-trips entry with versionLabel and versionId (labelled save)', async () => {
-      const { formatAuditLine, parseAuditLine } = await import('../../../src/storage/version/audit.js');
+      const { formatAuditLine, parseAuditLine } = await import(AUDIT_MODULE);
       const entry = {
         timestamp: '2000',
         users: '[{"email":"u@x.com"}]',
@@ -45,56 +69,36 @@ describe('Version Audit', () => {
     });
 
     it('parses legacy 3-column line (backward compat)', async () => {
-      const { parseAuditLine } = await import('../../../src/storage/version/audit.js');
-      const line = '1000\t[{}]\trepo/f.html';
-      const parsed = parseAuditLine(line);
+      const { parseAuditLine } = await import(AUDIT_MODULE);
+      const parsed = parseAuditLine('1000\t[{}]\trepo/f.html');
       assert.strictEqual(parsed.timestamp, '1000');
       assert.strictEqual(parsed.versionLabel, '');
       assert.strictEqual(parsed.versionId, '');
     });
 
     it('parses legacy 4-column line (versionId only, no label)', async () => {
-      const { parseAuditLine } = await import('../../../src/storage/version/audit.js');
-      const line = '2000\t[{}]\trepo/f.html\told-uuid.html';
-      const parsed = parseAuditLine(line);
+      const { parseAuditLine } = await import(AUDIT_MODULE);
+      const parsed = parseAuditLine('2000\t[{}]\trepo/f.html\told-uuid.html');
       assert.strictEqual(parsed.timestamp, '2000');
       assert.strictEqual(parsed.versionLabel, '');
       assert.strictEqual(parsed.versionId, 'old-uuid.html');
     });
   });
-
   describe('readAuditLines', () => {
     it('reads audit lines from a Node-style async iterable body', async () => {
       const lineText = '3000\t[{"email":"node@x.com"}]\trepo/path.html\t\t\n';
-
       async function* asyncIterableBody() {
         yield Buffer.from(lineText.slice(0, 10));
         yield Buffer.from(lineText.slice(10));
       }
-
-      const { readAuditLines } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof ListObjectsV2Command) {
-                  return { Contents: [{ Key: 'o/repo/.da-versions/fid/audit.txt' }] };
-                }
-                if (cmd instanceof GetObjectCommand) return { Body: asyncIterableBody() };
-                return {};
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return { Contents: [{ Key: 'o/repo/.da-versions/fid/audit.txt' }] };
+        }
+        if (cmd instanceof GetObjectCommand) return { Body: asyncIterableBody() };
+        return {};
+      });
       const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
-
       assert.strictEqual(lines.length, 1);
       assert.strictEqual(lines[0].timestamp, 3000);
       assert.deepStrictEqual(lines[0].users, [{ email: 'node@x.com' }]);
@@ -103,84 +107,44 @@ describe('Version Audit', () => {
 
     it('returns [] when S3 throws 404 (NoSuchKey)', async () => {
       const notFound = Object.assign(new Error('not found'), { name: 'NoSuchKey' });
-
-      const { readAuditLines } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async () => {
-                throw notFound;
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
+      const { readAuditLines } = await mockAudit(async () => {
+        throw notFound;
+      });
       const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
       assert.deepStrictEqual(lines, []);
     });
 
-    it('returns empty string when Node-style async iterable body throws during iteration', async () => {
+    it('skips a per-entry stream that throws during iteration (no crash)', async () => {
+      const goodLine = '9000\t[{"email":"good@x.com"}]\trepo/f.html\t\t\n';
       async function* throwingIterable() {
         yield Buffer.from('partial');
         throw new Error('stream error mid-read');
       }
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) return { Body: throwingIterable() };
-                if (cmd instanceof PutObjectCommand) return { $metadata: { httpStatusCode: 200 } };
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      // throwing iterable → streamToString catch → existingText = '' → append new entry
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '7000',
-        users: '[{"email":"e@x.com"}]',
-        path: 'repo/f.html',
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return {
+            Contents: [
+              { Key: 'o/repo/.da-versions/fid/audit/8000-aaaa.txt' },
+              { Key: 'o/repo/.da-versions/fid/audit/9000-bbbb.txt' },
+            ],
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          if (cmd.input.Key.endsWith('8000-aaaa.txt')) return { Body: throwingIterable() };
+          return { Body: makeStreamBody(goodLine) };
+        }
+        return {};
       });
-
-      assert.strictEqual(result.status, 200);
+      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(lines.length, 1, 'failed-stream object must be skipped, not crash readAuditLines');
+      assert.strictEqual(lines[0].timestamp, 9000);
     });
 
-    it('re-throws when S3 throws a non-404 error in readAuditLines', async () => {
-      const serverError = Object.assign(new Error('server err'), {
-        $metadata: { httpStatusCode: 500 },
+    it('re-throws when S3 throws a non-404 error', async () => {
+      const serverError = Object.assign(new Error('server err'), { $metadata: { httpStatusCode: 500 } });
+      const { readAuditLines } = await mockAudit(async () => {
+        throw serverError;
       });
-
-      const { readAuditLines } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async () => {
-                throw serverError;
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
       await assert.rejects(
         () => readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid'),
         (err) => err.$metadata?.httpStatusCode === 500,
@@ -189,816 +153,371 @@ describe('Version Audit', () => {
 
     it('returns default anonymous user when users JSON is invalid', async () => {
       const lineText = '1000\tinvalid-json\trepo/doc.html\t\t\n';
-
-      const { readAuditLines } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof ListObjectsV2Command) {
-                  return { Contents: [{ Key: 'o/repo/.da-versions/fid/audit.txt' }] };
-                }
-                return {
-                  Body: new ReadableStream({
-                    start(controller) {
-                      controller.enqueue(new TextEncoder().encode(lineText));
-                      controller.close();
-                    },
-                  }),
-                };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return { Contents: [{ Key: 'o/repo/.da-versions/fid/audit.txt' }] };
+        }
+        return { Body: makeStreamBody(lineText) };
+      });
       const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
       assert.strictEqual(lines.length, 1);
       assert.deepStrictEqual(lines[0].users, [{ email: 'anonymous' }]);
     });
-
-    it('reads current audit.txt and archive files, merging all entries', async () => {
+    it('merges legacy audit.txt, archive files, and per-entry objects (transparent migration)', async () => {
       const archiveLine = '1000\t[{"email":"a@x.com"}]\t/doc.html\t\t';
-      const currentLine = '9000\t[{"email":"b@x.com"}]\t/doc.html\t\t';
-
-      const { readAuditLines } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof ListObjectsV2Command) {
-                  return {
-                    Contents: [
-                      { Key: 'o/repo/.da-versions/fid/audit-1000.txt' },
-                      { Key: 'o/repo/.da-versions/fid/audit.txt' },
-                    ],
-                  };
-                }
-                if (cmd instanceof GetObjectCommand) {
-                  const isArchive = cmd.input.Key.includes('audit-1000');
-                  const line = isArchive ? archiveLine : currentLine;
-                  return {
-                    Body: new ReadableStream({
-                      start(controller) {
-                        controller.enqueue(new TextEncoder().encode(`${line}\n`));
-                        controller.close();
-                      },
-                    }),
-                  };
-                }
-                return {};
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
-      assert.strictEqual(lines.length, 2);
-      const timestamps = lines.map((l) => l.timestamp).sort((a, b) => a - b);
-      assert.deepStrictEqual(timestamps, [1000, 9000]);
+      const legacyLine = '2000\t[{"email":"b@x.com"}]\t/doc.html\t\t';
+      const perEntry1 = '7000\t[{"email":"c@x.com"}]\t/doc.html\t\t';
+      const perEntry2 = '9000\t[{"email":"d@x.com"}]\t/doc.html\t\t';
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return {
+            Contents: [
+              { Key: 'o/repo/.da-versions/fid/audit.txt' },
+              { Key: 'o/repo/.da-versions/fid/audit-1000.txt' },
+              { Key: 'o/repo/.da-versions/fid/audit/7000-aaaa.txt' },
+              { Key: 'o/repo/.da-versions/fid/audit/9000-bbbb.txt' },
+            ],
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          const k = cmd.input.Key;
+          if (k.endsWith('audit-1000.txt')) return { Body: makeStreamBody(`${archiveLine}\n`) };
+          if (k.endsWith('audit.txt')) return { Body: makeStreamBody(`${legacyLine}\n`) };
+          if (k.endsWith('7000-aaaa.txt')) return { Body: makeStreamBody(`${perEntry1}\n`) };
+          if (k.endsWith('9000-bbbb.txt')) return { Body: makeStreamBody(`${perEntry2}\n`) };
+        }
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(out.length, 4, 'all four sources must merge transparently');
+      assert.deepStrictEqual(out.map((l) => l.timestamp), [1000, 2000, 7000, 9000], 'must be sorted ascending');
     });
 
-    it('skips an archive file that throws on GET and still returns other entries', async () => {
+    it('skips an object that throws on GET and still returns other entries', async () => {
       const currentLine = '9000\t[{"email":"b@x.com"}]\t/doc.html\t\t';
-
-      const { readAuditLines } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof ListObjectsV2Command) {
-                  return {
-                    Contents: [
-                      { Key: 'o/repo/.da-versions/fid/audit-1000.txt' },
-                      { Key: 'o/repo/.da-versions/fid/audit.txt' },
-                    ],
-                  };
-                }
-                if (cmd instanceof GetObjectCommand) {
-                  if (cmd.input.Key.includes('audit-1000')) throw new Error('S3 read error');
-                  return {
-                    Body: new ReadableStream({
-                      start(controller) {
-                        controller.enqueue(new TextEncoder().encode(`${currentLine}\n`));
-                        controller.close();
-                      },
-                    }),
-                  };
-                }
-                return {};
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
-      assert.strictEqual(lines.length, 1, 'failed archive GET must be skipped, not throw');
-      assert.strictEqual(lines[0].timestamp, 9000);
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return {
+            Contents: [
+              { Key: 'o/repo/.da-versions/fid/audit-1000.txt' },
+              { Key: 'o/repo/.da-versions/fid/audit.txt' },
+            ],
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          if (cmd.input.Key.includes('audit-1000')) throw new Error('S3 read error');
+          return { Body: makeStreamBody(`${currentLine}\n`) };
+        }
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(out.length, 1, 'failed GET must be skipped, not throw');
+      assert.strictEqual(out[0].timestamp, 9000);
     });
 
-    it('returns [] when no audit files exist (empty list)', async () => {
-      const { readAuditLines } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof ListObjectsV2Command) return { Contents: [] };
-                return {};
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
+    it('returns [] when no audit objects exist (empty list)', async () => {
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) return { Contents: [] };
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.deepStrictEqual(out, []);
+    });
 
-      const lines = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
-      assert.deepStrictEqual(lines, []);
+    it('follows ContinuationToken to page across more than one ListObjectsV2 result', async () => {
+      const line1 = '1000\t[{"email":"a@x.com"}]\t/doc.html\t\t';
+      const line2 = '2000\t[{"email":"b@x.com"}]\t/doc.html\t\t';
+      let listCalls = 0;
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          listCalls += 1;
+          if (cmd.input.ContinuationToken === 'tok-1') {
+            return { Contents: [{ Key: 'o/repo/.da-versions/fid/audit/2000-b.txt' }], IsTruncated: false };
+          }
+          return {
+            Contents: [{ Key: 'o/repo/.da-versions/fid/audit/1000-a.txt' }],
+            IsTruncated: true,
+            NextContinuationToken: 'tok-1',
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          const k = cmd.input.Key;
+          if (k.endsWith('1000-a.txt')) return { Body: makeStreamBody(`${line1}\n`) };
+          if (k.endsWith('2000-b.txt')) return { Body: makeStreamBody(`${line2}\n`) };
+        }
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(listCalls, 2, 'must call ListObjectsV2 twice (second uses ContinuationToken)');
+      assert.strictEqual(out.length, 2);
+      assert.deepStrictEqual(out.map((l) => l.timestamp), [1000, 2000]);
+    });
+    it('collapses consecutive same-user edits within AUDIT_TIME_WINDOW_MS to the later entry', async () => {
+      const { AUDIT_TIME_WINDOW_MS } = await import(AUDIT_MODULE);
+      const half = Math.floor(AUDIT_TIME_WINDOW_MS / 2);
+      const t1 = 1000;
+      const t2 = t1 + half;
+      const line1 = `${String(t1)}\t[{"email":"u@x.com"}]\t/doc.html\t\t`;
+      const line2 = `${String(t2)}\t[{"email":"u@x.com"}]\t/doc.html\t\t`;
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return {
+            Contents: [
+              { Key: `o/repo/.da-versions/fid/audit/${t1}-aaaa.txt` },
+              { Key: `o/repo/.da-versions/fid/audit/${t2}-bbbb.txt` },
+            ],
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          const k = cmd.input.Key;
+          if (k.endsWith('-aaaa.txt')) return { Body: makeStreamBody(`${line1}\n`) };
+          return { Body: makeStreamBody(`${line2}\n`) };
+        }
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(out.length, 1, 'two same-user same-window edits must collapse to one');
+      assert.strictEqual(out[0].timestamp, t2, 'collapse must keep the later entry');
+    });
+
+    it('does NOT collapse when consecutive edits cross AUDIT_TIME_WINDOW_MS', async () => {
+      const { AUDIT_TIME_WINDOW_MS } = await import(AUDIT_MODULE);
+      const t1 = 1000;
+      const t2 = t1 + AUDIT_TIME_WINDOW_MS + 1;
+      const line1 = `${String(t1)}\t[{"email":"u@x.com"}]\t/doc.html\t\t`;
+      const line2 = `${String(t2)}\t[{"email":"u@x.com"}]\t/doc.html\t\t`;
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return {
+            Contents: [
+              { Key: `o/repo/.da-versions/fid/audit/${t1}-aaaa.txt` },
+              { Key: `o/repo/.da-versions/fid/audit/${t2}-bbbb.txt` },
+            ],
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          const k = cmd.input.Key;
+          if (k.endsWith('-aaaa.txt')) return { Body: makeStreamBody(`${line1}\n`) };
+          return { Body: makeStreamBody(`${line2}\n`) };
+        }
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(out.length, 2, 'edits outside the window must NOT collapse');
+      assert.deepStrictEqual(out.map((l) => l.timestamp), [t1, t2]);
+    });
+
+    it('does NOT collapse across different users', async () => {
+      const t1 = 1000;
+      const t2 = 2000;
+      const line1 = `${String(t1)}\t[{"email":"a@x.com"}]\t/doc.html\t\t`;
+      const line2 = `${String(t2)}\t[{"email":"b@x.com"}]\t/doc.html\t\t`;
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return {
+            Contents: [
+              { Key: `o/repo/.da-versions/fid/audit/${t1}-a.txt` },
+              { Key: `o/repo/.da-versions/fid/audit/${t2}-b.txt` },
+            ],
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          const k = cmd.input.Key;
+          if (k.endsWith('-a.txt')) return { Body: makeStreamBody(`${line1}\n`) };
+          return { Body: makeStreamBody(`${line2}\n`) };
+        }
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(out.length, 2, 'different users must NOT collapse');
+      assert.deepStrictEqual(out.map((l) => l.users[0].email), ['a@x.com', 'b@x.com']);
+    });
+    it('version entry breaks the collapse window (edit, version, edit produces 3 entries)', async () => {
+      const t1 = 1000;
+      const t2 = 2000;
+      const t3 = 3000;
+      const edit1 = `${String(t1)}\t[{"email":"u@x.com"}]\t/doc.html\t\t`;
+      const ver = `${String(t2)}\t[{"email":"u@x.com"}]\t/doc.html\tRelease 1\tuuid.html`;
+      const edit2 = `${String(t3)}\t[{"email":"u@x.com"}]\t/doc.html\t\t`;
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return {
+            Contents: [
+              { Key: `o/repo/.da-versions/fid/audit/${t1}-a.txt` },
+              { Key: `o/repo/.da-versions/fid/audit/${t2}-b.txt` },
+              { Key: `o/repo/.da-versions/fid/audit/${t3}-c.txt` },
+            ],
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          const k = cmd.input.Key;
+          if (k.includes(String(t1))) return { Body: makeStreamBody(`${edit1}\n`) };
+          if (k.includes(String(t2))) return { Body: makeStreamBody(`${ver}\n`) };
+          return { Body: makeStreamBody(`${edit2}\n`) };
+        }
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(out.length, 3, 'version entry must break the collapse window');
+      assert.deepStrictEqual(out.map((l) => l.timestamp), [t1, t2, t3]);
+      assert.strictEqual(out[1].versionLabel, 'Release 1');
+      assert.strictEqual(out[1].versionId, 'uuid.html');
+    });
+
+    it('treats malformed users JSON as opaque string (collapse falls back to raw comparison)', async () => {
+      const t1 = 1000;
+      const t2 = 2000;
+      const line1 = `${String(t1)}\tnot-valid-json\t/doc.html\t\t`;
+      const line2 = `${String(t2)}\tnot-valid-json\t/doc.html\t\t`;
+      const { readAuditLines } = await mockAudit(async (cmd) => {
+        if (cmd instanceof ListObjectsV2Command) {
+          return {
+            Contents: [
+              { Key: `o/repo/.da-versions/fid/audit/${t1}-a.txt` },
+              { Key: `o/repo/.da-versions/fid/audit/${t2}-b.txt` },
+            ],
+          };
+        }
+        if (cmd instanceof GetObjectCommand) {
+          const k = cmd.input.Key;
+          if (k.endsWith('-a.txt')) return { Body: makeStreamBody(`${line1}\n`) };
+          return { Body: makeStreamBody(`${line2}\n`) };
+        }
+        return {};
+      });
+      const out = await readAuditLines({}, { bucket: 'b', org: 'o' }, 'repo', 'fid');
+      assert.strictEqual(out.length, 1, 'identical malformed-JSON users normalize to the same raw string and collapse');
+      assert.strictEqual(out[0].timestamp, t2);
     });
   });
-
-  describe('writeAuditEntry read-modify-write', () => {
-    it('appends new line when existing content is read (Web ReadableStream body)', async () => {
-      const existingLine = '1000\t[{"email":"a@b.com"}]\trepo/path.html';
-      const bodyStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(`${existingLine}\n`));
-          controller.close();
-        },
-      });
-
-      const putCalls = [];
-      function createMockS3Client() {
-        return {
-          async send(cmd) {
-            if (cmd instanceof GetObjectCommand) return { Body: bodyStream };
-            if (cmd instanceof PutObjectCommand) {
-              putCalls.push(cmd.input);
-              return { $metadata: { httpStatusCode: 200 } };
-            }
-            return { $metadata: { httpStatusCode: 200 } };
-          },
-        };
-      }
-
-      const { writeAuditEntry, AUDIT_TIME_WINDOW_MS } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: createMockS3Client,
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const env = {};
-      const ctx = { bucket: 'bkt', org: 'org1' };
-      const newEntry = {
-        timestamp: String(1000 + AUDIT_TIME_WINDOW_MS + 1),
-        users: '[{"email":"a@b.com"}]',
-        path: 'repo/path.html',
-      };
-
-      const result = await writeAuditEntry(env, ctx, 'repo', 'file-id-1', newEntry);
-
-      assert.strictEqual(result.status, 200);
-      assert.strictEqual(putCalls.length, 1);
-      const putBody = putCalls[0].Body;
-      assert.strictEqual(typeof putBody, 'string');
-      const lines = putBody.split('\n').filter((l) => l.trim());
-      assert.strictEqual(lines.length, 2, 'must append: existing line + new line (would fail if stream not read)');
-      assert.ok(lines[0].startsWith('1000\t'));
-      assert.ok(lines[1].startsWith(String(1000 + AUDIT_TIME_WINDOW_MS + 1)));
-    });
-
-    it('overwrites last line when same user and within time window', async () => {
-      const existingLine = '1000\t[{"email":"x@y.com"}]\trepo/f.html';
-      const bodyStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(`${existingLine}\n`));
-          controller.close();
-        },
-      });
-
-      const putCalls = [];
-      function createMockS3ClientOverwrite() {
-        return {
-          async send(cmd) {
-            if (cmd instanceof GetObjectCommand) return { Body: bodyStream };
-            if (cmd instanceof PutObjectCommand) {
-              putCalls.push(cmd.input);
-              return { $metadata: { httpStatusCode: 200 } };
-            }
-            return { $metadata: { httpStatusCode: 200 } };
-          },
-        };
-      }
-
-      const { writeAuditEntry, AUDIT_TIME_WINDOW_MS } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: createMockS3ClientOverwrite,
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const newEntry = {
-        timestamp: String(1000 + Math.floor(AUDIT_TIME_WINDOW_MS / 2)),
-        users: '[{"email":"x@y.com"}]',
-        path: 'repo/f.html',
-      };
-
-      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', newEntry);
-
-      assert.strictEqual(putCalls.length, 1);
-      const lines = putCalls[0].Body.split('\n').filter((l) => l.trim());
-      assert.strictEqual(lines.length, 1, 'must overwrite last line (same user, within window)');
-    });
-
-    it('handles body with text() method (fetch Response-like body)', async () => {
-      const textBody = {
-        text: async () => '5000\t[{"email":"t@t.com"}]\trepo/doc.html\t\t\n',
-      };
-
-      const putCalls = [];
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) return { Body: textBody };
-                if (cmd instanceof PutObjectCommand) {
-                  putCalls.push(cmd.input);
-                  return { $metadata: { httpStatusCode: 200 } };
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const newEntry = {
-        timestamp: '9999',
-        users: '[{"email":"t@t.com"}]',
-        path: 'repo/doc.html',
-      };
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', newEntry);
-
-      assert.strictEqual(result.status, 200);
-      assert.strictEqual(putCalls.length, 1);
-      // text() body was read: existing line is present (same user, within window → collapsed)
-      const lines = putCalls[0].Body.split('\n').filter((l) => l.trim());
-      assert.ok(lines.length >= 1, 'body was read from text() stream');
-    });
-
-    it('returns status 500 when GET throws a non-404 error in writeAuditEntry', async () => {
-      const serverError = Object.assign(new Error('server error'), {
-        $metadata: { httpStatusCode: 500 },
-      });
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) throw serverError;
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '1000',
-        users: '[{"email":"x@x.com"}]',
-        path: 'repo/f.html',
-      });
-
-      assert.strictEqual(result.status, 500);
-      assert.strictEqual(result.error, 'server error');
-    });
-
-    it('appends three entries when edit then version then edit (version breaks time window)', async () => {
-      const baseMs = 1000;
-      const twoMinMs = 2 * 60 * 1000;
-      const seventeenMinMs = 17 * 60 * 1000;
-      const edit1 = `${baseMs}\t[{"email":"u@x.com"}]\trepo/doc.html\t\t`;
-      const versionAt = `${baseMs + twoMinMs}\t[{"email":"u@x.com"}]\trepo/doc.html\tRelease 1\tuuid.html`;
-      const existingText = `${edit1}\n${versionAt}\n`;
-      const bodyStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(existingText));
-          controller.close();
-        },
-      });
-
-      const putCalls = [];
-      const mockSend = (cmd) => {
-        if (cmd instanceof GetObjectCommand) return { Body: bodyStream };
+  describe('writeAuditEntry (append-only ledger)', () => {
+    it('writes a single unconditional PUT to a fresh per-entry key (no GET, no If-Match, no retry)', async () => {
+      const calls = [];
+      const { writeAuditEntry } = await mockAudit(async (cmd) => {
+        if (cmd instanceof GetObjectCommand) {
+          throw new Error('writeAuditEntry must not GET on the append-only path');
+        }
         if (cmd instanceof PutObjectCommand) {
-          putCalls.push(cmd.input);
+          calls.push(cmd.input);
           return { $metadata: { httpStatusCode: 200 } };
         }
         return { $metadata: { httpStatusCode: 200 } };
-      };
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() { this.send = mockSend; },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const edit2At = baseMs + seventeenMinMs;
-      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: String(edit2At),
-        users: '[{"email":"u@x.com"}]',
-        path: 'repo/doc.html',
       });
-
-      assert.strictEqual(putCalls.length, 1);
-      const lines = putCalls[0].Body.split('\n').filter((l) => l.trim());
-      assert.strictEqual(lines.length, 3, 'edit at 12:23, version at 12:25, edit at 12:40 => 3 entries');
-      assert.ok(lines[0].endsWith('\t\t'), 'first line is edit (no version)');
-      assert.ok(lines[1].includes('Release 1') && lines[1].includes('uuid.html'), 'second line is version');
-      assert.ok(lines[2].startsWith(String(edit2At)) && lines[2].endsWith('\t\t'), 'third line is edit');
-    });
-
-    it('sends If-Match header on PUT using ETag from GET', async () => {
-      const bodyStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(''));
-          controller.close();
-        },
-      });
-
-      const putCalls = [];
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  return { Body: bodyStream, ETag: '"etag-abc"' };
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCalls.push(cmd.input);
-                  return { $metadata: { httpStatusCode: 200 } };
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '1000',
-        users: '[{"email":"u@x.com"}]',
-        path: 'repo/doc.html',
-      });
-
-      assert.strictEqual(putCalls.length, 1);
-      assert.strictEqual(putCalls[0].IfMatch, '"etag-abc"', 'If-Match must equal ETag from GET');
-    });
-
-    it('omits If-Match when file does not yet exist (first write)', async () => {
-      const putCalls = [];
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  const err = new Error('not found');
-                  err.name = 'NoSuchKey';
-                  throw err;
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCalls.push(cmd.input);
-                  return { $metadata: { httpStatusCode: 200 } };
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '1000',
-        users: '[{"email":"u@x.com"}]',
-        path: 'repo/doc.html',
-      });
-
-      assert.strictEqual(putCalls.length, 1);
-      assert.strictEqual(putCalls[0].IfMatch, undefined, 'If-Match must be absent for first write');
-    });
-
-    it('retries on 412 from PUT and succeeds on a later attempt', async () => {
-      let getCallCount = 0;
-      const putCalls = [];
-
-      const makeBody = () => new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(''));
-          controller.close();
-        },
-      });
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  getCallCount += 1;
-                  return { Body: makeBody(), ETag: `"etag-${getCallCount}"` };
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCalls.push(cmd.input);
-                  if (putCalls.length < 3) {
-                    // First two PUTs: simulate concurrent write → 412
-                    const err = new Error('precondition failed');
-                    err.$metadata = { httpStatusCode: 412 };
-                    throw err;
-                  }
-                  return { $metadata: { httpStatusCode: 200 } };
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
       const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
         timestamp: '5000',
         users: '[{"email":"u@x.com"}]',
         path: 'repo/doc.html',
       });
-
       assert.strictEqual(result.status, 200);
-      assert.strictEqual(getCallCount, 3, 'must re-read on each retry');
-      assert.strictEqual(putCalls.length, 3, 'must retry the PUT until success');
-      assert.strictEqual(putCalls[0].IfMatch, '"etag-1"');
-      assert.strictEqual(putCalls[1].IfMatch, '"etag-2"', 'first retry uses fresh ETag');
-      assert.strictEqual(putCalls[2].IfMatch, '"etag-3"', 'second retry uses fresh ETag');
+      assert.strictEqual(calls.length, 1, 'exactly one PUT');
+      assert.strictEqual(calls[0].IfMatch, undefined, 'append-only PUT must not send If-Match');
+      assert.match(calls[0].Key, /^o\/repo\/\.da-versions\/fid\/audit\/5000-[a-f0-9]{16}\.txt$/);
+      const lns = calls[0].Body.split('\n').filter((l) => l.trim());
+      assert.strictEqual(lns.length, 1, 'body is exactly one formatted entry line');
+      assert.ok(lns[0].startsWith('5000\t'));
+      assert.ok(lns[0].includes('repo/doc.html'));
     });
 
-    it('archives existing content and starts fresh when entry count reaches AUDIT_MAX_ENTRIES', async () => {
-      const { AUDIT_MAX_ENTRIES } = await import('../../../src/storage/version/audit.js');
-
-      const lastTs = 5000;
-      const existingLines = Array.from({ length: AUDIT_MAX_ENTRIES }, (_, i) => (
-        `${1000 + i}\t[{"email":"u@x.com"}]\t/doc.html\t\t`
-      ));
-      existingLines[existingLines.length - 1] = `${lastTs}\t[{"email":"u@x.com"}]\t/doc.html\t\t`;
-      const existingText = `${existingLines.join('\n')}\n`;
-
-      const putCalls = [];
-      const mockSend = async (cmd) => {
-        if (cmd instanceof GetObjectCommand) {
-          return {
-            Body: new ReadableStream({
-              start(controller) {
-                controller.enqueue(new TextEncoder().encode(existingText));
-                controller.close();
-              },
-            }),
-            ETag: '"etag-1"',
-          };
-        }
+    it('does NOT retry on 412 from PUT (append-only: no etag, no contention)', async () => {
+      let putCalls = 0;
+      const { writeAuditEntry } = await mockAudit(async (cmd) => {
         if (cmd instanceof PutObjectCommand) {
-          putCalls.push(cmd.input);
+          putCalls += 1;
+          const err = new Error('precondition failed');
+          err.$metadata = { httpStatusCode: 412 };
+          throw err;
+        }
+        return { $metadata: { httpStatusCode: 200 } };
+      });
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '5000',
+        users: '[{"email":"u@x.com"}]',
+        path: 'repo/doc.html',
+      });
+      assert.strictEqual(result.status, 500, '412 must surface as 500 immediately with no retry');
+      assert.strictEqual(putCalls, 1, 'append-only path attempts PUT exactly once');
+    });
+
+    it('returns 500 with error message when PUT throws', async () => {
+      const { writeAuditEntry } = await mockAudit(async (cmd) => {
+        if (cmd instanceof PutObjectCommand) {
+          throw new Error('network down');
+        }
+        return { $metadata: { httpStatusCode: 200 } };
+      });
+      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '5000',
+        users: '[{"email":"u@x.com"}]',
+        path: 'repo/doc.html',
+      });
+      assert.strictEqual(result.status, 500);
+      assert.strictEqual(result.error, 'network down');
+    });
+    it('uses Date.now() as fallback when entry.timestamp is not numeric', async () => {
+      const calls = [];
+      const { writeAuditEntry } = await mockAudit(async (cmd) => {
+        if (cmd instanceof PutObjectCommand) {
+          calls.push(cmd.input);
           return { $metadata: { httpStatusCode: 200 } };
         }
-        return {};
-      };
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() { this.send = mockSend; },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const newEntry = {
-        timestamp: String(lastTs + 10000000),
-        users: '[{"email":"other@x.com"}]',
-        path: '/doc.html',
-      };
-
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', newEntry);
-
-      assert.strictEqual(result.status, 200);
-      assert.strictEqual(putCalls.length, 2, 'must PUT archive + new audit.txt');
-
-      const archivePut = putCalls.find((p) => p.Key.includes('audit-'));
-      const auditPut = putCalls.find((p) => p.Key.endsWith('audit.txt'));
-      assert.ok(archivePut, 'archive PUT must exist');
-      assert.ok(auditPut, 'audit.txt PUT must exist');
-      assert.strictEqual(archivePut.Body, existingText, 'archive must contain the old content');
-      assert.ok(archivePut.Key.includes(`audit-${lastTs}`), 'archive key must use last entry timestamp');
-      const newAuditLines = auditPut.Body.split('\n').filter((l) => l.trim());
-      assert.strictEqual(newAuditLines.length, 1, 'new audit.txt must contain only the new entry');
-      assert.ok(newAuditLines[0].includes(newEntry.timestamp), 'new entry must be present in fresh audit.txt');
-    });
-
-    it('treats malformed users JSON in existing entry as opaque string (no crash)', async () => {
-      // Covers usersNormalized catch branch: invalid JSON falls back to raw string comparison.
-      const existingLine = '1000\tnot-valid-json\t/doc.html\t\t';
-      const putCalls = [];
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  return {
-                    Body: new ReadableStream({
-                      start(controller) {
-                        controller.enqueue(new TextEncoder().encode(`${existingLine}\n`));
-                        controller.close();
-                      },
-                    }),
-                    ETag: '"etag-bad"',
-                  };
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCalls.push(cmd.input);
-                  return { $metadata: { httpStatusCode: 200 } };
-                }
-                return {};
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-            ListObjectsV2Command,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      // Different user — must not collapse with the malformed-JSON entry
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '9000',
-        users: '[{"email":"u@x.com"}]',
-        path: '/doc.html',
+        return { $metadata: { httpStatusCode: 200 } };
       });
-
-      assert.strictEqual(result.status, 200);
-      assert.strictEqual(putCalls.length, 1);
-      const lines = putCalls[0].Body.split('\n').filter((l) => l.trim());
-      assert.strictEqual(lines.length, 2, 'both entries must be present (no collapse across mismatched users)');
-    });
-
-    it('returns status 500 when PUT 412 persists across all 7 attempts', async () => {
-      let getCallCount = 0;
-      let putCallCount = 0;
-
-      const makeBody = () => new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(''));
-          controller.close();
-        },
-      });
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  getCallCount += 1;
-                  return { Body: makeBody(), ETag: '"etag-x"' };
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCallCount += 1;
-                  const err = new Error('precondition failed');
-                  err.$metadata = { httpStatusCode: 412 };
-                  throw err;
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '5000',
+      const before = Date.now();
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: 'not-a-number',
         users: '[{"email":"u@x.com"}]',
         path: 'repo/doc.html',
       });
-
-      assert.strictEqual(result.status, 500, 'persistent 412 must surface as 500 after 7 total attempts');
-      assert.strictEqual(result.error, 'precondition failed');
-      assert.strictEqual(putCallCount, 7, 'must attempt PUT 7 times total (1 initial + 6 retries)');
-      assert.strictEqual(getCallCount, 7, 'must re-read on each attempt');
+      const after = Date.now();
+      const m = calls[0].Key.match(/audit\/(\d+)-[a-f0-9]{16}\.txt$/);
+      assert.ok(m, 'key embeds numeric timestamp');
+      const ts = parseInt(m[1], 10);
+      assert.ok(ts >= before && ts <= after, 'timestamp falls back to Date.now() when entry value is non-numeric');
+      const lineTs = calls[0].Body.split('\t')[0];
+      assert.strictEqual(lineTs, String(ts), 'serialized entry timestamp matches key timestamp');
     });
 
-    it('uses exponential jitter backoff (0-50, 0-100, 0-200, 0-400, 0-800, 0-1600 ms) across six 412 retries', async () => {
-      // Stubs setTimeout and Math.random to capture per-retry delays.
-      // Asserts per-attempt exponential upper bounds for the 6-retry ladder
-      // (50, 100, 200, 400, 800, 1600 ms) and total elapsed sleep ~3050 ms.
-      const originalSetTimeout = globalThis.setTimeout;
-      const originalRandom = Math.random;
-      const delays = [];
-      Math.random = () => 0.999999;
-      globalThis.setTimeout = (fn, ms) => {
-        delays.push(ms);
-        fn();
-        return 0;
-      };
-
-      try {
-        const makeBody = () => new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode(''));
-            controller.close();
-          },
-        });
-
-        const { writeAuditEntry } = await esmock(
-          '../../../src/storage/version/audit.js',
-          {
-            '@aws-sdk/client-s3': {
-              S3Client: function S3Client() {
-                this.send = async (cmd) => {
-                  if (cmd instanceof GetObjectCommand) {
-                    return { Body: makeBody(), ETag: '"etag-x"' };
-                  }
-                  if (cmd instanceof PutObjectCommand) {
-                    const err = new Error('precondition failed');
-                    err.$metadata = { httpStatusCode: 412 };
-                    throw err;
-                  }
-                  return { $metadata: { httpStatusCode: 200 } };
-                };
-              },
-              GetObjectCommand,
-              PutObjectCommand,
-            },
-            '../../../src/storage/utils/config.js': { default: () => ({}) },
-          },
-        );
-
-        await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-          timestamp: '5000',
-          users: '[{"email":"u@x.com"}]',
-          path: 'repo/doc.html',
-        });
-      } finally {
-        globalThis.setTimeout = originalSetTimeout;
-        Math.random = originalRandom;
-      }
-
-      assert.strictEqual(delays.length, 6, 'must sleep between each of the 6 retries');
-      const upperBounds = [50, 100, 200, 400, 800, 1600];
-      delays.forEach((ms, i) => {
-        assert.ok(
-          ms >= 0 && ms < upperBounds[i],
-          `delay[${i}]=${ms} must be within [0, ${upperBounds[i]})`,
-        );
+    it('generates a fresh random suffix per call (two concurrent writes do not collide on key)', async () => {
+      const calls = [];
+      const { writeAuditEntry } = await mockAudit(async (cmd) => {
+        if (cmd instanceof PutObjectCommand) {
+          calls.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+        return { $metadata: { httpStatusCode: 200 } };
       });
-      assert.ok(
-        delays[2] >= 150,
-        `delay[2]=${delays[2]} must exceed the prior linear cap of 150 ms`,
-      );
-      assert.ok(
-        delays[3] >= 200,
-        `delay[3]=${delays[3]} must exceed the prior linear cap of 200 ms`,
-      );
-      assert.ok(
-        delays[5] >= 800,
-        `delay[5]=${delays[5]} must reach the new 6-retry exponential ceiling (>=800 ms)`,
-      );
-      const total = delays.reduce((a, b) => a + b, 0);
-      assert.ok(
-        total > 1500,
-        `total elapsed sleep ${total} must exceed prior 4-retry worst-case (~750 ms)`,
-      );
-      assert.ok(
-        total < 3200,
-        `total elapsed sleep ${total} must stay within the new 6-retry worst-case (~3050 ms)`,
-      );
-    });
-
-    it('succeeds on the 5th attempt after four 412s', async () => {
-      let getCallCount = 0;
-      let putCallCount = 0;
-
-      const makeBody = () => new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(''));
-          controller.close();
-        },
-      });
-
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  getCallCount += 1;
-                  return { Body: makeBody(), ETag: `"etag-${getCallCount}"` };
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCallCount += 1;
-                  if (putCallCount < 5) {
-                    const err = new Error('precondition failed');
-                    err.$metadata = { httpStatusCode: 412 };
-                    throw err;
-                  }
-                  return { $metadata: { httpStatusCode: 200 } };
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
-            },
-            GetObjectCommand,
-            PutObjectCommand,
-          },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
-
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+      const entry = {
         timestamp: '5000',
         users: '[{"email":"u@x.com"}]',
         path: 'repo/doc.html',
-      });
+      };
+      await Promise.all([
+        writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', entry),
+        writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', entry),
+      ]);
+      assert.strictEqual(calls.length, 2);
+      assert.notStrictEqual(calls[0].Key, calls[1].Key, 'concurrent writes must produce distinct keys');
+    });
 
-      assert.strictEqual(result.status, 200, 'must succeed on the 5th attempt');
-      assert.strictEqual(putCallCount, 5, 'must have attempted PUT 5 times');
-      assert.strictEqual(getCallCount, 5, 'must re-read on each attempt');
+    it('writes version entry (versionLabel + versionId) to its own per-entry object', async () => {
+      const calls = [];
+      const { writeAuditEntry } = await mockAudit(async (cmd) => {
+        if (cmd instanceof PutObjectCommand) {
+          calls.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        }
+        return { $metadata: { httpStatusCode: 200 } };
+      });
+      await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+        timestamp: '5000',
+        users: '[{"email":"u@x.com"}]',
+        path: 'repo/doc.html',
+        versionLabel: 'Release 1',
+        versionId: 'uuid',
+      });
+      assert.strictEqual(calls.length, 1);
+      assert.ok(calls[0].Body.includes('Release 1'));
+      assert.ok(calls[0].Body.includes('uuid'));
     });
   });
 });

@@ -17,12 +17,10 @@ import {
 } from '@aws-sdk/client-s3';
 
 import getS3Config from '../utils/config.js';
-import { auditKey, auditArchiveKey, auditDirPrefix } from './paths.js';
+import { auditDirPrefix, auditEntryKey } from './paths.js';
 
 /** Same-user edits within this window (ms) collapse into one entry (last timestamp). 30 min. */
 export const AUDIT_TIME_WINDOW_MS = 30 * 60 * 1000;
-
-export const AUDIT_MAX_ENTRIES = 500;
 
 const SEP = '\t';
 
@@ -69,9 +67,9 @@ export function parseAuditLine(line) {
 }
 
 /**
- * Read audit.txt body stream to string. Handles Web ReadableStream (Workers/R2),
+ * Read audit body stream to string. Handles Web ReadableStream (Workers/R2),
  * fetch Response.body, and Node-style async iterable streams.
- * @param {ReadableStream|import('stream').Readable|string} body
+ * @param {ReadableStream|import("stream").Readable|string} body
  * @returns {Promise<string>}
  */
 async function streamToString(body) {
@@ -118,25 +116,76 @@ async function streamToString(body) {
 }
 
 /**
- * Read all audit lines for a file (new structure).
+ * Normalize users for same-user comparison (stable string).
+ * @param {string} usersJson
+ * @returns {string}
+ */
+function usersNormalized(usersJson) {
+  try {
+    const arr = JSON.parse(usersJson);
+    const emails = Array.isArray(arr) ? arr.map((u) => u?.email ?? '').filter(Boolean) : [];
+    return emails.join(',') || usersJson;
+  } catch {
+    return usersJson;
+  }
+}
+
+/**
+ * Collapse consecutive same-user edit entries within AUDIT_TIME_WINDOW_MS into the later entry.
+ * Matches the historical write-side collapse: same user, both edits (no versionLabel/versionId),
+ * within 30 minutes => keep only the later entry. Version entries always break the window.
+ * @param {object[]} entries - ascending by timestamp; each carries usersRaw for collapse
+ * @returns {object[]}
+ */
+function collapseAuditEntries(entries) {
+  const out = [];
+  for (const entry of entries) {
+    const last = out.length ? out[out.length - 1] : null;
+    const isVersion = !!(entry.versionLabel || entry.versionId);
+    const lastIsVersion = last && !!(last.versionLabel || last.versionId);
+    const canCollapse = last
+      && !isVersion
+      && !lastIsVersion
+      && usersNormalized(last.usersRaw) === usersNormalized(entry.usersRaw)
+      && (entry.timestamp - last.timestamp) <= AUDIT_TIME_WINDOW_MS;
+    if (canCollapse) {
+      out[out.length - 1] = entry;
+    } else {
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
+/**
+ * Read all audit entries for a file. Merges legacy audit.txt + audit-{ts}.txt archives + per-entry
+ * objects under {org}/{repo}/.da-versions/{fileId}/audit/. Entries are sorted ascending by
+ * timestamp with the same-user same-window collapse applied (formerly enforced write-side).
  * @param {object} env
- * @param {{ bucket: string, org: string }} ctx - bucket, org
+ * @param {{ bucket: string, org: string }} ctx
  * @param {string} repo
  * @param {string} fileId
- * @returns {Promise<{ timestamp: number, users: object[], path: string }[]>}
+ * @returns {Promise<object[]>} entries with { timestamp, users, path, versionLabel?, versionId? }
  */
 export async function readAuditLines(env, ctx, repo, fileId) {
   const config = getS3Config(env);
   const client = new S3Client(config);
   const prefix = `${ctx.org}/${auditDirPrefix(repo, fileId)}`;
 
-  let keys;
+  let keys = [];
   try {
-    const listResp = await client.send(new ListObjectsV2Command({
-      Bucket: ctx.bucket,
-      Prefix: prefix,
-    }));
-    keys = (listResp.Contents || []).map((obj) => obj.Key);
+    let continuationToken;
+    do {
+      // eslint-disable-next-line no-await-in-loop
+      const listResp = await client.send(new ListObjectsV2Command({
+        Bucket: ctx.bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }));
+      const page = (listResp.Contents || []).map((obj) => obj.Key);
+      keys = keys.concat(page);
+      continuationToken = listResp.IsTruncated ? listResp.NextContinuationToken : undefined;
+    } while (continuationToken);
   } catch (e) {
     if (e.$metadata?.httpStatusCode === 404 || e.name === 'NoSuchKey') {
       return [];
@@ -156,8 +205,9 @@ export async function readAuditLines(env, ctx, repo, fileId) {
     }
   }));
 
-  return allLineArrays.flat().map((line) => ({
+  const parsed = allLineArrays.flat().map((line) => ({
     timestamp: parseInt(line.timestamp, 10) || 0,
+    usersRaw: line.users,
     users: (() => {
       try {
         return JSON.parse(line.users);
@@ -169,122 +219,38 @@ export async function readAuditLines(env, ctx, repo, fileId) {
     versionLabel: line.versionLabel || undefined,
     versionId: line.versionId || undefined,
   }));
+
+  parsed.sort((a, b) => a.timestamp - b.timestamp);
+
+  return collapseAuditEntries(parsed).map(({ usersRaw: _, ...rest }) => rest);
 }
 
 /**
- * Normalize users for same-user comparison (stable string).
- * @param {string} usersJson
- * @returns {string}
- */
-function usersNormalized(usersJson) {
-  try {
-    const arr = JSON.parse(usersJson);
-    const emails = Array.isArray(arr) ? arr.map((u) => u?.email ?? '').filter(Boolean) : [];
-    return emails.join(',') || usersJson;
-  } catch {
-    return usersJson;
-  }
-}
-
-/**
- * Append or update last line in audit.txt (read-modify-write). If last line is same user
- * and within AUDIT_TIME_WINDOW_MS and both last and new are edits (no version), replace that
- * line; else append. A version entry always appends and is never replaced (breaks the window).
- *
- * Uses If-Match on the PUT so that a concurrent write causes a 412, which triggers up to 6
- * retries with random jitter to reduce thundering-herd contention (7 total attempts).
+ * Append one audit entry as a fresh per-entry object under the audit/ prefix. Append-only:
+ * no GET, no etag, no retry — one unconditional PUT per call eliminates the read-modify-write
+ * contention that the previous read-modify-write-with-If-Match path exhibited under load.
  * @param {object} env
  * @param {{ bucket: string, org: string }} ctx - bucket, org
  * @param {string} repo
  * @param {string} fileId
  * @param {object} entry - { timestamp, users, path, versionLabel?, versionId? }
- * @param {number} [attempt=0] - retry counter (max 6 retries)
- * @returns {Promise<{ status: number }>}
+ * @returns {Promise<{ status: number, error?: string }>}
  */
-export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0) {
+export async function writeAuditEntry(env, ctx, repo, fileId, entry) {
   try {
     const config = getS3Config(env);
     const client = new S3Client(config);
-    const key = `${ctx.org}/${auditKey(repo, fileId)}`;
-    const nowMs = parseInt(entry.timestamp, 10) || Date.now();
-    const entryUsersNorm = usersNormalized(entry.users);
-
-    let existingText = '';
-    let etag;
-    try {
-      const getResp = await client.send(new GetObjectCommand({
-        Bucket: ctx.bucket,
-        Key: key,
-      }));
-      const body = getResp?.Body;
-      existingText = body != null ? await streamToString(body) : '';
-      etag = getResp?.ETag;
-    } catch (e) {
-      if (e?.$metadata?.httpStatusCode !== 404 && e?.name !== 'NoSuchKey') {
-        throw e;
-      }
-    }
-
-    const lines = existingText.split('\n').filter((l) => l.trim());
-    const lastLine = lines.length ? parseAuditLine(lines[lines.length - 1]) : null;
-
-    const isVersionEntry = (entry.versionLabel ?? '') !== '' || (entry.versionId ?? '') !== '';
-    const lastIsVersion = lastLine
-      && ((lastLine.versionLabel ?? '') !== '' || (lastLine.versionId ?? '') !== '');
-    const canCollapse = lastLine
-      && usersNormalized(lastLine.users) === entryUsersNorm
-      && !isVersionEntry
-      && !lastIsVersion
-      && (nowMs - (parseInt(lastLine.timestamp, 10) || 0) <= AUDIT_TIME_WINDOW_MS);
-    let newContent;
-    if (canCollapse) {
-      lines[lines.length - 1] = formatAuditLine(entry);
-      newContent = `${lines.join('\n')}\n`;
-    } else {
-      const sep = existingText && !existingText.endsWith('\n') ? '\n' : '';
-      newContent = `${existingText}${sep}${formatAuditLine(entry)}\n`;
-    }
-
-    const shouldArchive = !canCollapse && lines.length >= AUDIT_MAX_ENTRIES;
-    if (shouldArchive) {
-      const archiveTs = lastLine?.timestamp || Date.now();
-      await client.send(new PutObjectCommand({
-        Bucket: ctx.bucket,
-        Key: `${ctx.org}/${auditArchiveKey(repo, fileId, archiveTs)}`,
-        Body: existingText,
-        ContentType: 'text/plain; charset=utf-8',
-      }));
-      newContent = `${formatAuditLine(entry)}\n`;
-    }
-
-    const putInput = {
+    const ts = parseInt(entry.timestamp, 10) || Date.now();
+    const rand = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+    const key = `${ctx.org}/${auditEntryKey(repo, fileId, ts, rand)}`;
+    const body = `${formatAuditLine({ ...entry, timestamp: String(ts) })}\n`;
+    const resp = await client.send(new PutObjectCommand({
       Bucket: ctx.bucket,
       Key: key,
-      Body: newContent,
+      Body: body,
       ContentType: 'text/plain; charset=utf-8',
-    };
-    if (etag) putInput.IfMatch = etag;
-
-    try {
-      const resp = await client.send(new PutObjectCommand(putInput));
-      return { status: resp?.$metadata?.httpStatusCode ?? 200 };
-    } catch (e) {
-      if (e?.$metadata?.httpStatusCode === 412 && attempt < 6) {
-        // Exponential jitter, 6 retries: per-attempt max 50, 100, 200,
-        // 400, 800, 1600 ms (~3050 ms worst-case total). Two prior 4-retry
-        // backoff bumps did not converge because the contention window is
-        // wider than per-write latency — every retry inside a short window
-        // observes the same losing-etag generation. Append-only ledger
-        // (one object per entry) is the next escalation if this still fails.
-        const delay = Math.random() * 50 * 2 ** attempt;
-        // eslint-disable-next-line no-await-in-loop -- sequential retry with jitter
-        await new Promise((r) => {
-          setTimeout(r, delay);
-        });
-        return writeAuditEntry(env, ctx, repo, fileId, entry, attempt + 1);
-      }
-      throw e;
-    }
+    }));
+    return { status: resp?.$metadata?.httpStatusCode ?? 200 };
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('writeAuditEntry failed', e);

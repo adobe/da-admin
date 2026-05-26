@@ -15,6 +15,7 @@ import {
   auditKey,
   auditArchiveKey,
   auditDirPrefix,
+  auditEntryKey,
 } from '../../../src/storage/version/paths.js';
 
 describe('Version Paths', () => {
@@ -57,9 +58,30 @@ describe('Version Paths', () => {
   });
 
   describe('auditDirPrefix', () => {
-    it('returns prefix that matches audit.txt and audit-*.txt', () => {
+    it('returns prefix that matches audit.txt, audit-*.txt, and per-entry objects', () => {
       const prefix = auditDirPrefix('myrepo', 'file-id-xyz');
       assert.strictEqual(prefix, 'myrepo/.da-versions/file-id-xyz/audit');
+    });
+  });
+
+  describe('auditEntryKey', () => {
+    it('returns per-entry object key with ts-rand suffix under the audit/ prefix', () => {
+      const key = auditEntryKey('myrepo', 'file-id-xyz', 1234567890, 'deadbeefcafef00d');
+      assert.strictEqual(key, 'myrepo/.da-versions/file-id-xyz/audit/1234567890-deadbeefcafef00d.txt');
+    });
+
+    it('accepts string timestamp as-is', () => {
+      assert.strictEqual(
+        auditEntryKey('r', 'fid', '9999', 'abcd1234'),
+        'r/.da-versions/fid/audit/9999-abcd1234.txt',
+      );
+    });
+
+    it('lives under the same prefix as auditDirPrefix (so ListObjectsV2 picks it up alongside legacy files)', () => {
+      const repo = 'myrepo';
+      const fileId = 'file-1';
+      const prefix = auditDirPrefix(repo, fileId);
+      assert.ok(auditEntryKey(repo, fileId, 1000, 'r1').startsWith(prefix));
     });
   });
 });
