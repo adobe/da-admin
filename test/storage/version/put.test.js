@@ -3162,21 +3162,22 @@ describe('Version Put', () => {
       assert.strictEqual(resp.status, 201, 'must return 201 when version already exists (concurrent 412)');
     });
 
-    it('returns 201 when source contentType is application/octet-stream and a label is provided', async () => {
-      // Regression: legacy imports with missing/octet-stream ContentType metadata
-      // returned a silent 500 because shouldCreateVersion gated out non-html/json. When the
-      // caller passes an explicit label (POST /versionsource), the version MUST be created
-      // regardless of contentType, and the audit entry MUST be written.
+    it('heals legacy octet-stream HTML on labelled version: snapshot + main object both repaired', async () => {
+      // Regression: legacy imports with missing or octet-stream ContentType could not be
+      // labelled-versioned because shouldCreateVersion gated out non-html/json. Recover the
+      // correct mime from the file extension so the version snapshot AND the main-object PUT
+      // both heal to text/html.
       const versionWrites = [];
+      const mainWrites = [];
       const auditCalls = [];
 
       const mockGetObject = async () => ({
-        body: 'binary content',
+        body: '<html>legacy</html>',
         contentType: 'application/octet-stream',
-        contentLength: 14,
+        contentLength: 18,
         status: 200,
         metadata: {
-          id: 'octet-id', version: 'v1', timestamp: '123', users: '[]', path: '/legacy/file',
+          id: 'legacy-id', version: 'v1', timestamp: '123', users: '[]', path: '/mysite/legacy.html',
         },
         etag: '"etag1"',
       });
@@ -3188,7 +3189,8 @@ describe('Version Put', () => {
         },
       };
       const mainClient = {
-        async send() {
+        async send(cmd) {
+          mainWrites.push(cmd.input);
           return { $metadata: { httpStatusCode: 200 } };
         },
       };
@@ -3208,21 +3210,79 @@ describe('Version Put', () => {
       });
 
       const daCtx = {
-        bucket: 'b', org: 'o', site: 'mysite', key: 'mysite/legacy/file', ext: 'dat', users: [],
+        bucket: 'b', org: 'o', site: 'mysite', key: 'mysite/legacy.html', ext: 'html', users: [],
       };
       const resp = await postObjectVersionWithLabel('Pre-import snapshot', {}, daCtx);
 
-      assert.strictEqual(resp.status, 201, 'labelled version must succeed for octet-stream content');
-      assert.strictEqual(versionWrites.length, 1, 'version snapshot must be written even for octet-stream');
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(versionWrites.length, 1, 'version snapshot must be written');
+      assert.strictEqual(versionWrites[0].ContentType, 'text/html', 'snapshot ContentType must heal to text/html');
       assert.strictEqual(versionWrites[0].Metadata.Label, 'Pre-import snapshot');
-      assert.strictEqual(auditCalls.length, 1, 'audit entry must be written for labelled non-html/json version');
+      assert.strictEqual(mainWrites.length, 1, 'main object PUT must run');
+      assert.strictEqual(mainWrites[0].ContentType, 'text/html', 'main object ContentType must heal in storage');
+      assert.strictEqual(auditCalls.length, 1, 'audit entry must be written');
       assert.strictEqual(auditCalls[0].entry.versionLabel, 'Pre-import snapshot');
-      assert.ok(auditCalls[0].entry.versionId, 'audit entry must include versionId for labelled version');
+      assert.ok(auditCalls[0].entry.versionId);
     });
 
+    it('logs diagnostics and returns 500 when labelled version requested on non-versionable ext', async () => {
+      // Preserves the binary-never-version semantics: when the file extension does not map
+      // to a versionable mime (and the stored contentType is also not versionable), the
+      // labelled-version request still 500s and the diagnostic log fires with inferredType + ext
+      // captured so we can spot future legacy patterns in Cloudflare Logs.
+      const mockGetObject = async () => ({
+        body: 'binary content',
+        contentType: 'application/octet-stream',
+        contentLength: 14,
+        status: 200,
+        metadata: { id: 'bin-id', version: 'v1' },
+        etag: '"etag1"',
+      });
+
+      const s3Client = {
+        async send() { return { $metadata: { httpStatusCode: 200 } }; },
+      };
+
+      const { postObjectVersionWithLabel } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => s3Client,
+          ifMatch: () => s3Client,
+        },
+        '../../../src/storage/version/audit.js': { writeAuditEntry: async () => ({ status: 200 }) },
+        '../../../src/storage/utils/config.js': { default: () => ({}) },
+      });
+
+      const daCtx = {
+        bucket: 'b', org: 'o', site: 'mysite', key: 'mysite/data.bin', ext: 'bin', users: [],
+      };
+
+      const errors = [];
+      const origError = console.error;
+      console.error = (...args) => {
+        errors.push(args);
+      };
+      let resp;
+      try {
+        resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
+      } finally {
+        console.error = origError;
+      }
+
+      assert.strictEqual(resp.status, 500);
+      assert.strictEqual(resp.error, 'Version was not created');
+      assert(errors.length > 0, 'diagnostic log must fire for the unhealed octet-stream path');
+      const payload = errors[0].find((a) => a && typeof a === 'object');
+      assert(payload, 'log must include a structured diagnostic payload');
+      assert.strictEqual(payload.contentType, 'application/octet-stream');
+      assert.strictEqual(payload.inferredType, 'application/octet-stream', 'inference must fall through for unknown ext');
+      assert.strictEqual(payload.ext, 'bin');
+      assert.strictEqual(payload.hadLabel, true);
+      assert.strictEqual(payload.currentStatus, 200);
+    });
     it('plain PUT (no label) still skips auto-version for non-html/json contentType', async () => {
-      // Companion regression to confirm the fix only widens the LABELED path.
-      // Auto-versioning on plain PUT must still gate to html/json (no extra storage cost).
+      // Companion regression: the labelled-path mime inference must NOT bleed into plain
+      // PUTs. Auto-versioning on plain PUT must still gate to html/json (no extra storage cost).
       const versionWrites = [];
       const mainWrites = [];
 

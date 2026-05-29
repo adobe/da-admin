@@ -78,6 +78,16 @@ function shouldCreateVersion(contentType) {
   return type.startsWith('text/html') || type.startsWith('application/json');
 }
 
+// Infer a versionable contentType from the file extension when the stored
+// ContentType is missing or octet-stream (legacy imports). Returns the original
+// contentType when it is already versionable, or when we cannot map the extension.
+function inferVersionableType(contentType, ext) {
+  if (shouldCreateVersion(contentType)) return contentType;
+  if (ext === 'html') return 'text/html';
+  if (ext === 'json') return 'application/json';
+  return contentType;
+}
+
 function buildInput({
   bucket, org, key, body, type, contentLength,
 }) {
@@ -112,10 +122,9 @@ export async function putObjectWithVersion(
     return { status: 409, metadata: { id: ID } };
   }
 
+  // Only create versions for HTML and JSON files
   const contentType = update.type || current.contentType;
-  // For named versions (POST /versionsource) we always create, even when the source
-  // object lacks a versionable contentType (legacy imports stored as octet-stream).
-  const createVersion = shouldCreateVersion(contentType) || update.label != null;
+  const createVersion = shouldCreateVersion(contentType);
 
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));
@@ -226,7 +235,7 @@ export async function putObjectWithVersion(
       Repo: daCtx.site || undefined,
       Body: (body || storeBody ? current.body : ''),
       ContentLength: (body || storeBody ? current.contentLength : undefined),
-      ContentType: current.contentType,
+      ContentType: contentType,
       ID,
       Version,
       Ext: daCtx.ext,
@@ -323,8 +332,13 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
   const bodyBuffer = body instanceof ReadableStream ? await new Response(body).arrayBuffer() : body;
   const { bucket, org, key } = daCtx;
 
+  // Legacy imports may have lost their ContentType metadata (stored as
+  // application/octet-stream). Recover the correct mime from the file
+  // extension so the version write + main-object PUT both heal.
+  const inferredType = inferVersionableType(contentType, daCtx.ext);
+
   const resp = await putObjectWithVersion(env, daCtx, {
-    bucket, org, key, body: bodyBuffer, contentLength, type: contentType, label,
+    bucket, org, key, body: bodyBuffer, contentLength, type: inferredType, label,
   }, true);
 
   if (resp.status !== 200) return { status: resp.status };
@@ -335,6 +349,8 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
     // eslint-disable-next-line no-console
     console.error('Failed to version (no version created)', {
       contentType,
+      inferredType,
+      ext: daCtx.ext,
       hadLabel: label != null,
       currentStatus,
     });
