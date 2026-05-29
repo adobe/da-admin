@@ -3162,8 +3162,8 @@ describe('Version Put', () => {
       assert.strictEqual(resp.status, 201, 'must return 201 when version already exists (concurrent 412)');
     });
 
-    it('returns 201 when source contentType is application/octet-stream and a label is provided (COR-55)', async () => {
-      // Regression for COR-55: legacy imports with missing/octet-stream ContentType metadata
+    it('returns 201 when source contentType is application/octet-stream and a label is provided', async () => {
+      // Regression: legacy imports with missing/octet-stream ContentType metadata
       // returned a silent 500 because shouldCreateVersion gated out non-html/json. When the
       // caller passes an explicit label (POST /versionsource), the version MUST be created
       // regardless of contentType, and the audit entry MUST be written.
@@ -3221,7 +3221,7 @@ describe('Version Put', () => {
     });
 
     it('plain PUT (no label) still skips auto-version for non-html/json contentType', async () => {
-      // Companion regression to confirm the COR-55 fix only widens the LABELED path.
+      // Companion regression to confirm the fix only widens the LABELED path.
       // Auto-versioning on plain PUT must still gate to html/json (no extra storage cost).
       const versionWrites = [];
       const mainWrites = [];
