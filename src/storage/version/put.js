@@ -112,9 +112,10 @@ export async function putObjectWithVersion(
     return { status: 409, metadata: { id: ID } };
   }
 
-  // Only create versions for HTML and JSON files
   const contentType = update.type || current.contentType;
-  const createVersion = shouldCreateVersion(contentType);
+  // For named versions (POST /versionsource) we always create, even when the source
+  // object lacks a versionable contentType (legacy imports stored as octet-stream).
+  const createVersion = shouldCreateVersion(contentType) || update.label != null;
 
   const Version = current.metadata?.version || crypto.randomUUID();
   const Users = JSON.stringify(getUsersForMetadata(daCtx.users));

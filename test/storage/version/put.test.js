@@ -3162,28 +3162,35 @@ describe('Version Put', () => {
       assert.strictEqual(resp.status, 201, 'must return 201 when version already exists (concurrent 412)');
     });
 
-    it('logs diagnostics when versionCreated is false (silent 500 path)', async () => {
-      // Regression: legacy HTML imports can land in storage with no S3
-      // ContentType metadata. shouldCreateVersion(undefined) returns false ->
-      // shouldCreateVersionObject is false -> putObjectWithVersion returns
-      // { status: 200, versionCreated: false } -> postObjectVersionWithLabel
-      // returns a silent 500 with empty Cloudflare Logs (no console.error).
-      // The fix adds a single diagnostic log capturing contentType / hadLabel /
-      // currentStatus so the next daily review can confirm root cause.
+    it('returns 201 when source contentType is application/octet-stream and a label is provided (COR-55)', async () => {
+      // Regression for COR-55: legacy imports with missing/octet-stream ContentType metadata
+      // returned a silent 500 because shouldCreateVersion gated out non-html/json. When the
+      // caller passes an explicit label (POST /versionsource), the version MUST be created
+      // regardless of contentType, and the audit entry MUST be written.
+      const versionWrites = [];
+      const auditCalls = [];
+
       const mockGetObject = async () => ({
-        body: 'doc content',
-        contentType: undefined,
-        contentLength: 200,
+        body: 'binary content',
+        contentType: 'application/octet-stream',
+        contentLength: 14,
         status: 200,
-        metadata: { id: 'doc-id', version: 'v1' },
+        metadata: {
+          id: 'octet-id', version: 'v1', timestamp: '123', users: '[]', path: '/legacy/file',
+        },
         etag: '"etag1"',
       });
 
-      const mainClient = {
-        async send() { return { $metadata: { httpStatusCode: 200 } }; },
-      };
       const versionClient = {
-        async send() { return { $metadata: { httpStatusCode: 200 } }; },
+        async send(cmd) {
+          versionWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+      const mainClient = {
+        async send() {
+          return { $metadata: { httpStatusCode: 200 } };
+        },
       };
 
       const { postObjectVersionWithLabel } = await esmock('../../../src/storage/version/put.js', {
@@ -3193,35 +3200,75 @@ describe('Version Put', () => {
           ifMatch: () => mainClient,
         },
         '../../../src/storage/version/audit.js': {
-          writeAuditEntry: async () => ({ status: 200 }),
+          writeAuditEntry: async (env, ctx, repo, fileId, entry) => {
+            auditCalls.push({ repo, fileId, entry });
+          },
         },
         '../../../src/storage/utils/config.js': { default: () => ({}) },
       });
 
       const daCtx = {
-        bucket: 'b', org: 'o', key: 'doc.html', ext: 'html', users: [],
+        bucket: 'b', org: 'o', site: 'mysite', key: 'mysite/legacy/file', ext: 'dat', users: [],
+      };
+      const resp = await postObjectVersionWithLabel('Pre-import snapshot', {}, daCtx);
+
+      assert.strictEqual(resp.status, 201, 'labelled version must succeed for octet-stream content');
+      assert.strictEqual(versionWrites.length, 1, 'version snapshot must be written even for octet-stream');
+      assert.strictEqual(versionWrites[0].Metadata.Label, 'Pre-import snapshot');
+      assert.strictEqual(auditCalls.length, 1, 'audit entry must be written for labelled non-html/json version');
+      assert.strictEqual(auditCalls[0].entry.versionLabel, 'Pre-import snapshot');
+      assert.ok(auditCalls[0].entry.versionId, 'audit entry must include versionId for labelled version');
+    });
+
+    it('plain PUT (no label) still skips auto-version for non-html/json contentType', async () => {
+      // Companion regression to confirm the COR-55 fix only widens the LABELED path.
+      // Auto-versioning on plain PUT must still gate to html/json (no extra storage cost).
+      const versionWrites = [];
+      const mainWrites = [];
+
+      const mockGetObject = async () => ({
+        body: 'binary content',
+        contentType: 'application/octet-stream',
+        contentLength: 14,
+        status: 200,
+        metadata: {
+          id: 'octet-id', version: 'v1', timestamp: '123', users: '[]', path: '/legacy/file',
+        },
+        etag: '"etag1"',
+      });
+
+      const versionClient = {
+        async send(cmd) {
+          versionWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+      const mainClient = {
+        async send(cmd) {
+          mainWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
       };
 
-      const errors = [];
-      const origError = console.error;
-      console.error = (...args) => {
-        errors.push(args);
-      };
-      let resp;
-      try {
-        resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
-      } finally {
-        console.error = origError;
-      }
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => versionClient,
+          ifMatch: () => mainClient,
+        },
+      });
 
-      assert.strictEqual(resp.status, 500);
-      assert.strictEqual(resp.error, 'Version was not created');
-      assert(errors.length > 0, 'silent-500 path must emit a console.error so Cloudflare Logs is non-empty');
-      const payload = errors[0].find((a) => a && typeof a === 'object');
-      assert(payload, 'log must include a structured diagnostic payload');
-      assert.strictEqual(payload.contentType, undefined, 'payload must record contentType (undefined when source metadata is missing)');
-      assert.strictEqual(payload.hadLabel, true, 'payload must record whether a label was supplied');
-      assert.strictEqual(payload.currentStatus, 200, 'payload must record the source-object status');
+      const daCtx = {
+        org: 'o', ext: 'bin', site: 'mysite', users: [{ email: 'u@x.com' }],
+      };
+      const update = {
+        org: 'o', key: 'mysite/legacy/file', body: 'new', type: 'application/octet-stream',
+      };
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
+
+      assert.strictEqual(resp.status, 200);
+      assert.strictEqual(versionWrites.length, 0, 'no version snapshot for plain octet-stream PUT without label');
+      assert.strictEqual(mainWrites.length, 1, 'main object updated once');
     });
 
     it('returns 201 when version client body is a ReadableStream that would be disturbed by SDK retry', async () => {
