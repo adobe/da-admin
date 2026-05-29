@@ -1,3 +1,10 @@
+## [1.9.3](https://github.com/adobe/da-admin/compare/v1.9.2...v1.9.3) (2026-05-29)
+
+
+### Bug Fixes
+
+* **version:** heal ContentType for legacy octet-stream files on labelled version ([#288](https://github.com/adobe/da-admin/issues/288)) ([bf86d40](https://github.com/adobe/da-admin/commit/bf86d4011ef62509d8c7981f502d0b0c74183cc8)), closes [#284](https://github.com/adobe/da-admin/issues/284) [#284](https://github.com/adobe/da-admin/issues/284)
+
 ## [1.9.2](https://github.com/adobe/da-admin/compare/v1.9.1...v1.9.2) (2026-05-22)
 
 
