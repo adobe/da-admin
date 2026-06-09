@@ -287,7 +287,7 @@ export async function writeAuditEntry(env, ctx, repo, fileId, entry, attempt = 0
     }
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.error('writeAuditEntry failed', e);
+    console.error('writeAuditEntry failed', { repo, fileId }, e);
     return { status: 500, error: e.message };
   }
 }
