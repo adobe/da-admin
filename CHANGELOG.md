@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/adobe/da-admin/compare/v1.9.3...v1.10.0) (2026-06-10)
+
+
+### Features
+
+* trigger release ([cc42df6](https://github.com/adobe/da-admin/commit/cc42df6963aef7f85d6ad39e956246c9b66db685))
+
 ## [1.9.3](https://github.com/adobe/da-admin/compare/v1.9.2...v1.9.3) (2026-05-29)
 
 
