@@ -99,6 +99,8 @@ function buildInput({
   };
 }
 
+const MAX_PUT_ATTEMPTS = 5;
+
 export async function putObjectWithVersion(
   env,
   daCtx,
@@ -106,6 +108,7 @@ export async function putObjectWithVersion(
   body,
   guid,
   clientConditionals = null,
+  putAttempt = 0,
 ) {
   const config = getS3Config(env);
   const current = await getObject(env, update, false);
@@ -186,7 +189,7 @@ export async function putObjectWithVersion(
       const status = e.$metadata?.httpStatusCode || 500;
       if (status === 412) {
         // Only retry if no client conditionals (internal operation) and under retry limit
-        if (!effectiveConditionals?.ifNoneMatch) {
+        if (!effectiveConditionals?.ifNoneMatch && putAttempt < MAX_PUT_ATTEMPTS) {
           return putObjectWithVersion(
             env,
             daCtx,
@@ -194,6 +197,7 @@ export async function putObjectWithVersion(
             body,
             guid,
             clientConditionals,
+            putAttempt + 1,
           );
         }
         // Client conditional failed or max retries exceeded, return 412
@@ -311,8 +315,16 @@ export async function putObjectWithVersion(
       // A specific ETag means the client explicitly requires that version, so propagate 412.
       const shouldRetry = !effectiveConditionals?.ifMatch
         || effectiveConditionals.ifMatch === '*';
-      if (shouldRetry) {
-        return putObjectWithVersion(env, daCtx, update, body, guid, clientConditionals);
+      if (shouldRetry && putAttempt < MAX_PUT_ATTEMPTS) {
+        return putObjectWithVersion(
+          env,
+          daCtx,
+          update,
+          body,
+          guid,
+          clientConditionals,
+          putAttempt + 1,
+        );
       }
       return { status: 412, metadata: { id: ID } };
     }
