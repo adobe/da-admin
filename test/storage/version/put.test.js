@@ -311,6 +311,72 @@ describe('Version Put', () => {
     assert.equal(1, sendCalls.length, 'Should not retry when client sent a specific ETag');
   });
 
+  it('putObjectWithVersion stops retrying new document after MAX_PUT_ATTEMPTS', async () => {
+    const getObjectCalls = [];
+    const mockGetObject = async (e, u, nb) => {
+      getObjectCalls.push(1);
+      return { status: 404, metadata: {} };
+    };
+
+    const sendCalls = [];
+    const mockS3Client = {
+      async send(cmd) {
+        sendCalls.push(cmd);
+        const err = new Error('PreconditionFailed');
+        err.$metadata = { httpStatusCode: 412 };
+        throw err;
+      },
+    };
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/utils/version.js': { ifNoneMatch: () => mockS3Client },
+    });
+
+    const resp = await putObjectWithVersion({}, { users: [] }, {}, false);
+
+    assert.equal(412, resp.status);
+    assert.equal(6, sendCalls.length, 'Should attempt exactly MAX_PUT_ATTEMPTS+1 (5+1) times');
+    assert.equal(6, getObjectCalls.length, 'Should re-fetch object on each retry');
+  });
+
+  it('putObjectWithVersion stops retrying existing document after MAX_PUT_ATTEMPTS', async () => {
+    const getObjectCalls = [];
+    const mockGetObject = async () => {
+      getObjectCalls.push(1);
+      return { status: 200, metadata: {}, etag: 'etag-x' };
+    };
+
+    const sendCalls = [];
+    const mockIfMatchClient = {
+      async send(cmd) {
+        sendCalls.push(cmd);
+        const err = new Error('PreconditionFailed');
+        err.$metadata = { httpStatusCode: 412 };
+        throw err;
+      },
+    };
+    const mockIfNoneMatchClient = {
+      async send() {
+        return { $metadata: { httpStatusCode: 200 } };
+      },
+    };
+
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': { default: mockGetObject },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: () => mockIfMatchClient,
+        ifNoneMatch: () => mockIfNoneMatchClient,
+      },
+    });
+
+    const resp = await putObjectWithVersion({}, { users: [] }, {}, false);
+
+    assert.equal(412, resp.status);
+    assert.equal(6, sendCalls.length, 'Should attempt exactly MAX_PUT_ATTEMPTS+1 (5+1) times');
+    assert.equal(6, getObjectCalls.length, 'Should re-fetch object on each retry');
+  });
+
   it('Put Object With Version store content', async () => {
     // eslint-disable-next-line consistent-return
     const mockGetObject = async (e, u, h) => {
