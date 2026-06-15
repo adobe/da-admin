@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/adobe/da-admin/compare/v1.10.0...v1.10.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* cap putObjectWithVersion retries to prevent runaway workers ([#291](https://github.com/adobe/da-admin/issues/291)) ([fa5dad5](https://github.com/adobe/da-admin/commit/fa5dad560200c52a39c113b7f59117be3ab551f8)), closes [hi#concurrency](https://github.com/hi/issues/concurrency)
+
 # [1.10.0](https://github.com/adobe/da-admin/compare/v1.9.3...v1.10.0) (2026-06-10)
 
 
