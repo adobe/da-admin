@@ -229,13 +229,34 @@ export function pathSorter({ path: path1 }, { path: path2 }) {
 }
 
 /**
- * The keyword path that governs access to a config resource. Org-level config
- * (`/config/{org}`) is governed by the `CONFIG` keyword, while site-level config
- * (`/config/{org}/{site}/...`) is governed by a per-site `/{site}/CONFIG` keyword.
- * The `CONFIG` portion is always uppercase so it cannot collide with a content path.
+ * Resolve the keyword path that governs access to a config resource.
+ *
+ * Org-level config (`/config/{org}`) is always governed by the `CONFIG` keyword.
+ * Site-level config (`/config/{org}/{site}/...`) is governed by a per-site
+ * `/{site}/CONFIG` keyword, but only when such a rule is actually present in the
+ * permissions sheet. When no `/{site}/CONFIG` rule is specified, site config access
+ * falls back to the org-level `CONFIG` rule. The `CONFIG` portion is always uppercase
+ * so it cannot collide with a content path.
+ *
+ * @param {Map} pathLookup the parsed permissions, keyed by ident
+ * @param {string} [site] the site, if this is a site config request
+ * @returns {string} the keyword path governing this config resource
+ */
+function resolveConfigKey(pathLookup, site) {
+  if (!site) return 'CONFIG';
+  const siteKey = `/${site}/CONFIG`;
+  for (const entries of pathLookup?.values() ?? []) {
+    if (entries.some((entry) => entry.path === siteKey)) return siteKey;
+  }
+  return 'CONFIG';
+}
+
+/**
+ * The keyword path that governs access to the config resource of the given request.
+ * @see resolveConfigKey
  */
 export function configPermissionPath(daCtx) {
-  return daCtx.site ? `/${daCtx.site}/CONFIG` : 'CONFIG';
+  return resolveConfigKey(daCtx.aclCtx?.pathLookup, daCtx.site);
 }
 
 export async function getAclCtx(env, org, users, key, api) {
@@ -338,10 +359,8 @@ export async function getAclCtx(env, org, users, key, api) {
   // Do a lookup for the base key, we always need this info
   let k;
   if (api === 'config') {
-    // Org config (`/config/{org}`) is governed by the `CONFIG` keyword. Site config
-    // (`/config/{org}/{site}/...`) is governed by a per-site `/{site}/CONFIG` keyword.
     const [site] = key.split('/').filter((part) => part.length > 0);
-    k = site ? `/${site}/CONFIG` : 'CONFIG';
+    k = resolveConfigKey(pathLookup, site);
   } else {
     k = key.startsWith('/') ? key : `/${key}`;
   }
