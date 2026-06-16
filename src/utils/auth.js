@@ -228,6 +228,16 @@ export function pathSorter({ path: path1 }, { path: path2 }) {
   return sp2.length - sp1.length;
 }
 
+/**
+ * The keyword path that governs access to a config resource. Org-level config
+ * (`/config/{org}`) is governed by the `CONFIG` keyword, while site-level config
+ * (`/config/{org}/{site}/...`) is governed by a per-site `/{site}/CONFIG` keyword.
+ * The `CONFIG` portion is always uppercase so it cannot collide with a content path.
+ */
+export function configPermissionPath(daCtx) {
+  return daCtx.site ? `/${daCtx.site}/CONFIG` : 'CONFIG';
+}
+
 export async function getAclCtx(env, org, users, key, api) {
   const pathLookup = new Map();
 
@@ -328,7 +338,10 @@ export async function getAclCtx(env, org, users, key, api) {
   // Do a lookup for the base key, we always need this info
   let k;
   if (api === 'config') {
-    k = 'CONFIG';
+    // Org config (`/config/{org}`) is governed by the `CONFIG` keyword. Site config
+    // (`/config/{org}/{site}/...`) is governed by a per-site `/{site}/CONFIG` keyword.
+    const [site] = key.split('/').filter((part) => part.length > 0);
+    k = site ? `/${site}/CONFIG` : 'CONFIG';
   } else {
     k = key.startsWith('/') ? key : `/${key}`;
   }
@@ -354,7 +367,7 @@ export async function getAclCtx(env, org, users, key, api) {
     ? actionTrace
     : undefined;
 
-  if (k === 'CONFIG' || api === 'versionsource') {
+  if (api === 'config' || api === 'versionsource') {
     actionSet.add('read');
   }
 

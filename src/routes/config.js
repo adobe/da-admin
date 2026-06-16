@@ -12,10 +12,10 @@
 
 import putKv from '../storage/kv/put.js';
 import getKv from '../storage/kv/get.js';
-import { hasPermission } from '../utils/auth.js';
+import { configPermissionPath, hasPermission } from '../utils/auth.js';
 
 export async function postConfig({ req, env, daCtx }) {
-  if (!hasPermission(daCtx, 'CONFIG', 'write', true)) {
+  if (!hasPermission(daCtx, configPermissionPath(daCtx), 'write', true)) {
     return { status: 403 };
   }
 
@@ -23,7 +23,7 @@ export async function postConfig({ req, env, daCtx }) {
 }
 
 export async function getConfig({ env, daCtx }) {
-  if (!hasPermission(daCtx, 'CONFIG', 'read', true)) {
+  if (!hasPermission(daCtx, configPermissionPath(daCtx), 'read', true)) {
     return { status: 403 };
   }
 

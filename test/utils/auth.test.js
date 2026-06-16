@@ -19,6 +19,7 @@ import env from './mocks/env.js';
 import jose from './mocks/jose.js';
 import fetch from './mocks/fetch.js';
 import {
+  configPermissionPath,
   getAclCtx,
   getChildRules,
   getUserActions,
@@ -529,6 +530,56 @@ describe('DA auth', () => {
       const aclCtx = await getAclCtx(env2, 'test', users, '/restricted', 'versionsource');
       assert(aclCtx.actionSet.has('read'));
       assert(!aclCtx.actionSet.has('write'));
+    });
+
+    it('configPermissionPath returns CONFIG for org config', () => {
+      assert.strictEqual(configPermissionPath({}), 'CONFIG');
+    });
+
+    it('configPermissionPath returns /{site}/CONFIG for site config', () => {
+      assert.strictEqual(configPermissionPath({ site: 'mysite' }), '/mysite/CONFIG');
+    });
+
+    it('test site CONFIG governs site config read', async () => {
+      const siteConfig = {
+        test: {
+          ':type': 'sheet',
+          ':sheetname': 'permissions',
+          data: [
+            { path: '/mysite/CONFIG', groups: 'reader@bloggs.org', actions: 'read' },
+            { path: 'CONFIG', groups: 'orgadmin@bloggs.org', actions: 'write' },
+          ],
+        },
+      };
+      const siteEnv = { DA_CONFIG: { get: (name) => siteConfig[name] } };
+
+      const reader = [{ email: 'reader@bloggs.org' }];
+      const aclCtx = await getAclCtx(siteEnv, 'test', reader, 'mysite/config.json', 'config');
+
+      // The index.js gate always allows reaching the config route for config requests.
+      assert(aclCtx.actionSet.has('read'));
+
+      // The reader can read this site's config.
+      assert(hasPermission({
+        users: reader, org: 'test', aclCtx, key: 'mysite/config.json', site: 'mysite',
+      }, configPermissionPath({ site: 'mysite' }), 'read', true));
+
+      // The reader cannot write this site's config.
+      assert(!hasPermission({
+        users: reader, org: 'test', aclCtx, key: 'mysite/config.json', site: 'mysite',
+      }, configPermissionPath({ site: 'mysite' }), 'write', true));
+
+      // A user without the site CONFIG permission cannot read this site's config.
+      const stranger = [{ email: 'orgadmin@bloggs.org' }];
+      const strangerCtx = await getAclCtx(siteEnv, 'test', stranger, 'mysite/config.json', 'config');
+      assert(!hasPermission({
+        users: stranger, org: 'test', aclCtx: strangerCtx, key: 'mysite/config.json', site: 'mysite',
+      }, configPermissionPath({ site: 'mysite' }), 'read', true));
+
+      // The site CONFIG permission does not grant read on a different site's config.
+      assert(!hasPermission({
+        users: reader, org: 'test', aclCtx, key: 'other/config.json', site: 'other',
+      }, configPermissionPath({ site: 'other' }), 'read', true));
     });
 
     it('test DA_OPS_IMS_ORG permissions', async () => {
