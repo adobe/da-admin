@@ -1,3 +1,10 @@
+## [1.10.2](https://github.com/adobe/da-admin/compare/v1.10.1...v1.10.2) (2026-06-16)
+
+
+### Bug Fixes
+
+* Error when deleting file open in another window ([#259](https://github.com/adobe/da-admin/issues/259)) ([85217c1](https://github.com/adobe/da-admin/commit/85217c1e5b444de6a438cdb7065f741ea5f3f2a7)), closes [#258](https://github.com/adobe/da-admin/issues/258)
+
 ## [1.10.1](https://github.com/adobe/da-admin/compare/v1.10.0...v1.10.1) (2026-06-15)
 
 
