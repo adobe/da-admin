@@ -75,6 +75,61 @@ describe('Config', () => {
     assert.deepStrictEqual(getKVCalled, [{ e: env, c: ctx }]);
   });
 
+  it('Test postConfig site config uses /{site}/CONFIG permission', async () => {
+    const ctx = { site: 'mysite' };
+    const env = {};
+    const req = {};
+
+    const putKVCalled = [];
+    const putKV = async (r, q, c) => {
+      putKVCalled.push({ r, q, c });
+      return 'called';
+    };
+
+    const hasPermission = (c, k, a, kw) => k === '/mysite/CONFIG' && a === 'write' && kw === true;
+
+    const { postConfig } = await esmock('../../src/routes/config.js', {
+      '../../src/storage/kv/put.js': {
+        default: putKV,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission,
+        configPermissionPath: (c) => `/${c.site}/CONFIG`,
+      },
+    });
+
+    const res = await postConfig({ req, env, daCtx: ctx });
+    assert.strictEqual(res, 'called');
+    assert.deepStrictEqual(putKVCalled, [{ r: req, q: env, c: ctx }]);
+  });
+
+  it('Test getConfig site config uses /{site}/CONFIG permission', async () => {
+    const ctx = { site: 'mysite' };
+    const env = {};
+
+    const getKVCalled = [];
+    const getKV = async (e, c) => {
+      getKVCalled.push({ e, c });
+      return 'called';
+    };
+
+    const hasPermission = (c, k, a, kw) => k === '/mysite/CONFIG' && a === 'read' && kw === true;
+
+    const { getConfig } = await esmock('../../src/routes/config.js', {
+      '../../src/storage/kv/get.js': {
+        default: getKV,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission,
+        configPermissionPath: (c) => `/${c.site}/CONFIG`,
+      },
+    });
+
+    const res = await getConfig({ env, daCtx: ctx });
+    assert.strictEqual(res, 'called');
+    assert.deepStrictEqual(getKVCalled, [{ e: env, c: ctx }]);
+  });
+
   it('Test no permission', async () => {
     const ctx = {};
     const env = {};
