@@ -196,18 +196,26 @@ function getIdents(user) {
   return idents.map((ident) => ident?.toLowerCase());
 }
 
+/**
+ * Whether an ACL rule `path` covers a given `target` path, applying the wildcard
+ * conventions: `/x/+**` covers `/x` and everything below it, `/x/**` covers
+ * everything strictly below `/x`, and otherwise an exact match (with `.html`
+ * leniency) is required.
+ */
+export function pathMatchesTarget(path, target) {
+  if (path.endsWith('/+**')) return target.startsWith(path.slice(0, -3)) || target === path.slice(0, -4);
+  if (target.length < path.length) return false;
+  if (path.endsWith('/**')) return target.startsWith(path.slice(0, -2));
+  if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
+  return target === path;
+}
+
 export function getUserActions(pathLookup, user, target) {
   const idents = getIdents(user);
 
   const plVals = idents.map((key) => pathLookup.get(key) || []);
   const actions = plVals.map((entries) => entries
-    .find(({ path }) => {
-      if (path.endsWith('/+**')) return target.startsWith(path.slice(0, -3)) || target === path.slice(0, -4);
-      if (target.length < path.length) return false;
-      if (path.endsWith('/**')) return target.startsWith(path.slice(0, -2));
-      if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
-      return target === path;
-    }))
+    .find(({ path }) => pathMatchesTarget(path, target)))
     .filter((a) => a);
 
   return {
@@ -233,10 +241,14 @@ export function pathSorter({ path: path1 }, { path: path2 }) {
  *
  * Org-level config (`/config/{org}`) is always governed by the `CONFIG` keyword.
  * Site-level config (`/config/{org}/{site}/...`) is governed by a per-site
- * `/{site}/CONFIG` keyword, but only when such a rule is actually present in the
- * permissions sheet. When no `/{site}/CONFIG` rule is specified, site config access
- * falls back to the org-level `CONFIG` rule. The `CONFIG` portion is always uppercase
- * so it cannot collide with a content path.
+ * `/{site}/CONFIG` keyword whenever the permissions sheet contains a site-scoped
+ * rule covering it — i.e. an explicit `/{site}/CONFIG` rule, or a site wildcard such
+ * as `/{site}/**` or `/{site}/+**`. When no such site-scoped rule exists, site config
+ * access falls back to the org-level `CONFIG` rule. Note that root wildcards (`/**`,
+ * `/+**`) do not activate the per-site keyword (they are not site-scoped, so they must
+ * not suppress the org `CONFIG` fallback), though once the keyword is active they do
+ * grant access to whoever holds them. The `CONFIG` portion is always uppercase so it
+ * cannot collide with a content path.
  *
  * @param {Map} pathLookup the parsed permissions, keyed by ident
  * @param {string} [site] the site, if this is a site config request
@@ -245,10 +257,27 @@ export function pathSorter({ path: path1 }, { path: path2 }) {
 function resolveConfigKey(pathLookup, site) {
   if (!site) return 'CONFIG';
   const siteKey = `/${site}/CONFIG`;
+  const sitePrefix = `/${site}/`;
   for (const entries of pathLookup?.values() ?? []) {
-    if (entries.some((entry) => entry.path === siteKey)) return siteKey;
+    if (entries.some((entry) => entry.path.startsWith(sitePrefix)
+      && pathMatchesTarget(entry.path, siteKey))) {
+      return siteKey;
+    }
   }
   return 'CONFIG';
+}
+
+/**
+ * The site of a config request, derived from its key (the path below the org).
+ * For `/config/{org}` the key is empty (org config, no site). For
+ * `/config/{org}/{site}` and `/config/{org}/{site}/...` the site is the first
+ * key segment. Note that `daCtx.site` is unreliable here: for the bare
+ * `/config/{org}/{site}` request the site name is parsed as the filename, leaving
+ * `daCtx.site` undefined, so the key is the source of truth.
+ */
+function configSite(key) {
+  const [site] = (key || '').split('/').filter((part) => part.length > 0);
+  return site;
 }
 
 /**
@@ -256,7 +285,7 @@ function resolveConfigKey(pathLookup, site) {
  * @see resolveConfigKey
  */
 export function configPermissionPath(daCtx) {
-  return resolveConfigKey(daCtx.aclCtx?.pathLookup, daCtx.site);
+  return resolveConfigKey(daCtx.aclCtx?.pathLookup, configSite(daCtx.key));
 }
 
 export async function getAclCtx(env, org, users, key, api) {
@@ -359,8 +388,7 @@ export async function getAclCtx(env, org, users, key, api) {
   // Do a lookup for the base key, we always need this info
   let k;
   if (api === 'config') {
-    const [site] = key.split('/').filter((part) => part.length > 0);
-    k = resolveConfigKey(pathLookup, site);
+    k = resolveConfigKey(pathLookup, configSite(key));
   } else {
     k = key.startsWith('/') ? key : `/${key}`;
   }
