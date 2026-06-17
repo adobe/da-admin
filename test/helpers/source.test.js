@@ -119,9 +119,10 @@ describe('Source helper', () => {
       assert.strictEqual(helped, undefined);
     });
 
-    it('Returns undefined for application/json raw body', async () => {
+    it('Handles application/json raw body', async () => {
+      const json = JSON.stringify({ title: 'Café' });
       const opts = {
-        body: JSON.stringify({ title: 'Café' }),
+        body: json,
         method: 'PUT',
         headers: new Headers({
           'Content-Type': 'application/json',
@@ -130,7 +131,10 @@ describe('Source helper', () => {
 
       const req = new Request(MOCK_URL, opts);
       const helped = await putHelper(req, env, daCtx);
-      assert.strictEqual(helped, undefined);
+      assert(helped.data instanceof File);
+      assert.strictEqual(helped.data.type, 'application/json');
+      const text = await helped.data.text();
+      assert.strictEqual(text, json);
     });
 
     it('Handles text/html with existing charset', async () => {
