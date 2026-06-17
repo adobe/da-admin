@@ -229,34 +229,27 @@ export function pathSorter({ path: path1 }, { path: path2 }) {
 }
 
 /**
- * Resolve the keyword path that governs access to a config resource.
- *
- * Org-level config (`/config/{org}`) is always governed by the `CONFIG` keyword.
- * Site-level config (`/config/{org}/{site}/...`) is governed by a per-site
- * `/{site}/CONFIG` keyword, but only when such a rule is actually present in the
- * permissions sheet. When no `/{site}/CONFIG` rule is specified, site config access
- * falls back to the org-level `CONFIG` rule. The `CONFIG` portion is always uppercase
- * so it cannot collide with a content path.
- *
- * @param {Map} pathLookup the parsed permissions, keyed by ident
- * @param {string} [site] the site, if this is a site config request
- * @returns {string} the keyword path governing this config resource
+ * The site of a config request, derived from its key (the path below the org).
+ * For `/config/{org}` the key is empty (org config, no site). For
+ * `/config/{org}/{site}` and `/config/{org}/{site}/...` the site is the first
+ * key segment. Note that `daCtx.site` is unreliable here: for the bare
+ * `/config/{org}/{site}` request the site name is parsed as the filename, leaving
+ * `daCtx.site` undefined, so the key is the source of truth.
  */
-function resolveConfigKey(pathLookup, site) {
-  if (!site) return 'CONFIG';
-  const siteKey = `/${site}/CONFIG`;
-  for (const entries of pathLookup?.values() ?? []) {
-    if (entries.some((entry) => entry.path === siteKey)) return siteKey;
-  }
-  return 'CONFIG';
+function configSite(key) {
+  const [site] = (key || '').split('/').filter((part) => part.length > 0);
+  return site;
 }
 
 /**
- * The keyword path that governs access to the config resource of the given request.
- * @see resolveConfigKey
+ * The keyword path naming the config resource of the given request: the per-site
+ * `/{site}/CONFIG` for site config, or the org-level `CONFIG` for org config. The
+ * `CONFIG` portion is always uppercase so it cannot collide with a content path.
+ * Access is granted via this keyword OR the org `CONFIG` keyword (see the config route).
  */
 export function configPermissionPath(daCtx) {
-  return resolveConfigKey(daCtx.aclCtx?.pathLookup, daCtx.site);
+  const site = configSite(daCtx.key);
+  return site ? `/${site}/CONFIG` : 'CONFIG';
 }
 
 export async function getAclCtx(env, org, users, key, api) {
@@ -359,8 +352,8 @@ export async function getAclCtx(env, org, users, key, api) {
   // Do a lookup for the base key, we always need this info
   let k;
   if (api === 'config') {
-    const [site] = key.split('/').filter((part) => part.length > 0);
-    k = resolveConfigKey(pathLookup, site);
+    const site = configSite(key);
+    k = site ? `/${site}/CONFIG` : 'CONFIG';
   } else {
     k = key.startsWith('/') ? key : `/${key}`;
   }
