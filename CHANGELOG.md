@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/adobe/da-admin/compare/v1.10.2...v1.11.0) (2026-06-17)
+
+
+### Features
+
+* add per-site /{site}/CONFIG permission for site config ([#293](https://github.com/adobe/da-admin/issues/293)) ([f9002e9](https://github.com/adobe/da-admin/commit/f9002e931d6666a850ad33aec78de700e992cb84))
+
 ## [1.10.2](https://github.com/adobe/da-admin/compare/v1.10.1...v1.10.2) (2026-06-16)
 
 
