@@ -532,196 +532,57 @@ describe('DA auth', () => {
       assert(!aclCtx.actionSet.has('write'));
     });
 
-    it('configPermissionPath returns CONFIG for org config', () => {
+    it('configPermissionPath maps a config request to its keyword', () => {
+      // Org config (no site) -> the CONFIG keyword.
       assert.strictEqual(configPermissionPath({}), 'CONFIG');
+      assert.strictEqual(configPermissionPath({ key: '' }), 'CONFIG');
+      // Site config -> /{site}/CONFIG, derived from the key. (daCtx.site is undefined
+      // for the bare /config/{org}/{site} URL, so the key is the source of truth.)
+      assert.strictEqual(configPermissionPath({ key: 'mysite' }), '/mysite/CONFIG');
+      assert.strictEqual(
+        configPermissionPath({ key: 'mysite/public/config.json' }),
+        '/mysite/CONFIG',
+      );
     });
 
-    it('configPermissionPath returns /{site}/CONFIG when a site rule exists', () => {
-      const pathLookup = new Map([
-        ['someone@bloggs.org', [{ path: '/mysite/CONFIG', actions: ['read'] }]],
-      ]);
-      // The site is derived from the key, not daCtx.site: for a bare
-      // /config/{org}/{site} request the key is the site and daCtx.site is undefined.
-      const daCtx = { key: 'mysite', aclCtx: { pathLookup } };
-      assert.strictEqual(configPermissionPath(daCtx), '/mysite/CONFIG');
-    });
-
-    it('configPermissionPath derives the site from a deeper key', () => {
-      const pathLookup = new Map([
-        ['someone@bloggs.org', [{ path: '/mysite/CONFIG', actions: ['read'] }]],
-      ]);
-      const daCtx = { key: 'mysite/public/config.json', aclCtx: { pathLookup } };
-      assert.strictEqual(configPermissionPath(daCtx), '/mysite/CONFIG');
-    });
-
-    it('configPermissionPath falls back to CONFIG when no site rule exists', () => {
-      const pathLookup = new Map([
-        ['someone@bloggs.org', [{ path: 'CONFIG', actions: ['write'] }]],
-      ]);
-      const daCtx = { key: 'mysite', aclCtx: { pathLookup } };
-      assert.strictEqual(configPermissionPath(daCtx), 'CONFIG');
-    });
-
-    it('test site CONFIG governs site config read when a site rule is specified', async () => {
+    it('site config permission is granted by the site keyword or a site wildcard', async () => {
+      // Building blocks for the union model: the route grants config access if the user
+      // matches the /{site}/CONFIG keyword OR the org CONFIG keyword (see config route).
       const siteConfig = {
         test: {
           ':type': 'sheet',
           ':sheetname': 'permissions',
           data: [
             { path: '/mysite/CONFIG', groups: 'reader@bloggs.org', actions: 'read' },
-            { path: 'CONFIG', groups: 'orgadmin@bloggs.org', actions: 'write' },
-          ],
-        },
-      };
-      const siteEnv = { DA_CONFIG: { get: (name) => siteConfig[name] } };
-
-      // Build a site-config daCtx for a bare `/config/{org}/{site}` request. The key
-      // is the site and daCtx.site is intentionally absent (it would be undefined for
-      // this URL because daCtx parsing consumes the site as the filename).
-      const ctxFor = async (users, site) => {
-        const aclCtx = await getAclCtx(siteEnv, 'test', users, site, 'config');
-        return {
-          users, org: 'test', aclCtx, key: site,
-        };
-      };
-
-      const reader = [{ email: 'reader@bloggs.org' }];
-      const readerCtx = await ctxFor(reader, 'mysite');
-
-      // The index.js gate always allows reaching the config route for config requests.
-      assert(readerCtx.aclCtx.actionSet.has('read'));
-
-      // A /mysite/CONFIG rule exists, so the site keyword governs this site's config.
-      assert.strictEqual(configPermissionPath(readerCtx), '/mysite/CONFIG');
-
-      // The reader can read this site's config.
-      assert(hasPermission(readerCtx, configPermissionPath(readerCtx), 'read', true));
-      // ...but cannot write it.
-      assert(!hasPermission(readerCtx, configPermissionPath(readerCtx), 'write', true));
-
-      // An org-CONFIG holder without /mysite/CONFIG cannot read this site's config,
-      // because a /mysite/CONFIG rule is specified (no fallback to the CONFIG rule).
-      const orgAdmin = [{ email: 'orgadmin@bloggs.org' }];
-      const orgAdminCtx = await ctxFor(orgAdmin, 'mysite');
-      assert.strictEqual(configPermissionPath(orgAdminCtx), '/mysite/CONFIG');
-      assert(!hasPermission(orgAdminCtx, configPermissionPath(orgAdminCtx), 'read', true));
-    });
-
-    it('test site config falls back to CONFIG rule when no site rule is specified', async () => {
-      const siteConfig = {
-        test: {
-          ':type': 'sheet',
-          ':sheetname': 'permissions',
-          data: [
-            // Note: no /othersite/CONFIG rule is specified anywhere.
-            { path: 'CONFIG', groups: 'orgadmin@bloggs.org', actions: 'write' },
-            { path: '/mysite/CONFIG', groups: 'reader@bloggs.org', actions: 'read' },
-          ],
-        },
-      };
-      const siteEnv = { DA_CONFIG: { get: (name) => siteConfig[name] } };
-
-      const ctxFor = async (users, site) => {
-        const aclCtx = await getAclCtx(siteEnv, 'test', users, site, 'config');
-        return {
-          users, org: 'test', aclCtx, key: site,
-        };
-      };
-
-      // No /othersite/CONFIG rule -> falls back to the org-level CONFIG rule.
-      const orgAdmin = [{ email: 'orgadmin@bloggs.org' }];
-      const orgAdminCtx = await ctxFor(orgAdmin, 'othersite');
-      assert.strictEqual(configPermissionPath(orgAdminCtx), 'CONFIG');
-      // The CONFIG rule grants orgAdmin write (and therefore read) on this site's config.
-      assert(hasPermission(orgAdminCtx, configPermissionPath(orgAdminCtx), 'read', true));
-      assert(hasPermission(orgAdminCtx, configPermissionPath(orgAdminCtx), 'write', true));
-
-      // A user with only /mysite/CONFIG does not inherit access to othersite via the
-      // fallback, since the fallback follows the CONFIG rule which they do not hold.
-      const reader = [{ email: 'reader@bloggs.org' }];
-      const readerCtx = await ctxFor(reader, 'othersite');
-      assert.strictEqual(configPermissionPath(readerCtx), 'CONFIG');
-      assert(!hasPermission(readerCtx, configPermissionPath(readerCtx), 'read', true));
-    });
-
-    it('test site content wildcards grant access to the site config', async () => {
-      // No explicit /mysite/CONFIG rule: access is granted via site content wildcards.
-      const siteConfig = {
-        test: {
-          ':type': 'sheet',
-          ':sheetname': 'permissions',
-          data: [
             { path: '/mysite/+**', groups: 'plus@bloggs.org', actions: 'read' },
             { path: '/mysite/**', groups: 'star@bloggs.org', actions: 'write' },
-            { path: 'CONFIG', groups: 'orgadmin@bloggs.org', actions: 'write' },
           ],
         },
       };
       const siteEnv = { DA_CONFIG: { get: (name) => siteConfig[name] } };
 
+      // A bare /config/{org}/{site} request: key is the site, daCtx.site absent.
       const ctxFor = async (users) => {
         const aclCtx = await getAclCtx(siteEnv, 'test', users, 'mysite', 'config');
         return {
           users, org: 'test', aclCtx, key: 'mysite',
         };
       };
+      const siteKey = '/mysite/CONFIG';
 
-      // A /mysite/+** read rule grants read on /mysite/CONFIG (the bare /config/{org}/{site} URL).
-      const plus = [{ email: 'plus@bloggs.org' }];
-      const plusCtx = await ctxFor(plus);
-      assert.strictEqual(configPermissionPath(plusCtx), '/mysite/CONFIG');
-      assert(hasPermission(plusCtx, configPermissionPath(plusCtx), 'read', true));
-      assert(!hasPermission(plusCtx, configPermissionPath(plusCtx), 'write', true));
+      // An explicit /mysite/CONFIG read rule grants read but not write.
+      const reader = await ctxFor([{ email: 'reader@bloggs.org' }]);
+      assert(hasPermission(reader, siteKey, 'read', true));
+      assert(!hasPermission(reader, siteKey, 'write', true));
 
-      // A /mysite/** write rule grants read+write on the site config.
-      const star = [{ email: 'star@bloggs.org' }];
-      const starCtx = await ctxFor(star);
-      assert.strictEqual(configPermissionPath(starCtx), '/mysite/CONFIG');
-      assert(hasPermission(starCtx, configPermissionPath(starCtx), 'read', true));
-      assert(hasPermission(starCtx, configPermissionPath(starCtx), 'write', true));
+      // A /mysite/+** read wildcard matches the site keyword.
+      const plus = await ctxFor([{ email: 'plus@bloggs.org' }]);
+      assert(hasPermission(plus, siteKey, 'read', true));
 
-      // Since a site-scoped rule activates the /mysite/CONFIG keyword, an org-CONFIG-only
-      // admin without any /mysite/ rule is NOT granted access (no fallback to CONFIG).
-      const orgAdmin = [{ email: 'orgadmin@bloggs.org' }];
-      const orgAdminCtx = await ctxFor(orgAdmin);
-      assert.strictEqual(configPermissionPath(orgAdminCtx), '/mysite/CONFIG');
-      assert(!hasPermission(orgAdminCtx, configPermissionPath(orgAdminCtx), 'read', true));
-    });
-
-    it('test root wildcards do not suppress the org CONFIG fallback', async () => {
-      // A root /+** rule is not site-scoped, so it must not activate the per-site
-      // keyword; site config still falls back to the org CONFIG rule.
-      const siteConfig = {
-        test: {
-          ':type': 'sheet',
-          ':sheetname': 'permissions',
-          data: [
-            { path: '/+**', groups: 'root@bloggs.org', actions: 'write' },
-            { path: 'CONFIG', groups: 'orgadmin@bloggs.org', actions: 'write' },
-          ],
-        },
-      };
-      const siteEnv = { DA_CONFIG: { get: (name) => siteConfig[name] } };
-
-      const ctxFor = async (users) => {
-        const aclCtx = await getAclCtx(siteEnv, 'test', users, 'mysite', 'config');
-        return {
-          users, org: 'test', aclCtx, key: 'mysite',
-        };
-      };
-
-      // No site-scoped rule exists -> fall back to CONFIG.
-      const orgAdmin = [{ email: 'orgadmin@bloggs.org' }];
-      const orgAdminCtx = await ctxFor(orgAdmin);
-      assert.strictEqual(configPermissionPath(orgAdminCtx), 'CONFIG');
-      assert(hasPermission(orgAdminCtx, configPermissionPath(orgAdminCtx), 'read', true));
-
-      // The root-wildcard holder still gets in via the CONFIG fallback... only if they
-      // also hold CONFIG. /+** alone does not match the slash-less CONFIG keyword.
-      const root = [{ email: 'root@bloggs.org' }];
-      const rootCtx = await ctxFor(root);
-      assert.strictEqual(configPermissionPath(rootCtx), 'CONFIG');
-      assert(!hasPermission(rootCtx, configPermissionPath(rootCtx), 'read', true));
+      // A /mysite/** write wildcard grants read+write on the site keyword.
+      const star = await ctxFor([{ email: 'star@bloggs.org' }]);
+      assert(hasPermission(star, siteKey, 'read', true));
+      assert(hasPermission(star, siteKey, 'write', true));
     });
 
     it('test DA_OPS_IMS_ORG permissions', async () => {
