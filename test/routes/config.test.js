@@ -130,6 +130,60 @@ describe('Config', () => {
     assert.deepStrictEqual(getKVCalled, [{ e: env, c: ctx }]);
   });
 
+  it('Test getConfig site config granted via the site keyword', async () => {
+    // Real configPermissionPath derives /mysite/CONFIG from the key.
+    const ctx = { key: 'mysite' };
+    const env = {};
+
+    const getKVCalled = [];
+    const getKV = async (e, c) => {
+      getKVCalled.push({ e, c });
+      return 'called';
+    };
+
+    const hasPermission = (c, k, a, kw) => k === '/mysite/CONFIG' && a === 'read' && kw === true;
+
+    const { getConfig } = await esmock('../../src/routes/config.js', {
+      '../../src/storage/kv/get.js': {
+        default: getKV,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission,
+      },
+    });
+
+    const res = await getConfig({ env, daCtx: ctx });
+    assert.strictEqual(res, 'called');
+    assert.deepStrictEqual(getKVCalled, [{ e: env, c: ctx }]);
+  });
+
+  it('Test getConfig site config granted via the org CONFIG fallback', async () => {
+    // No /mysite/CONFIG permission, but the user holds the org CONFIG keyword.
+    const ctx = { key: 'mysite' };
+    const env = {};
+
+    const getKVCalled = [];
+    const getKV = async (e, c) => {
+      getKVCalled.push({ e, c });
+      return 'called';
+    };
+
+    const hasPermission = (c, k, a, kw) => k === 'CONFIG' && a === 'read' && kw === true;
+
+    const { getConfig } = await esmock('../../src/routes/config.js', {
+      '../../src/storage/kv/get.js': {
+        default: getKV,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission,
+      },
+    });
+
+    const res = await getConfig({ env, daCtx: ctx });
+    assert.strictEqual(res, 'called');
+    assert.deepStrictEqual(getKVCalled, [{ e: env, c: ctx }]);
+  });
+
   it('Test no permission', async () => {
     const ctx = {};
     const env = {};

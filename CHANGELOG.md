@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/adobe/da-admin/compare/v1.11.0...v1.11.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* derive config site from key and let site wildcards govern site config ([#295](https://github.com/adobe/da-admin/issues/295)) ([fd355f3](https://github.com/adobe/da-admin/commit/fd355f39d47ddbf4773e4f0e7c2e270ab5b49e32))
+
 # [1.11.0](https://github.com/adobe/da-admin/compare/v1.10.2...v1.11.0) (2026-06-17)
 
 
