@@ -81,10 +81,14 @@ function shouldCreateVersion(contentType) {
 // Infer a versionable contentType from the file extension when the stored
 // ContentType is missing or octet-stream (legacy imports). Returns the original
 // contentType when it is already versionable, or when we cannot map the extension.
-function inferVersionableType(contentType, ext) {
+// Legacy ext-less keys (e.g. `org/site/doc` with no `.html`) reach versionsource only via
+// labelled POST — auto-version is gated by createVersion which never fires for non-html/json.
+// DA never stores binaries without an extension, so default ext-less labelled POSTs to text/html.
+function inferVersionableType(contentType, ext, hasLabel = false) {
   if (shouldCreateVersion(contentType)) return contentType;
   if (ext === 'html') return 'text/html';
   if (ext === 'json') return 'application/json';
+  if (!ext && hasLabel) return 'text/html';
   return contentType;
 }
 
@@ -347,9 +351,18 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
   // Legacy imports may have lost their ContentType metadata (stored as
   // application/octet-stream). Recover the correct mime from the file
   // extension so the version write + main-object PUT both heal.
-  const inferredType = inferVersionableType(contentType, daCtx.ext);
+  const inferredType = inferVersionableType(contentType, daCtx.ext, label != null);
 
-  const resp = await putObjectWithVersion(env, daCtx, {
+  // Ext-less keys still need a file extension on the snapshot key
+  // (`{repo}/.da-versions/{id}/{version}.{ext}`) — otherwise putVersion writes `.undefined`.
+  let inferredExt = daCtx.ext;
+  if (!inferredExt) {
+    if (inferredType === 'text/html') inferredExt = 'html';
+    else if (inferredType === 'application/json') inferredExt = 'json';
+  }
+  const healedCtx = inferredExt !== daCtx.ext ? { ...daCtx, ext: inferredExt } : daCtx;
+
+  const resp = await putObjectWithVersion(env, healedCtx, {
     bucket, org, key, body: bodyBuffer, contentLength, type: inferredType, label,
   }, true);
 

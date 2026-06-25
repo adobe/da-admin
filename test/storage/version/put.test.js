@@ -3291,6 +3291,122 @@ describe('Version Put', () => {
       assert.ok(auditCalls[0].entry.versionId);
     });
 
+    it('heals legacy ext-less HTML on labelled version: snapshot + main object both repaired', async () => {
+      // Regression COR-99: ext-less paths (e.g. `remekie/aws/ai-visibility-chart`) hit
+      // postObjectVersionWithLabel with daCtx.ext === undefined. The COR-55 fix-B only mapped
+      // ext === 'html' | 'json' and fell through for ext === undefined, leaving labelled
+      // versionsource as a silent 500. DA never stores binaries without an extension, so an
+      // ext-less LABELLED POST defaults to text/html and heals.
+      const versionWrites = [];
+      const mainWrites = [];
+      const auditCalls = [];
+
+      const mockGetObject = async () => ({
+        body: '<html>legacy</html>',
+        contentType: 'application/octet-stream',
+        contentLength: 18,
+        status: 200,
+        metadata: {
+          id: 'legacy-id', version: 'v1', timestamp: '123', users: '[]', path: '/aws/ai-visibility-chart',
+        },
+        etag: '"etag1"',
+      });
+
+      const versionClient = {
+        async send(cmd) {
+          versionWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+      const mainClient = {
+        async send(cmd) {
+          mainWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+
+      const { postObjectVersionWithLabel } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => versionClient,
+          ifMatch: () => mainClient,
+        },
+        '../../../src/storage/version/audit.js': {
+          writeAuditEntry: async (env, ctx, repo, fileId, entry) => {
+            auditCalls.push({ repo, fileId, entry });
+          },
+        },
+        '../../../src/storage/utils/config.js': { default: () => ({}) },
+      });
+
+      const daCtx = {
+        bucket: 'b', org: 'o', site: 'aws', key: 'aws/ai-visibility-chart', ext: undefined, users: [],
+      };
+      const resp = await postObjectVersionWithLabel('Auto Version', {}, daCtx);
+
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(versionWrites.length, 1, 'version snapshot must be written');
+      assert.strictEqual(versionWrites[0].ContentType, 'text/html', 'snapshot ContentType must heal to text/html for ext-less labelled POST');
+      assert.ok(versionWrites[0].Key.endsWith('.html'), `version key must use .html suffix, got: ${versionWrites[0].Key}`);
+      assert.strictEqual(versionWrites[0].Metadata.Label, 'Auto Version');
+      assert.strictEqual(mainWrites.length, 1, 'main object PUT must run');
+      assert.strictEqual(mainWrites[0].ContentType, 'text/html', 'main object ContentType must heal in storage');
+      assert.strictEqual(auditCalls.length, 1, 'audit entry must be written');
+      assert.strictEqual(auditCalls[0].entry.versionLabel, 'Auto Version');
+      assert.ok(auditCalls[0].entry.versionId);
+    });
+
+    it('ext-less plain PUT (no label) still skips auto-version', async () => {
+      // Companion guard: ext-less heal must apply only to labelled POST. Plain PUT on an
+      // ext-less path with octet-stream contentType must NOT spawn an unsolicited version.
+      const versionWrites = [];
+      const mainWrites = [];
+
+      const mockGetObject = async () => ({
+        body: '<html>legacy</html>',
+        contentType: 'application/octet-stream',
+        contentLength: 18,
+        status: 200,
+        metadata: {
+          id: 'legacy-id', version: 'v1', timestamp: '123', users: '[]', path: '/aws/ai-visibility-chart',
+        },
+        etag: '"etag1"',
+      });
+
+      const versionClient = {
+        async send(cmd) {
+          versionWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+      const mainClient = {
+        async send(cmd) {
+          mainWrites.push(cmd.input);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifNoneMatch: () => versionClient,
+          ifMatch: () => mainClient,
+        },
+      });
+
+      const daCtx = {
+        org: 'o', ext: undefined, site: 'aws', users: [{ email: 'u@x.com' }],
+      };
+      const update = {
+        org: 'o', key: 'aws/ai-visibility-chart', body: 'new', type: 'application/octet-stream',
+      };
+      const resp = await putObjectWithVersion({}, daCtx, update, true);
+
+      assert.strictEqual(resp.status, 200);
+      assert.strictEqual(versionWrites.length, 0, 'no version snapshot for plain ext-less PUT without label');
+      assert.strictEqual(mainWrites.length, 1, 'main object updated once');
+    });
+
     it('logs diagnostics and returns 500 when labelled version requested on non-versionable ext', async () => {
       // Preserves the binary-never-version semantics: when the file extension does not map
       // to a versionable mime (and the stored contentType is also not versionable), the
