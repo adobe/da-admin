@@ -881,7 +881,7 @@ describe('Version Audit', () => {
       });
 
       it('uses exponential jitter backoff (0-50, 0-100, 0-200, 0-400, 0-800, 0-1600 ms) across six 412 retries', async () => {
-        // Also stubs Math.random to capture per-retry delays.
+        // stub Math.random so we can capture per-retry delays
         const originalRandom = Math.random;
         const delays = [];
         Math.random = () => 0.999999;
