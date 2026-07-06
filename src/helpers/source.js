@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { FORM_TYPES } from '../utils/constants.js';
+import { FORM_TYPES, SUPPORTED_TYPES, MEDIA_TYPES } from '../utils/constants.js';
 import normalizeCharset from '../utils/charset.js';
 
 /**
@@ -78,7 +78,7 @@ export async function putHelper(req, env, daCtx) {
 
   if (FORM_TYPES.some((type) => type === contentType)) return formPutHandler(req, env, daCtx);
 
-  if (contentType === 'text/html') {
+  if (SUPPORTED_TYPES.includes(contentType) && !MEDIA_TYPES.includes(contentType)) {
     return rawBodyPutHandler(req, contentType);
   }
 
