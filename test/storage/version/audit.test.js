@@ -815,6 +815,14 @@ describe('Version Audit', () => {
     });
 
     it('returns status 500 when PUT 412 persists across all 7 attempts', async () => {
+      // Stubs setTimeout so the ~3050ms worst-case retry backoff (see
+      // audit.js) doesn't race mocha's 2000ms default test timeout.
+      const originalSetTimeout = globalThis.setTimeout;
+      globalThis.setTimeout = (fn) => {
+        fn();
+        return 0;
+      };
+
       let getCallCount = 0;
       let putCallCount = 0;
 
@@ -825,37 +833,42 @@ describe('Version Audit', () => {
         },
       });
 
-      const { writeAuditEntry } = await esmock(
-        '../../../src/storage/version/audit.js',
-        {
-          '@aws-sdk/client-s3': {
-            S3Client: function S3Client() {
-              this.send = async (cmd) => {
-                if (cmd instanceof GetObjectCommand) {
-                  getCallCount += 1;
-                  return { Body: makeBody(), ETag: '"etag-x"' };
-                }
-                if (cmd instanceof PutObjectCommand) {
-                  putCallCount += 1;
-                  const err = new Error('precondition failed');
-                  err.$metadata = { httpStatusCode: 412 };
-                  throw err;
-                }
-                return { $metadata: { httpStatusCode: 200 } };
-              };
+      let result;
+      try {
+        const { writeAuditEntry } = await esmock(
+          '../../../src/storage/version/audit.js',
+          {
+            '@aws-sdk/client-s3': {
+              S3Client: function S3Client() {
+                this.send = async (cmd) => {
+                  if (cmd instanceof GetObjectCommand) {
+                    getCallCount += 1;
+                    return { Body: makeBody(), ETag: '"etag-x"' };
+                  }
+                  if (cmd instanceof PutObjectCommand) {
+                    putCallCount += 1;
+                    const err = new Error('precondition failed');
+                    err.$metadata = { httpStatusCode: 412 };
+                    throw err;
+                  }
+                  return { $metadata: { httpStatusCode: 200 } };
+                };
+              },
+              GetObjectCommand,
+              PutObjectCommand,
             },
-            GetObjectCommand,
-            PutObjectCommand,
+            '../../../src/storage/utils/config.js': { default: () => ({}) },
           },
-          '../../../src/storage/utils/config.js': { default: () => ({}) },
-        },
-      );
+        );
 
-      const result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
-        timestamp: '5000',
-        users: '[{"email":"u@x.com"}]',
-        path: 'repo/doc.html',
-      });
+        result = await writeAuditEntry({}, { bucket: 'b', org: 'o' }, 'repo', 'fid', {
+          timestamp: '5000',
+          users: '[{"email":"u@x.com"}]',
+          path: 'repo/doc.html',
+        });
+      } finally {
+        globalThis.setTimeout = originalSetTimeout;
+      }
 
       assert.strictEqual(result.status, 500, 'persistent 412 must surface as 500 after 7 total attempts');
       assert.strictEqual(result.error, 'precondition failed');
