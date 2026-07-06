@@ -815,13 +815,8 @@ describe('Version Audit', () => {
     });
 
     describe('412 retry backoff', () => {
-      // These tests exercise the real retry loop in writeAuditEntry, which
-      // sleeps between attempts with real exponential-jitter setTimeout
-      // delays (worst case ~3050ms across 6 retries, see audit.js). Real
-      // delays here would race mocha's 2000ms default test timeout, so every
-      // test in this block stubs setTimeout to fire immediately. The hook
-      // only owns save/restore of the reference — each test installs
-      // whatever replacement behavior it needs (some also capture delays).
+      // Real retry delays (~3050ms worst case) would exceed mocha's 2000ms
+      // timeout, so each test stubs setTimeout; the hook just restores it.
       let originalSetTimeout;
 
       beforeEach(() => {
@@ -887,9 +882,7 @@ describe('Version Audit', () => {
       });
 
       it('uses exponential jitter backoff (0-50, 0-100, 0-200, 0-400, 0-800, 0-1600 ms) across six 412 retries', async () => {
-        // Also stubs Math.random to capture per-retry delays. Asserts
-        // per-attempt exponential upper bounds for the 6-retry ladder
-        // (50, 100, 200, 400, 800, 1600 ms) and total elapsed sleep ~3050 ms.
+        // Also stubs Math.random to capture per-retry delays.
         const originalRandom = Math.random;
         const delays = [];
         Math.random = () => 0.999999;
