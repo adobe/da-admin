@@ -815,8 +815,7 @@ describe('Version Audit', () => {
     });
 
     describe('412 retry backoff', () => {
-      // Real retry delays (~3050ms worst case) would exceed mocha's 2000ms
-      // timeout, so each test stubs setTimeout; the hook just restores it.
+      // stub/restore setTimeout to avoid exceeding mocha 2000ms timeout
       let originalSetTimeout;
 
       beforeEach(() => {
