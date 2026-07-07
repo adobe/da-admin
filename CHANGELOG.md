@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/adobe/da-admin/compare/v1.11.2...v1.12.0) (2026-07-07)
+
+
+### Features
+
+* **source:** accept raw body PUT/POST for application/json ([#294](https://github.com/adobe/da-admin/issues/294)) ([6d1363c](https://github.com/adobe/da-admin/commit/6d1363c2c905c04f98f835d881ac8121d5cc4e72))
+
 ## [1.11.2](https://github.com/adobe/da-admin/compare/v1.11.1...v1.11.2) (2026-06-30)
 
 
