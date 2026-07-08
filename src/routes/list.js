@@ -11,13 +11,20 @@
  */
 import listBuckets from '../storage/bucket/list.js';
 import listObjects from '../storage/object/list.js';
-import { getChildRules, hasPermission } from '../utils/auth.js';
+import { getChildRules, hasDescendantPermission, hasPermission } from '../utils/auth.js';
 
 export default async function getList({ env, daCtx }) {
   if (!daCtx.org) return listBuckets(env, daCtx);
-  if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
+
+  const canReadDir = hasPermission(daCtx, daCtx.key, 'read');
+  if (!canReadDir && !hasDescendantPermission(daCtx, daCtx.key, 'read')) {
+    return { status: 403 };
+  }
 
   // Get the child rules of the current folder and store this in daCtx.aclCtx
   getChildRules(daCtx);
-  return /* await */ listObjects(env, daCtx);
+  // When the user can't read this folder directly but has permission on some
+  // descendant, only the folder itself is authorized as an ancestor - each
+  // child must still be checked individually before being shown.
+  return /* await */ listObjects(env, daCtx, undefined, !canReadDir);
 }

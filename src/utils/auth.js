@@ -453,6 +453,37 @@ export function getChildRules(daCtx) {
   daCtx.aclCtx.childRules = [`${probeDir}**=${[...resultSet].join(',')}`];
 }
 
+/**
+ * Whether the user has `action` on some path at or below `path` (a descendant,
+ * or `path` itself). Used to let a listing of an ancestor folder proceed even
+ * when the user has no permission on the folder itself - e.g. a user granted
+ * read on `/folder2/a/b/c` only should still see `folder2` when listing `/`.
+ * Keyword paths (CONFIG, ACLTRACE) are ignored since they don't represent
+ * content and must not leak directory visibility.
+ */
+export function hasDescendantPermission(daCtx, path, action = 'read') {
+  if (path === null || path === undefined) return false;
+  const { pathLookup } = daCtx.aclCtx;
+  if (pathLookup.size === 0) return true;
+
+  const p = !path.startsWith('/') ? `/${path}` : path;
+  const dirKey = p === '/' ? '/' : `${p.endsWith('/') ? p.slice(0, -1) : p}/`;
+
+  return daCtx.users.every((u) => getIdents(u).some((ident) => (pathLookup.get(ident) || [])
+    .some((r) => {
+      if (!r.path.startsWith('/')) return false;
+      if (r.path === 'CONFIG' || r.path.endsWith('/CONFIG')) return false;
+      if (!r.actions.includes(action)) return false;
+
+      let base = r.path;
+      if (base.endsWith('/+**')) base = base.slice(0, -3);
+      else if (base.endsWith('/**')) base = base.slice(0, -2);
+      else base = base.endsWith('/') ? base : `${base}/`;
+
+      return base.startsWith(dirKey);
+    })));
+}
+
 export function hasPermission(daCtx, path, action, keywordPath = false) {
   if (path === null || path === undefined) return false;
   if (daCtx.aclCtx.pathLookup.size === 0) {

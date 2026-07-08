@@ -23,6 +23,7 @@ import {
   getAclCtx,
   getChildRules,
   getUserActions,
+  hasDescendantPermission,
   hasPermission,
   logout,
   pathSorter,
@@ -1194,5 +1195,131 @@ describe('DA auth', () => {
     const rules = daCtx.aclCtx.childRules;
     assert.strictEqual(1, rules.length);
     assert(rules[0] === '/foo/**=read,write' || rules[0] === '/foo/**=write,read');
+  });
+
+  describe('hasDescendantPermission (ancestor listing)', async () => {
+    const DA_CONFIG = {
+      test: {
+        ':type': 'multi-sheet',
+        permissions: {
+          data: [
+            // Only a deep exact page is granted - the reported customer bug.
+            { path: '/folder2/a/b/c', groups: 'deep@bloggs.org', actions: 'read' },
+            // A folder granted via a recursive-descendants-only wildcard.
+            { path: '/folder/**', groups: 'wild@bloggs.org', actions: 'read' },
+            // A folder granted via +** (folder itself and descendants), write-only
+            // (write implies read).
+            { path: '/team/proj/+**', groups: 'plus@bloggs.org', actions: 'write' },
+            // A user with both a wildcard folder and a deep exact page - should
+            // reveal both "folder" and "folder2" when listing "/".
+            { path: '/folder/**', groups: 'both@bloggs.org', actions: 'read' },
+            { path: '/folder2/a/b/c', groups: 'both@bloggs.org', actions: 'read' },
+            // A user who shares one path with another co-author (AND semantics).
+            { path: '/shared/**', groups: 'sharedA@bloggs.org', actions: 'read' },
+            { path: '/shared/**', groups: 'sharedB@bloggs.org', actions: 'read' },
+            // Unrelated grants that must not leak directory visibility.
+            { path: '/other/x', groups: 'other@bloggs.org', actions: 'write' },
+            { path: 'CONFIG', groups: 'cfgonly@bloggs.org', actions: 'write' },
+            { path: '/site/CONFIG', groups: 'sitecfg@bloggs.org', actions: 'write' },
+          ],
+        },
+      },
+    };
+    const env = { DA_CONFIG: { get: (name) => DA_CONFIG[name] } };
+
+    async function aclCtxFor(...emails) {
+      const users = emails.map((email) => ({ email }));
+      const aclCtx = await getAclCtx(env, 'test', users, '/irrelevant');
+      return { users, aclCtx };
+    }
+
+    it('returns false for a null or undefined path', async () => {
+      const { users, aclCtx } = await aclCtxFor('deep@bloggs.org');
+      assert(!hasDescendantPermission({ users, aclCtx }, null, 'read'));
+      assert(!hasDescendantPermission({ users, aclCtx }, undefined, 'read'));
+    });
+
+    it('returns true for every ancestor of a deep exact grant, and the exact path itself', async () => {
+      const { users, aclCtx } = await aclCtxFor('deep@bloggs.org');
+      const ctx = { users, aclCtx };
+      assert(hasDescendantPermission(ctx, '/', 'read'));
+      assert(hasDescendantPermission(ctx, '/folder2', 'read'));
+      assert(hasDescendantPermission(ctx, '/folder2/a', 'read'));
+      assert(hasDescendantPermission(ctx, '/folder2/a/b', 'read'));
+      assert(hasDescendantPermission(ctx, '/folder2/a/b/c', 'read'));
+      assert(hasDescendantPermission(ctx, 'folder2', 'read'), 'should normalize missing leading slash');
+    });
+
+    it('returns false beyond the exact grant and for unrelated siblings', async () => {
+      const { users, aclCtx } = await aclCtxFor('deep@bloggs.org');
+      const ctx = { users, aclCtx };
+      // An exact (non-wildcard) grant does not cover its own children.
+      assert(!hasDescendantPermission(ctx, '/folder2/a/b/c/d', 'read'));
+      assert(!hasDescendantPermission(ctx, '/folder3', 'read'));
+      // Prefix-collision guard: "/team" must not match "/teamx".
+      assert(!hasDescendantPermission(ctx, '/foo', 'read'));
+    });
+
+    it('respects the action being checked', async () => {
+      const { users, aclCtx } = await aclCtxFor('deep@bloggs.org');
+      const ctx = { users, aclCtx };
+      assert(hasDescendantPermission(ctx, '/folder2', 'read'));
+      assert(!hasDescendantPermission(ctx, '/folder2', 'write'));
+    });
+
+    it('returns true when the deepest grant is via a recursive wildcard', async () => {
+      const { users, aclCtx } = await aclCtxFor('wild@bloggs.org');
+      const ctx = { users, aclCtx };
+      assert(hasDescendantPermission(ctx, '/', 'read'));
+      assert(hasDescendantPermission(ctx, '/folder', 'read'));
+      assert(!hasDescendantPermission(ctx, '/folderx', 'read'), 'prefix-collision guard');
+    });
+
+    it('returns true for ancestors of a +** grant', async () => {
+      const { users, aclCtx } = await aclCtxFor('plus@bloggs.org');
+      const ctx = { users, aclCtx };
+      // "/team" and "/team/proj" are ancestors of the granted root and need
+      // this fallback to be listable. "/team/proj/sub" is already directly
+      // covered by hasPermission's forward +** match, so it's out of scope
+      // for this ancestor-only helper (hasPermission is checked first by
+      // callers and would already return true there).
+      assert(hasDescendantPermission(ctx, '/team', 'read'));
+      assert(hasDescendantPermission(ctx, '/team/proj', 'read'));
+      assert(!hasDescendantPermission(ctx, '/teamx', 'read'), 'prefix-collision guard');
+    });
+
+    it('reveals every distinct top-level folder that leads to a grant for the same user', async () => {
+      const { users, aclCtx } = await aclCtxFor('both@bloggs.org');
+      const ctx = { users, aclCtx };
+      assert(hasDescendantPermission(ctx, '/', 'read'));
+      assert(hasDescendantPermission(ctx, '/folder', 'read'));
+      assert(hasDescendantPermission(ctx, '/folder2', 'read'));
+      assert(!hasDescendantPermission(ctx, '/folder3', 'read'));
+    });
+
+    it('requires every co-author to have descendant permission (AND semantics)', async () => {
+      const both = await aclCtxFor('sharedA@bloggs.org', 'sharedB@bloggs.org');
+      assert(hasDescendantPermission(both, '/shared', 'read'));
+
+      const mixed = await aclCtxFor('deep@bloggs.org', 'other@bloggs.org');
+      assert(!hasDescendantPermission(mixed, '/folder2', 'read'), 'other@bloggs.org has no grant there');
+    });
+
+    it('does not leak directory visibility from CONFIG-only grants', async () => {
+      const cfgOnly = await aclCtxFor('cfgonly@bloggs.org');
+      assert(!hasDescendantPermission(cfgOnly, '/', 'read'));
+
+      const siteCfg = await aclCtxFor('sitecfg@bloggs.org');
+      assert(!hasDescendantPermission(siteCfg, '/', 'read'));
+      assert(!hasDescendantPermission(siteCfg, '/site', 'read'));
+    });
+
+    it('returns true unconditionally when there is no ACL config at all', async () => {
+      const openEnv = { DA_CONFIG: { get: () => undefined } };
+      const users = [{ email: 'anyone@bloggs.org' }];
+      const aclCtx = await getAclCtx(openEnv, 'test', users, '/irrelevant');
+      assert(hasDescendantPermission({ users, aclCtx }, '/', 'read'));
+      assert(hasDescendantPermission({ users, aclCtx }, '/anything/at/all', 'read'));
+    });
   });
 });

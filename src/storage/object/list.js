@@ -16,6 +16,7 @@ import {
 
 import getS3Config from '../utils/config.js';
 import formatList from '../utils/list.js';
+import { hasDescendantPermission, hasPermission } from '../../utils/auth.js';
 
 function buildInput({
   bucket, org, key, maxKeys, continuationToken,
@@ -30,7 +31,24 @@ function buildInput({
   return input;
 }
 
-export default async function listObjects(env, daCtx, maxKeys) {
+// Only used when the caller couldn't read the listed folder directly, but got
+// in because some descendant is permitted (see src/routes/list.js). Every
+// child then needs its own check: folders may lead to a permitted descendant
+// even if not directly readable, but files have no descendants to fall back on.
+function filterUnauthorized(daCtx, items) {
+  // item.path is bucket-relative (starts with /{org}/...) since one bucket is
+  // shared across orgs, but permissions are org-scoped and keyed off
+  // org-relative paths (like daCtx.key) - so the org segment must be stripped
+  // before checking.
+  const orgPrefix = `/${daCtx.org}`;
+  return items.filter((item) => {
+    const relPath = item.path.slice(orgPrefix.length) || '/';
+    return hasPermission(daCtx, relPath, 'read')
+      || (!item.ext && hasDescendantPermission(daCtx, relPath, 'read'));
+  });
+}
+
+export default async function listObjects(env, daCtx, maxKeys, restrictToPermitted = false) {
   const config = getS3Config(env);
   const client = new S3Client(config);
 
@@ -42,7 +60,9 @@ export default async function listObjects(env, daCtx, maxKeys) {
   try {
     const resp = await client.send(command);
     // console.log(resp);
-    const body = formatList(resp);
+    const body = restrictToPermitted
+      ? filterUnauthorized(daCtx, formatList(resp))
+      : formatList(resp);
     const nextContinuationToken = resp.IsTruncated
       && resp.NextContinuationToken
       && resp.NextContinuationToken !== daCtx.continuationToken
