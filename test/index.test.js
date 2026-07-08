@@ -67,6 +67,50 @@ describe('fetch', () => {
     assert.strictEqual(resp.status, 403);
   });
 
+  it('defers to the list route when not authorized on the exact path but api is list', async () => {
+    // daCtx.authorized reflects exact-path permission only. A user who is only
+    // granted access on a deep descendant (e.g. /folder2/a/b/c) has
+    // authorized=false for the root listing request, but routes/list.js knows
+    // how to fall back to descendant permission - so the blanket 403 gate here
+    // must not shadow it for the list api.
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: false,
+          users: [{ email: 'acapt@adobe.com' }],
+          path: '/list/kptdobe',
+          api: 'list',
+          org: 'kptdobe',
+          key: '',
+        }),
+      },
+      '../src/handlers/get.js': {
+        default: async () => ({ status: 200, body: '[]', contentType: 'application/json' }),
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/list/kptdobe' }, {});
+    assert.strictEqual(resp.status, 200);
+  });
+
+  it('still returns 403 for a non-list api when not authorized on the exact path', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: false,
+          users: [{ email: 'acapt@adobe.com' }],
+          path: '/source/kptdobe/test/index.html',
+          api: 'source',
+          org: 'kptdobe',
+          key: 'test/index.html',
+        }),
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/source/kptdobe/test/index.html' }, {});
+    assert.strictEqual(resp.status, 403);
+  });
+
   it('return 404 for unknown get route', async () => {
     const hnd = await esmock('../src/index.js', {
       '../src/utils/daCtx.js': {
