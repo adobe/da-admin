@@ -1,3 +1,10 @@
+## [1.12.1](https://github.com/adobe/da-admin/compare/v1.12.0...v1.12.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **list:** allow listing an ancestor folder when permission is only granted on a descendant ([#299](https://github.com/adobe/da-admin/issues/299)) ([420f664](https://github.com/adobe/da-admin/commit/420f66454cf00e18b3a4d92c071746ef690082bc))
+
 # [1.12.0](https://github.com/adobe/da-admin/compare/v1.11.2...v1.12.0) (2026-07-07)
 
 
