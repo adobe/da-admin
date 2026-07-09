@@ -196,15 +196,35 @@ function getIdents(user) {
   return idents.map((ident) => ident?.toLowerCase());
 }
 
+// A page's assets live in a dot-folder next to it (e.g. `foo.html`'s images live under
+// `.foo/`). A recursive grant on `foo` or `foo/**` must also cover `.foo/**` so uploading
+// to a page's asset folder doesn't require a separate ACL entry.
+function dotFolderVariant(prefix) {
+  const trimmed = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+  const slashIdx = trimmed.lastIndexOf('/');
+  const lastSegment = trimmed.slice(slashIdx + 1);
+  if (!lastSegment || lastSegment.startsWith('.')) return null;
+  return `${trimmed.slice(0, slashIdx + 1)}.${lastSegment}/`;
+}
+
 export function getUserActions(pathLookup, user, target) {
   const idents = getIdents(user);
 
   const plVals = idents.map((key) => pathLookup.get(key) || []);
   const actions = plVals.map((entries) => entries
     .find(({ path }) => {
-      if (path.endsWith('/+**')) return target.startsWith(path.slice(0, -3)) || target === path.slice(0, -4);
+      if (path.endsWith('/+**')) {
+        const prefix = path.slice(0, -3);
+        const dotPrefix = dotFolderVariant(prefix);
+        return target.startsWith(prefix) || target === path.slice(0, -4)
+          || (dotPrefix && target.startsWith(dotPrefix));
+      }
       if (target.length < path.length) return false;
-      if (path.endsWith('/**')) return target.startsWith(path.slice(0, -2));
+      if (path.endsWith('/**')) {
+        const prefix = path.slice(0, -2);
+        const dotPrefix = dotFolderVariant(prefix);
+        return target.startsWith(prefix) || (dotPrefix && target.startsWith(dotPrefix));
+      }
       if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
       return target === path;
     }))
