@@ -1064,6 +1064,35 @@ describe('DA auth', () => {
     );
   });
 
+  it('page-scoped grant also covers the page\'s dot asset folder', () => {
+    const patharr = [
+      {
+        path: '/westernsydney/learning-futures/+**',
+        actions: ['write'],
+      },
+      {
+        path: '/westernsydney/learning-futures.html',
+        actions: ['write'],
+      },
+    ];
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', patharr);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual(
+      ['write'],
+      [...getUserActions(pathlookup, user, '/westernsydney/learning-futures.html').actions],
+    );
+    assert.deepStrictEqual(
+      ['write'],
+      [...getUserActions(pathlookup, user, '/westernsydney/.learning-futures/Parramatta.jpg').actions],
+    );
+  });
+
   it('test logout', async () => {
     const deleteCalled = [];
     const deleteFunc = async (id) => {
