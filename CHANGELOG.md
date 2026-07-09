@@ -1,3 +1,10 @@
+## [1.12.2](https://github.com/adobe/da-admin/compare/v1.12.1...v1.12.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* page-scoped ACL grants also cover the page's dot asset folder ([#300](https://github.com/adobe/da-admin/issues/300)) ([0e95a8e](https://github.com/adobe/da-admin/commit/0e95a8e1fb700c5c849a107b9c96b24277ece2ff))
+
 ## [1.12.1](https://github.com/adobe/da-admin/compare/v1.12.0...v1.12.1) (2026-07-08)
 
 
