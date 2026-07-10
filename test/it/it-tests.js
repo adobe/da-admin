@@ -451,6 +451,75 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.ok(fileNames.includes('page2'), 'Should list page2');
   });
 
+  it('[super user] should copy a page within the org', async () => {
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+    const formData = new FormData();
+    formData.append('destination', `/${org}/${repo}/test-folder/page1-copy.html`);
+
+    let resp = await fetch(`${serverUrl}/copy/${org}/${repo}/test-folder/page1.html`, {
+      method: 'POST',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 204, `Expected 204 No Content, got ${resp.status} - user: ${superUser.email}`);
+
+    // validate the copy exists
+    resp = await fetch(`${serverUrl}/source/${org}/${repo}/test-folder/page1-copy.html`, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
+    const body = await resp.text();
+    assert.strictEqual(body, '<html><body><h1>Page 1</h1></body></html>');
+  });
+
+  it('[super user] cannot copy a page to another org', async () => {
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+    const formData = new FormData();
+    formData.append('destination', `/other-${org}/${repo}/test-folder/page1-xorg.html`);
+
+    let resp = await fetch(`${serverUrl}/copy/${org}/${repo}/test-folder/page1.html`, {
+      method: 'POST',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 400, `Expected 400 Bad Request, got ${resp.status} - user: ${superUser.email}`);
+    const body = await resp.json();
+    assert.match(body.error, /same org/i, `Expected cross-org error, got ${body.error}`);
+
+    // validate no phantom copy was re-anchored into the source org
+    resp = await fetch(`${serverUrl}/source/${org}/${repo}/test-folder/page1-xorg.html`, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 404, `Expected 404 Not Found, got ${resp.status} - user: ${superUser.email}`);
+  });
+
+  it('[super user] cannot move a page to another org', async () => {
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+    const formData = new FormData();
+    formData.append('destination', `/other-${org}/${repo}/test-folder/page1-moved.html`);
+
+    let resp = await fetch(`${serverUrl}/move/${org}/${repo}/test-folder/page1-copy.html`, {
+      method: 'POST',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 400, `Expected 400 Bad Request, got ${resp.status} - user: ${superUser.email}`);
+    const body = await resp.json();
+    assert.match(body.error, /same org/i, `Expected cross-org error, got ${body.error}`);
+
+    // validate the source was not touched
+    resp = await fetch(`${serverUrl}/source/${org}/${repo}/test-folder/page1-copy.html`, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
+  });
+
   it('[anonymous] cannot delete an object', async () => {
     const {
       serverUrl, org, repo, key,
