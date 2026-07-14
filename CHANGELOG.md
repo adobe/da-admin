@@ -1,3 +1,10 @@
+## [1.12.3](https://github.com/adobe/da-admin/compare/v1.12.2...v1.12.3) (2026-07-14)
+
+
+### Bug Fixes
+
+* reject cross-org copy/move destinations instead of misdelivering ([#301](https://github.com/adobe/da-admin/issues/301)) ([fd7a351](https://github.com/adobe/da-admin/commit/fd7a3511faf98e6282a2d2e88b10b2eb3717970f))
+
 ## [1.12.2](https://github.com/adobe/da-admin/compare/v1.12.1...v1.12.2) (2026-07-09)
 
 
