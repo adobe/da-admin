@@ -37,8 +37,11 @@ export default async function copyHelper(req, daCtx) {
   const continuationToken = formData.get('continuation-token');
   const lower = fullDest.slice(1).toLowerCase();
   const sanitized = lower.endsWith('/') ? lower.slice(0, -1) : lower;
+
+  // Reject cross-org destinations
   const [destOrg, ...destParts] = sanitized.split('/');
   if (destOrg !== daCtx.org) return { error: CROSS_ORG_ERROR };
+
   const destination = destParts.join('/');
   const source = daCtx.key;
   return { source, destination, continuationToken };
