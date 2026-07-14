@@ -44,11 +44,11 @@ describe('Move Route', () => {
       formData: () => formdata,
     };
 
-    const resp = await moveRoute({ req, env: {}, daCtx: { key: 'abc.html' } });
+    const resp = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'abc.html' } });
     assert.strictEqual(403, resp.status);
     assert.strictEqual(0, moCalled.length);
 
-    const resp2 = await moveRoute({ req, env: {}, daCtx: { key: 'zzz.html' } });
+    const resp2 = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'zzz.html' } });
     assert.strictEqual(403, resp2.status);
     assert.strictEqual(0, moCalled.length);
 
@@ -58,13 +58,69 @@ describe('Move Route', () => {
       formData: () => formdata2,
     };
 
-    const resp3 = await moveRoute({ req: req2, env: {}, daCtx: { key: 'abc.html' } });
+    const resp3 = await moveRoute({ req: req2, env: {}, daCtx: { org: 'someorg', key: 'abc.html' } });
     assert.strictEqual(403, resp3.status);
     assert.strictEqual(0, moCalled.length);
 
-    await moveRoute({ req: req2, env: {}, daCtx: { key: 'zzz.html' } });
+    await moveRoute({ req: req2, env: {}, daCtx: { org: 'someorg', key: 'zzz.html' } });
     assert.strictEqual(1, moCalled.length);
     assert.strictEqual('zzz.html', moCalled[0].d.source);
     assert.strictEqual('someotherdest', moCalled[0].d.destination);
+  });
+
+  it('Test moveRoute returns 400 when destination org differs from request org', async () => {
+    const moCalled = [];
+    const moveObject = (e, c, d) => {
+      moCalled.push({ e, c, d });
+    };
+
+    const moveRoute = await esmock('../../src/routes/move.js', {
+      '../../src/storage/object/move.js': {
+        default: moveObject,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission: () => true,
+      },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/otherorg/somedest/');
+    const req = {
+      formData: () => formdata,
+    };
+
+    const resp = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'abc.html' } });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(0, moCalled.length);
+    const body = JSON.parse(resp.body);
+    assert.match(body.error, /same org/i);
+  });
+
+  it('Test moveRoute accepts a same-org destination regardless of case', async () => {
+    const moCalled = [];
+    const moveObject = (e, c, d) => {
+      moCalled.push({ e, c, d });
+      return { status: 204 };
+    };
+
+    const moveRoute = await esmock('../../src/routes/move.js', {
+      '../../src/storage/object/move.js': {
+        default: moveObject,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission: () => true,
+      },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/SomeOrg/somedest/');
+    const req = {
+      formData: () => formdata,
+    };
+
+    const resp = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'abc.html' } });
+    assert.strictEqual(resp.status, 204);
+    assert.strictEqual(1, moCalled.length);
+    assert.strictEqual('somedest', moCalled[0].d.destination);
   });
 });

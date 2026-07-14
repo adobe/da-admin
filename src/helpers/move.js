@@ -20,6 +20,11 @@ const NO_PARENT_ERROR = {
   status: 400,
 };
 
+const CROSS_ORG_ERROR = {
+  body: JSON.stringify({ error: 'Destination must be in the same org as the source.' }),
+  status: 400,
+};
+
 export default async function moveHelper(req, daCtx) {
   try {
     const formData = await req.formData();
@@ -28,7 +33,12 @@ export default async function moveHelper(req, daCtx) {
     if (!fullDest) return { error: NO_DEST_ERROR };
     const lower = fullDest.slice(1).toLowerCase();
     const sanitized = lower.endsWith('/') ? lower.slice(0, -1) : lower;
-    let destination = sanitized.split('/').slice(1).join('/');
+
+    // Reject cross-org destinations
+    const [destOrg, ...destParts] = sanitized.split('/');
+    if (destOrg !== daCtx.org) return { error: CROSS_ORG_ERROR };
+
+    let destination = destParts.join('/');
     const source = daCtx.key;
 
     // Ensure destination is not child of source

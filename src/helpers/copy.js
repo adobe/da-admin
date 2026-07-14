@@ -19,6 +19,11 @@ const BAD_CONTENT_TYPE_ERROR = {
   status: 400,
 };
 
+const CROSS_ORG_ERROR = {
+  body: JSON.stringify({ error: 'Destination must be in the same org as the source.' }),
+  status: 400,
+};
+
 export default async function copyHelper(req, daCtx) {
   let formData;
   try {
@@ -32,7 +37,12 @@ export default async function copyHelper(req, daCtx) {
   const continuationToken = formData.get('continuation-token');
   const lower = fullDest.slice(1).toLowerCase();
   const sanitized = lower.endsWith('/') ? lower.slice(0, -1) : lower;
-  const destination = sanitized.split('/').slice(1).join('/');
+
+  // Reject cross-org destinations
+  const [destOrg, ...destParts] = sanitized.split('/');
+  if (destOrg !== daCtx.org) return { error: CROSS_ORG_ERROR };
+
+  const destination = destParts.join('/');
   const source = daCtx.key;
   return { source, destination, continuationToken };
 }
