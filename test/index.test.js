@@ -278,6 +278,72 @@ describe('.da-versions storage guard', () => {
     );
     assert.strictEqual(resp.status, 200);
   });
+
+  it('blocks the legacy org-root .da-versions layout (first-segment key)', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/source/org/.da-versions/1234/5678.html',
+          api: 'source',
+          org: 'org',
+          key: '.da-versions/1234/5678.html',
+        }),
+      },
+      '../src/handlers/get.js': leakHandler,
+    });
+
+    const resp = await hnd.fetch(
+      { method: 'GET', url: 'http://www.example.com/source/org/.da-versions/1234/5678.html' },
+      {},
+    );
+    assert.strictEqual(resp.status, 404);
+  });
+
+  it('blocks writing an audit object via the generic source route', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/source/org/repo/.da-versions/1234/audit.txt',
+          api: 'source',
+          org: 'org',
+          key: 'repo/.da-versions/1234/audit.txt',
+        }),
+      },
+      '../src/handlers/post.js': leakHandler,
+    });
+
+    const resp = await hnd.fetch(
+      { method: 'POST', url: 'http://www.example.com/source/org/repo/.da-versions/1234/audit.txt' },
+      {},
+    );
+    assert.strictEqual(resp.status, 404);
+  });
+
+  it('does not block a path segment that merely contains da-versions', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/source/org/repo/my-da-versions-notes/file.html',
+          api: 'source',
+          org: 'org',
+          key: 'repo/my-da-versions-notes/file.html',
+        }),
+      },
+      '../src/handlers/get.js': { default: async () => ({ status: 200, body: 'ok' }) },
+    });
+
+    const resp = await hnd.fetch(
+      { method: 'GET', url: 'http://www.example.com/source/org/repo/my-da-versions-notes/file.html' },
+      {},
+    );
+    assert.strictEqual(resp.status, 200);
+  });
 });
 
 describe('invalid routes', () => {
