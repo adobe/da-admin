@@ -161,6 +161,125 @@ describe('fetch', () => {
   });
 });
 
+describe('.da-versions storage guard', () => {
+  // Version and audit objects live at R2 key `{org}/{repo}/.da-versions/...`, so
+  // daCtx.key (org stripped) is `{repo}/.da-versions/...`. The generic
+  // source/list/delete routes must not reach that storage - only the ACL-aware
+  // /versionsource and /versionlist routes may. When the guard is bypassed,
+  // dispatch reaches the handler mocked below and leaks or alters the raw object.
+  const leakHandler = { default: async () => ({ status: 200, body: 'SECRET VERSION BODY' }) };
+
+  it('blocks reading a version object via the generic source route', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/source/org/repo/.da-versions/1234/5678.html',
+          api: 'source',
+          org: 'org',
+          key: 'repo/.da-versions/1234/5678.html',
+        }),
+      },
+      '../src/handlers/get.js': leakHandler,
+    });
+
+    const resp = await hnd.fetch(
+      { method: 'GET', url: 'http://www.example.com/source/org/repo/.da-versions/1234/5678.html' },
+      {},
+    );
+    assert.strictEqual(resp.status, 404);
+  });
+
+  it('blocks deleting a version object via the generic source route', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/source/org/repo/.da-versions/1234/5678.html',
+          api: 'source',
+          org: 'org',
+          key: 'repo/.da-versions/1234/5678.html',
+        }),
+      },
+      '../src/handlers/delete.js': leakHandler,
+    });
+
+    const resp = await hnd.fetch(
+      { method: 'DELETE', url: 'http://www.example.com/source/org/repo/.da-versions/1234/5678.html' },
+      {},
+    );
+    assert.strictEqual(resp.status, 404);
+  });
+
+  it('blocks listing the .da-versions folder via the generic list route', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/list/org/repo/.da-versions',
+          api: 'list',
+          org: 'org',
+          key: 'repo/.da-versions',
+        }),
+      },
+      '../src/handlers/get.js': leakHandler,
+    });
+
+    const resp = await hnd.fetch(
+      { method: 'GET', url: 'http://www.example.com/list/org/repo/.da-versions' },
+      {},
+    );
+    assert.strictEqual(resp.status, 404);
+  });
+
+  it('does not block the dedicated version route (no .da-versions in key)', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/versionsource/org/repo/1234/5678.html',
+          api: 'versionsource',
+          org: 'org',
+          key: 'repo/1234/5678.html',
+        }),
+      },
+      '../src/handlers/get.js': { default: async () => ({ status: 200, body: 'ok' }) },
+    });
+
+    const resp = await hnd.fetch(
+      { method: 'GET', url: 'http://www.example.com/versionsource/org/repo/1234/5678.html' },
+      {},
+    );
+    assert.strictEqual(resp.status, 200);
+  });
+
+  it('does not block ordinary content paths', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/source/org/repo/path/file.html',
+          api: 'source',
+          org: 'org',
+          key: 'repo/path/file.html',
+        }),
+      },
+      '../src/handlers/get.js': { default: async () => ({ status: 200, body: 'ok' }) },
+    });
+
+    const resp = await hnd.fetch(
+      { method: 'GET', url: 'http://www.example.com/source/org/repo/path/file.html' },
+      {},
+    );
+    assert.strictEqual(resp.status, 200);
+  });
+});
+
 describe('invalid routes', () => {
   let hnd;
 
