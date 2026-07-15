@@ -292,6 +292,42 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.ok([200, 201].includes(resp.status), `Expected 200 or 201, got ${resp.status} - user: ${superUser.email}`);
   });
 
+  it('[super user] cannot list the reserved .da-versions folder via the generic list route', async () => {
+    // Version bodies and audit logs live at '{repo}/.da-versions/{fileId}/...'.
+    // Creating the pages above wrote audit entries there, so without the router
+    // guard this list returns 200 with those entries; only /versionlist may reach
+    // them. The guard must make the generic list route 404 instead.
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+    const resp = await fetch(`${serverUrl}/list/${org}/${repo}/.da-versions`, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 404, `Expected 404 from the router guard, got ${resp.status} - user: ${superUser.email}`);
+  });
+
+  it('[super user] cannot read or write a .da-versions object via the generic source route', async () => {
+    // Without the guard this POST forges an audit/version object under
+    // .da-versions and the GET reads it back. The guard must 404 both.
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+    const url = `${serverUrl}/source/${org}/${repo}/.da-versions/forge-test/leak.html`;
+    const formData = new FormData();
+    const blob = new Blob(['<html><body>forged</body></html>'], { type: 'text/html' });
+    formData.append('data', new File([blob], 'leak.html', { type: 'text/html' }));
+    const putResp = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(putResp.status, 404, `Expected 404 from the router guard on write, got ${putResp.status} - user: ${superUser.email}`);
+    const getResp = await fetch(url, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(getResp.status, 404, `Expected 404 from the router guard on read, got ${getResp.status} - user: ${superUser.email}`);
+  });
+
   it('[limited user] cannot read page1', async () => {
     const {
       serverUrl, org, repo, limitedUser,
