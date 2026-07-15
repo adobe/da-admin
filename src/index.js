@@ -55,7 +55,12 @@ export default {
     // blanket gate must not shadow it.
     if (!authorized && api !== 'list') return daResp({ status: 403 });
 
-    if (key?.startsWith('.da-versions')) {
+    // `key` is org-stripped (daCtx.key), so version storage appears as the
+    // segment `{repo}/.da-versions/...`, not a leading `.da-versions`. Block the
+    // reserved folder anywhere in the path so the generic source/list/delete
+    // routes cannot read, list, write, or delete raw version and audit objects,
+    // which must only be reached via the ACL-aware versionsource/versionlist routes.
+    if (key?.split('/').includes('.da-versions')) {
       return daResp({ status: 404 });
     }
 
