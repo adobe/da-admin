@@ -21,11 +21,18 @@ import { putObjectWithVersion } from '../version/put.js';
 import { getUsersForMetadata } from '../utils/version.js';
 import { listCommand } from '../utils/list.js';
 import { hasPermission } from '../../utils/auth.js';
+import { hasReservedSegment } from '../version/paths.js';
 
 const MAX_KEYS = 900;
 
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = sourceKey.replace(details.source, details.destination);
+
+  // A folder copy derives many keys from one request. Never let any of them
+  // land in the reserved .da-versions folder, whatever the caller's grants.
+  if (hasReservedSegment(Key)) {
+    return { $metadata: { httpStatusCode: 400 } };
+  }
 
   if (!hasPermission(daCtx, sourceKey, 'read') || !hasPermission(daCtx, Key, 'write')) {
     return {
