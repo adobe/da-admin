@@ -328,6 +328,63 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(getResp.status, 404, `Expected 404 from the router guard on read, got ${getResp.status} - user: ${superUser.email}`);
   });
 
+  it('[super user] source PUT rejects a guid that contains a .da-versions segment', async () => {
+    // The guid becomes the document file id and keys the reserved
+    // .da-versions/{id}/... space. A guid with path separators or a .da-versions
+    // segment must not be accepted, or it would steer the write outside that space.
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+    const url = `${serverUrl}/source/${org}/${repo}/guid-craft-seg.html`;
+    const formData = new FormData();
+    const blob = new Blob(['<html><body>craft</body></html>'], { type: 'text/html' });
+    formData.append('data', new File([blob], 'guid-craft-seg.html', { type: 'text/html' }));
+    formData.append('guid', 'x/.da-versions/forged');
+    const resp = await fetch(url, {
+      method: 'PUT',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 400, `Expected 400 for a crafted guid, got ${resp.status} - user: ${superUser.email}`);
+  });
+
+  it('[super user] source PUT rejects a non-UUID guid', async () => {
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+    const url = `${serverUrl}/source/${org}/${repo}/guid-craft-plain.html`;
+    const formData = new FormData();
+    const blob = new Blob(['<html><body>craft</body></html>'], { type: 'text/html' });
+    formData.append('data', new File([blob], 'guid-craft-plain.html', { type: 'text/html' }));
+    formData.append('guid', 'not-a-uuid');
+    const resp = await fetch(url, {
+      method: 'PUT',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 400, `Expected 400 for a non-UUID guid, got ${resp.status} - user: ${superUser.email}`);
+  });
+
+  it('[super user] source PUT accepts a valid UUID guid and stores it as the file id', async () => {
+    // A well formed guid is the supported contract and must still work.
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+    const validGuid = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d';
+    const url = `${serverUrl}/source/${org}/${repo}/guid-valid.html`;
+    const formData = new FormData();
+    const blob = new Blob(['<html><body>valid</body></html>'], { type: 'text/html' });
+    formData.append('data', new File([blob], 'guid-valid.html', { type: 'text/html' }));
+    formData.append('guid', validGuid);
+    const resp = await fetch(url, {
+      method: 'PUT',
+      body: formData,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.ok([200, 201].includes(resp.status), `Expected 200 or 201 for a valid guid, got ${resp.status} - user: ${superUser.email}`);
+    assert.strictEqual(resp.headers.get('x-da-id'), validGuid, `Expected the stored file id to match the guid - user: ${superUser.email}`);
+  });
+
   it('[limited user] cannot read page1', async () => {
     const {
       serverUrl, org, repo, limitedUser,
