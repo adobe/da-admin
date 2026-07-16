@@ -28,11 +28,11 @@ const MAX_KEYS = 900;
 export const copyFile = async (config, env, daCtx, sourceKey, details, isRename) => {
   const Key = sourceKey.replace(details.source, details.destination);
 
-  // Block a destination that pushes a key into the reserved .da-versions folder,
-  // whatever the caller's grants. A repo-level copy or move lists the repo's own
-  // version storage, so allow keys whose source is already under .da-versions to
-  // carry along; only reject when the destination is what introduces the segment.
-  if (!hasReservedSegment(sourceKey) && hasReservedSegment(Key)) {
+  // A folder copy derives many keys from one request. Reject any that lands in
+  // the reserved .da-versions folder, whatever the caller's grants and whatever
+  // the source looks like. Version storage is only reachable through the
+  // ACL-aware version routes, so no copy or move may write into it.
+  if (hasReservedSegment(Key)) {
     return { $metadata: { httpStatusCode: 400 } };
   }
 
