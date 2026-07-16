@@ -128,6 +128,48 @@ describe('Object copy', () => {
     assert.strictEqual(s3Sent.length, 0);
   });
 
+  it('carries a source-side .da-versions object along on a repo-level rename', async () => {
+    // A repo-level move/copy lists the repo's own version storage. copyFile must
+    // carry those keys along, not reject them. The reserved guard only blocks a
+    // destination that introduces .da-versions, not a source that already has it.
+    const s3Sent = [];
+    const mockS3Client = class {
+      // eslint-disable-next-line class-methods-use-this
+      send(command) {
+        s3Sent.push(command);
+        return { $metadata: { httpStatusCode: 200 } };
+      }
+
+      middlewareStack = { add: () => {} };
+    };
+
+    const mockGetObject = async () => ({ contentType: 'text/html', status: 200 });
+
+    // eslint-disable-next-line no-shadow
+    const { copyFile } = await esmock('../../../src/storage/object/copy.js', {
+      '@aws-sdk/client-s3': {
+        S3Client: mockS3Client,
+      },
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject,
+      },
+      '../../../src/utils/auth.js': { hasPermission: () => true },
+    });
+
+    const env = { dacollab: { fetch: () => ({ body: { cancel: () => {} } }) } };
+    const daCtx = {
+      bucket: 'root-bucket',
+      org: 'myorg',
+      origin: 'https://test.com',
+      users: [{ email: 'test@example.com' }],
+    };
+    const details = { source: 'oldrepo', destination: 'newrepo' };
+
+    const resp = await copyFile({}, env, daCtx, 'oldrepo/.da-versions/fid1/v1.html', details, true);
+    assert.notStrictEqual(resp?.$metadata?.httpStatusCode, 400, 'carry-along must not be blocked');
+    assert.strictEqual(s3Sent.length, 1, 'the version object must be copied to the new repo');
+  });
+
   it('Copy to location with permission', async () => {
     const pathLookup = new Map();
     pathLookup.set('aaa@bbb.ccc', [
