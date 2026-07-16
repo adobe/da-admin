@@ -1,3 +1,10 @@
+## [1.12.4](https://github.com/adobe/da-admin/compare/v1.12.3...v1.12.4) (2026-07-16)
+
+
+### Bug Fixes
+
+* block .da-versions access through the generic source/list/delete routes ([#302](https://github.com/adobe/da-admin/issues/302)) ([3d74efa](https://github.com/adobe/da-admin/commit/3d74efa9ed0c7680a43895ac086fd9c8f15432f2))
+
 ## [1.12.3](https://github.com/adobe/da-admin/compare/v1.12.2...v1.12.3) (2026-07-14)
 
 
