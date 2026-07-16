@@ -89,6 +89,45 @@ describe('Object copy', () => {
     assert.strictEqual(resp.$metadata.httpStatusCode, 403);
   });
 
+  it('returns 400 without sending a copy when the destination Key is in the reserved .da-versions folder', async () => {
+    const s3Sent = [];
+    const mockS3Client = class {
+      // eslint-disable-next-line class-methods-use-this
+      send(command) {
+        s3Sent.push(command);
+        return { $metadata: { httpStatusCode: 200 } };
+      }
+
+      middlewareStack = { add: () => {} };
+    };
+
+    const mockGetObject = async () => ({ contentType: 'text/html', status: 200 });
+
+    // eslint-disable-next-line no-shadow
+    const { copyFile } = await esmock('../../../src/storage/object/copy.js', {
+      '@aws-sdk/client-s3': {
+        S3Client: mockS3Client,
+      },
+      '../../../src/storage/object/get.js': {
+        default: mockGetObject,
+      },
+      '../../../src/utils/auth.js': { hasPermission: () => true },
+    });
+
+    const env = { dacollab: { fetch: () => ({ body: { cancel: () => {} } }) } };
+    const daCtx = {
+      bucket: 'root-bucket',
+      org: 'myorg',
+      origin: 'https://test.com',
+      users: [{ email: 'test@example.com' }],
+    };
+    const details = { source: 'mysrc', destination: 'my/.da-versions/1234' };
+
+    const resp = await copyFile({}, env, daCtx, 'mysrc/audit-9999999999.txt', details, false);
+    assert.strictEqual(resp.$metadata.httpStatusCode, 400);
+    assert.strictEqual(s3Sent.length, 0);
+  });
+
   it('Copy to location with permission', async () => {
     const pathLookup = new Map();
     pathLookup.set('aaa@bbb.ccc', [
