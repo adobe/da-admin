@@ -17,6 +17,7 @@ import {
   auditDirPrefix,
   isValidId,
   isSafeId,
+  hasReservedSegment,
 } from '../../../src/storage/version/paths.js';
 
 describe('Version Paths', () => {
@@ -134,6 +135,26 @@ describe('Version Paths', () => {
 
     it('rejects a non-string', () => {
       assert.strictEqual(isSafeId(null), false);
+    });
+  });
+
+  describe('hasReservedSegment', () => {
+    it('matches the reserved folder as any path segment', () => {
+      assert.strictEqual(hasReservedSegment('repo/.da-versions/fid/audit.txt'), true);
+      assert.strictEqual(hasReservedSegment('.da-versions/fid/v1.html'), true);
+      assert.strictEqual(hasReservedSegment('a/b/.da-versions'), true);
+    });
+
+    it('does not match a segment that merely contains the name', () => {
+      assert.strictEqual(hasReservedSegment('repo/my-da-versions-notes.html'), false);
+      assert.strictEqual(hasReservedSegment('repo/.da-versions-backup/x'), false);
+      assert.strictEqual(hasReservedSegment('repo/foo.da-versions'), false);
+      assert.strictEqual(hasReservedSegment('repo/page1.html'), false);
+    });
+
+    it('is safe for non-string input', () => {
+      assert.strictEqual(hasReservedSegment(undefined), false);
+      assert.strictEqual(hasReservedSegment(null), false);
     });
   });
 });
