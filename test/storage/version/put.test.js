@@ -608,6 +608,66 @@ describe('Version Put', () => {
     assert.equal('myidAAA', resp.metadata.id);
   });
 
+  describe('client-supplied guid validation on creation', () => {
+    async function loadPut(s3Sent) {
+      const mockGetObject = async () => ({ status: 404 });
+      const mockS3Client = {
+        send: (c) => {
+          s3Sent.push(c);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+      return esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': { ifNoneMatch: () => mockS3Client },
+      });
+    }
+
+    const badGuids = [
+      ['a non-UUID string', 'test-guid'],
+      ['a slash', 'foo/bar'],
+      ['a leading slash', '/etc/passwd'],
+      ['a .da-versions segment', 'aaa/.da-versions/bbb'],
+      ['a bare .da-versions segment', '.da-versions'],
+      ['a UUID with a trailing path', '11111111-1111-4111-8111-111111111111/x'],
+    ];
+
+    badGuids.forEach(([desc, guid]) => {
+      it(`rejects a guid with ${desc} with 400 and writes nothing`, async () => {
+        const s3Sent = [];
+        const { putObjectWithVersion } = await loadPut(s3Sent);
+        const update = { org: 'orgOne', key: '/root/somedoc.html', type: 'text/html' };
+        const resp = await putObjectWithVersion(
+          {},
+          { org: 'orgOne', ext: 'html' },
+          update,
+          true,
+          guid,
+        );
+        assert.equal(400, resp.status, `guid "${guid}" should be rejected with 400`);
+        assert.equal(0, s3Sent.length, `guid "${guid}" must not be written to storage`);
+      });
+    });
+
+    it('accepts a valid UUID guid and uses it as the document id', async () => {
+      const s3Sent = [];
+      const { putObjectWithVersion } = await loadPut(s3Sent);
+      const guid = '9b2e6c1a-4f3d-4a2b-8c1e-1d2f3a4b5c6d';
+      const update = { org: 'orgOne', key: '/root/somedoc.html', type: 'text/html' };
+      const resp = await putObjectWithVersion(
+        {},
+        { org: 'orgOne', ext: 'html' },
+        update,
+        true,
+        guid,
+      );
+      assert.equal(201, resp.status);
+      assert.equal(guid, resp.metadata.id);
+      assert.equal(1, s3Sent.length);
+      assert.equal(guid, s3Sent[0].input.Metadata.ID);
+    });
+  });
+
   it('Post Object With Version creates new version', async () => {
     const req = {
       json: () => ({
