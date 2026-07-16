@@ -128,10 +128,12 @@ describe('Object copy', () => {
     assert.strictEqual(s3Sent.length, 0);
   });
 
-  it('carries a source-side .da-versions object along on a repo-level rename', async () => {
-    // A repo-level move/copy lists the repo's own version storage. copyFile must
-    // carry those keys along, not reject them. The reserved guard only blocks a
-    // destination that introduces .da-versions, not a source that already has it.
+  it('blocks a .da-versions destination even when the source is already under .da-versions', async () => {
+    // No source-side exemption. A repo-level copy or move must not relocate a
+    // .da-versions object into another .da-versions location. Otherwise an
+    // attacker who gets crafted content into any .da-versions (through a separate
+    // write hole) could plant it in a victim's version history. The guard rejects
+    // the reserved destination whatever the source looks like.
     const s3Sent = [];
     const mockS3Client = class {
       // eslint-disable-next-line class-methods-use-this
@@ -166,8 +168,8 @@ describe('Object copy', () => {
     const details = { source: 'oldrepo', destination: 'newrepo' };
 
     const resp = await copyFile({}, env, daCtx, 'oldrepo/.da-versions/fid1/v1.html', details, true);
-    assert.notStrictEqual(resp?.$metadata?.httpStatusCode, 400, 'carry-along must not be blocked');
-    assert.strictEqual(s3Sent.length, 1, 'the version object must be copied to the new repo');
+    assert.strictEqual(resp.$metadata.httpStatusCode, 400);
+    assert.strictEqual(s3Sent.length, 0);
   });
 
   it('Copy to location with permission', async () => {
