@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/adobe/da-admin/compare/v1.12.4...v1.13.0) (2026-07-17)
+
+
+### Features
+
+* reject a non-UUID guid before it becomes a file id ([#304](https://github.com/adobe/da-admin/issues/304)) ([818c553](https://github.com/adobe/da-admin/commit/818c55346d323c9bb636de725ce47df65403c808))
+
 ## [1.12.4](https://github.com/adobe/da-admin/compare/v1.12.3...v1.12.4) (2026-07-16)
 
 
