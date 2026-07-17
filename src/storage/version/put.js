@@ -21,7 +21,7 @@ import {
 } from '../utils/version.js';
 import getObject from '../object/get.js';
 import { writeAuditEntry } from './audit.js';
-import { versionKey } from './paths.js';
+import { versionKey, isValidId, isSafeId } from './paths.js';
 
 export function getContentLength(body) {
   if (body === undefined) {
@@ -120,7 +120,20 @@ export async function putObjectWithVersion(
 
   let ID = current.metadata?.id;
   if (!ID) {
+    // A client-supplied guid becomes this document's file id and is written into the
+    // reserved .da-versions key space. Require a plain UUID so a crafted guid cannot
+    // place keys outside that space, for example a value with a slash or a
+    // .da-versions segment.
+    if (guid && !isValidId(guid)) {
+      return { status: 400, metadata: {} };
+    }
     ID = guid || crypto.randomUUID();
+  } else if (!isSafeId(ID)) {
+    // A stored file id is untrusted input. An id persisted before this validation
+    // existed could contain key steering characters. Refuse to build reserved keys
+    // from an unsafe stored id. A benign legacy id (a single segment that is not
+    // .da-versions) is still allowed.
+    return { status: 400, metadata: {} };
   } else if (guid && ID !== guid) {
     return { status: 409, metadata: { id: ID } };
   }

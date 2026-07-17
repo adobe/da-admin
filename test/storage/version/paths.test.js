@@ -15,6 +15,8 @@ import {
   auditKey,
   auditArchiveKey,
   auditDirPrefix,
+  isValidId,
+  isSafeId,
 } from '../../../src/storage/version/paths.js';
 
 describe('Version Paths', () => {
@@ -60,6 +62,78 @@ describe('Version Paths', () => {
     it('returns prefix that matches audit.txt and audit-*.txt', () => {
       const prefix = auditDirPrefix('myrepo', 'file-id-xyz');
       assert.strictEqual(prefix, 'myrepo/.da-versions/file-id-xyz/audit');
+    });
+  });
+
+  describe('isValidId', () => {
+    it('accepts a plain UUID', () => {
+      assert.strictEqual(isValidId('9b2e6c1a-4f3d-4a2b-8c1e-1d2f3a4b5c6d'), true);
+    });
+
+    it('rejects a non-UUID string', () => {
+      assert.strictEqual(isValidId('not-a-uuid'), false);
+    });
+
+    it('rejects a UUID with a trailing path', () => {
+      assert.strictEqual(isValidId('9b2e6c1a-4f3d-4a2b-8c1e-1d2f3a4b5c6d/x'), false);
+    });
+
+    it('rejects a non-string', () => {
+      assert.strictEqual(isValidId(undefined), false);
+    });
+  });
+
+  describe('isSafeId', () => {
+    it('accepts a plain UUID', () => {
+      assert.strictEqual(isSafeId('9b2e6c1a-4f3d-4a2b-8c1e-1d2f3a4b5c6d'), true);
+    });
+
+    it('accepts a benign legacy single-segment id', () => {
+      assert.strictEqual(isSafeId('legacy-id-123'), true);
+    });
+
+    it('rejects an id with a slash', () => {
+      assert.strictEqual(isSafeId('foo/bar'), false);
+    });
+
+    it('rejects an id with a .da-versions segment', () => {
+      assert.strictEqual(isSafeId('x/.da-versions/y'), false);
+    });
+
+    it('rejects a bare .da-versions id', () => {
+      assert.strictEqual(isSafeId('.da-versions'), false);
+    });
+
+    it('rejects a single dot segment', () => {
+      assert.strictEqual(isSafeId('.'), false);
+    });
+
+    it('rejects a double dot segment', () => {
+      assert.strictEqual(isSafeId('..'), false);
+    });
+
+    it('rejects an id with a backslash separator', () => {
+      assert.strictEqual(isSafeId('..\\..'), false);
+    });
+
+    it('rejects a percent-encoded dot segment', () => {
+      assert.strictEqual(isSafeId('%2e%2e'), false);
+    });
+
+    it('rejects an id with whitespace', () => {
+      assert.strictEqual(isSafeId('a\tb'), false);
+    });
+
+    it('accepts a legacy id that contains a dot', () => {
+      assert.strictEqual(isSafeId('v1.2'), true);
+    });
+
+    it('rejects an empty string', () => {
+      assert.strictEqual(isSafeId(''), false);
+    });
+
+    it('rejects a non-string', () => {
+      assert.strictEqual(isSafeId(null), false);
     });
   });
 });

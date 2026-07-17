@@ -10,6 +10,45 @@
  * governing permissions and limitations under the License.
  */
 
+const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * True when the value is a plain UUID that is safe to use as a file id.
+ * A file id becomes a path segment inside the reserved .da-versions key space,
+ * so it must not contain a slash or any other key steering characters. Requiring
+ * the UUID shape also matches the ids this service generates with
+ * crypto.randomUUID.
+ * @param {string} id
+ * @returns {boolean}
+ */
+export function isValidId(id) {
+  return typeof id === 'string' && ID_PATTERN.test(id);
+}
+
+/**
+ * True when the value is safe to use as a path segment inside the reserved
+ * .da-versions key space. A stored file id read from object metadata is
+ * untrusted input, so it must not steer keys. The Cloudflare Worker AWS
+ * transport turns a key into a WHATWG URL, which collapses "." and ".."
+ * segments, treats a backslash as a separator, decodes "%xx" (so "%2e" becomes
+ * "."), and strips whitespace such as tab or newline. Any of those let a
+ * poisoned id escape its per-document prefix, so reject a slash, a backslash, a
+ * percent sign, any whitespace, a "." or ".." segment, and a bare .da-versions
+ * segment before key construction. A plain single-segment id, including a UUID
+ * or a benign legacy id, is still allowed. It is weaker than isValidId on
+ * purpose so existing non-UUID ids keep working while unsafe values are refused.
+ * @param {string} id
+ * @returns {boolean}
+ */
+export function isSafeId(id) {
+  return typeof id === 'string'
+    && id.length > 0
+    && !/[\s%/\\]/.test(id)
+    && id !== '.'
+    && id !== '..'
+    && id !== '.da-versions';
+}
+
 /**
  * Path for a version object under repo.
  * @param {string} repo

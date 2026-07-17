@@ -603,9 +603,132 @@ describe('Version Put', () => {
     });
 
     const update = { org: 'orgOne', key: '/root/somedoc.html' };
-    const resp = await putObjectWithVersion({}, {}, update, true, 'myidAAA');
+    const providedId = 'b1a7c3d2-9e8f-4a1b-8c2d-3e4f5a6b7c8d';
+    const resp = await putObjectWithVersion({}, {}, update, true, providedId);
     assert.equal(201, resp.status);
-    assert.equal('myidAAA', resp.metadata.id);
+    assert.equal(providedId, resp.metadata.id);
+  });
+
+  describe('client-supplied guid validation on creation', () => {
+    async function loadPut(s3Sent) {
+      const mockGetObject = async () => ({ status: 404 });
+      const mockS3Client = {
+        send: (c) => {
+          s3Sent.push(c);
+          return { $metadata: { httpStatusCode: 200 } };
+        },
+      };
+      return esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': { ifNoneMatch: () => mockS3Client },
+      });
+    }
+
+    const badGuids = [
+      ['a non-UUID string', 'test-guid'],
+      ['a slash', 'foo/bar'],
+      ['a leading slash', '/etc/passwd'],
+      ['a .da-versions segment', 'aaa/.da-versions/bbb'],
+      ['a bare .da-versions segment', '.da-versions'],
+      ['a UUID with a trailing path', '11111111-1111-4111-8111-111111111111/x'],
+    ];
+
+    badGuids.forEach(([desc, guid]) => {
+      it(`rejects a guid with ${desc} with 400 and writes nothing`, async () => {
+        const s3Sent = [];
+        const { putObjectWithVersion } = await loadPut(s3Sent);
+        const update = { org: 'orgOne', key: '/root/somedoc.html', type: 'text/html' };
+        const resp = await putObjectWithVersion(
+          {},
+          { org: 'orgOne', ext: 'html' },
+          update,
+          true,
+          guid,
+        );
+        assert.equal(400, resp.status, `guid "${guid}" should be rejected with 400`);
+        assert.equal(0, s3Sent.length, `guid "${guid}" must not be written to storage`);
+      });
+    });
+
+    it('accepts a valid UUID guid and uses it as the document id', async () => {
+      const s3Sent = [];
+      const { putObjectWithVersion } = await loadPut(s3Sent);
+      const guid = '9b2e6c1a-4f3d-4a2b-8c1e-1d2f3a4b5c6d';
+      const update = { org: 'orgOne', key: '/root/somedoc.html', type: 'text/html' };
+      const resp = await putObjectWithVersion(
+        {},
+        { org: 'orgOne', ext: 'html' },
+        update,
+        true,
+        guid,
+      );
+      assert.equal(201, resp.status);
+      assert.equal(guid, resp.metadata.id);
+      assert.equal(1, s3Sent.length);
+      assert.equal(guid, s3Sent[0].input.Metadata.ID);
+    });
+  });
+
+  describe('unsafe stored id validation on update', () => {
+    async function loadPut({ storedId, s3Sent, audits }) {
+      const mockGetObject = async () => ({
+        status: 200,
+        metadata: { id: storedId },
+        contentType: 'text/html',
+        contentLength: 4,
+        body: 'body',
+        etag: 'etag-1',
+      });
+      const mockS3Client = {
+        send: (c) => {
+          s3Sent.push(c);
+          return { $metadata: { httpStatusCode: 200 }, ETag: 'etag-2' };
+        },
+      };
+      return esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': { default: mockGetObject },
+        '../../../src/storage/utils/version.js': {
+          ifMatch: () => mockS3Client,
+          ifNoneMatch: () => mockS3Client,
+        },
+        '../../../src/storage/version/audit.js': {
+          writeAuditEntry: async (...args) => { audits.push(args); },
+        },
+      });
+    }
+
+    const unsafeStoredIds = [
+      ['a slash', 'foo/bar'],
+      ['a .da-versions segment', 'forge/.da-versions/x'],
+      ['a bare .da-versions segment', '.da-versions'],
+      ['a single dot segment', '.'],
+      ['a double dot segment', '..'],
+      ['a backslash separator', '..\\..'],
+      ['a percent-encoded dot segment', '%2e%2e'],
+    ];
+
+    unsafeStoredIds.forEach(([desc, storedId]) => {
+      it(`refuses to build keys from a stored id with ${desc} and writes nothing`, async () => {
+        const s3Sent = [];
+        const audits = [];
+        const { putObjectWithVersion } = await loadPut({ storedId, s3Sent, audits });
+        const update = { org: 'orgOne', key: '/root/somedoc.html', type: 'text/html' };
+        const resp = await putObjectWithVersion({}, { org: 'orgOne', ext: 'html' }, update, true);
+        assert.equal(400, resp.status, `stored id "${storedId}" should be refused with 400`);
+        assert.equal(0, audits.length, `stored id "${storedId}" must not write an audit entry`);
+        assert.equal(0, s3Sent.length, `stored id "${storedId}" must not be written to storage`);
+      });
+    });
+
+    it('still updates a document with a benign legacy single-segment stored id', async () => {
+      const s3Sent = [];
+      const audits = [];
+      const { putObjectWithVersion } = await loadPut({ storedId: 'legacy-id-123', s3Sent, audits });
+      const update = { org: 'orgOne', key: '/root/somedoc.html', type: 'text/html' };
+      const resp = await putObjectWithVersion({}, { org: 'orgOne', ext: 'html' }, update, true);
+      assert.equal(200, resp.status, 'a benign legacy id must still update');
+      assert.equal(1, s3Sent.length, 'a benign legacy id must still write the object');
+    });
   });
 
   it('Post Object With Version creates new version', async () => {
@@ -1024,7 +1147,7 @@ describe('Version Put', () => {
     // Explicit label required to create a version (no Collab Parse version)
     await putObjectWithVersion(env, daCtx, {
       key: 'test-file.html', type: 'text/html', label: 'Test version',
-    }, 'test body', 'test-guid');
+    }, 'test body', 'c2b8d4e3-1a2b-4c3d-8e4f-5a6b7c8d9e0f');
 
     assert.strictEqual(sentCommands.length, 2); // Version + main file
     const putCommand = sentCommands[0]; // First command is the version

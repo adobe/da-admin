@@ -35,6 +35,12 @@ source:
       Accepts either a `multipart/form-data` body with the content in the `data` field, or a
       raw request body for text-based types (`text/html`, `application/json`).
 
+      The `multipart/form-data` body may also include an optional `guid` field. When the target
+      location does not already have a stored identifier, `guid` becomes the document identifier.
+      It must be a UUID. A `guid` that is not a UUID is rejected with a 400 response. When the
+      target already has a stored identifier that differs from `guid`, the request is rejected with
+      a 409 response. When omitted, the service generates a UUID.
+
       **Important:** For files, the `path` parameter must include the file extension (e.g., `myfile.html`, `data.json`).
       For folders, omit the extension (e.g., `myfolder`).
     parameters:
@@ -64,6 +70,8 @@ source:
         $ref: "./responses.yaml#/400"
       '401':
         $ref: "./responses.yaml#/401"
+      '409':
+        $ref: "./responses.yaml#/409"
       '500':
         $ref: "./responses.yaml#/500"
   post:
@@ -76,6 +84,12 @@ source:
 
       Accepts either a `multipart/form-data` body with the content in the `data` field, or a
       raw request body for text-based types (`text/html`, `application/json`).
+
+      The `multipart/form-data` body may also include an optional `guid` field. When the target
+      location does not already have a stored identifier, `guid` becomes the document identifier.
+      It must be a UUID. A `guid` that is not a UUID is rejected with a 400 response. When the
+      target already has a stored identifier that differs from `guid`, the request is rejected with
+      a 409 response. When omitted, the service generates a UUID.
 
       **Important:** For files, the `path` parameter must include the file extension (e.g., `myfile.html`, `data.json`).
       For folders, omit the extension (e.g., `myfolder`).
@@ -109,6 +123,8 @@ source:
         $ref: "./responses.yaml#/400"
       '401':
         $ref: "./responses.yaml#/401"
+      '409':
+        $ref: "./responses.yaml#/409"
       '500':
         $ref: "./responses.yaml#/500"
   delete:
