@@ -208,7 +208,7 @@ describe('Copy Route', () => {
     assert.strictEqual(resp.status, 400);
     assert.strictEqual(copyCalled.length, 0);
     const body = JSON.parse(resp.body);
-    assert.match(body.error, /da-versions/i);
+    assert.match(body.error, /invalid or reserved/i);
   });
 
   it('Test copyHandler allows a destination segment that merely contains da-versions', async () => {

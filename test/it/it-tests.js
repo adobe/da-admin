@@ -631,7 +631,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     });
     assert.strictEqual(resp.status, 400, `Expected 400 from the destination guard on copy, got ${resp.status} - user: ${superUser.email}`);
     let body = await resp.json();
-    assert.match(body.error, /da-versions/i, `Expected reserved-folder error, got ${body.error}`);
+    assert.match(body.error, /invalid or reserved/i, `Expected reserved-destination error, got ${body.error}`);
 
     const moveForm = new FormData();
     moveForm.append('destination', `/${org}/${repo}/.da-versions/forge-target/0000.html`);
@@ -642,7 +642,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     });
     assert.strictEqual(resp.status, 400, `Expected 400 from the destination guard on move, got ${resp.status} - user: ${superUser.email}`);
     body = await resp.json();
-    assert.match(body.error, /da-versions/i, `Expected reserved-folder error, got ${body.error}`);
+    assert.match(body.error, /invalid or reserved/i, `Expected reserved-destination error, got ${body.error}`);
 
     // the blocked move must leave the source in place
     resp = await fetch(`${serverUrl}/source/${org}/${repo}/test-folder/page1-copy.html`, {
