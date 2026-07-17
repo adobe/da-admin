@@ -27,7 +27,7 @@ const CROSS_ORG_ERROR = {
 };
 
 const RESERVED_DEST_ERROR = {
-  body: JSON.stringify({ error: 'Destination cannot be inside the reserved .da-versions folder.' }),
+  body: JSON.stringify({ error: 'Invalid or reserved destination.' }),
   status: 400,
 };
 
