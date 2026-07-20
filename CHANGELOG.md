@@ -1,3 +1,10 @@
+## [1.13.1](https://github.com/adobe/da-admin/compare/v1.13.0...v1.13.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* reject copy/move destinations in the reserved .da-versions folder ([#303](https://github.com/adobe/da-admin/issues/303)) ([df584e5](https://github.com/adobe/da-admin/commit/df584e57d7e794f604677d1f7feda1b9c3a2bc48)), closes [#301](https://github.com/adobe/da-admin/issues/301) [#302](https://github.com/adobe/da-admin/issues/302)
+
 # [1.13.0](https://github.com/adobe/da-admin/compare/v1.12.4...v1.13.0) (2026-07-17)
 
 
