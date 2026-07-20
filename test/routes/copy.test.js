@@ -181,4 +181,61 @@ describe('Copy Route', () => {
     assert.strictEqual(400, resp.status);
     assert.strictEqual(copyCalled.length, 0);
   });
+
+  it('Test copyHandler returns 400 when destination is in the reserved .da-versions folder', async () => {
+    const copyCalled = [];
+    const copyObject = (e, c, d, m) => {
+      copyCalled.push({
+        e, c, d, m,
+      });
+      return { status: 200 };
+    };
+
+    const copyHandler = await esmock('../../src/routes/copy.js', {
+      '../../src/storage/object/copy.js': {
+        default: copyObject,
+      },
+      '../../src/utils/auth.js': { hasPermission: () => true },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/myorg/my/.da-versions/1234/audit-9999999999.txt');
+    const req = {
+      formData: () => formdata,
+    };
+
+    const resp = await copyHandler({ req, env: {}, daCtx: { org: 'myorg', key: 'my/decoy.html' } });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(copyCalled.length, 0);
+    const body = JSON.parse(resp.body);
+    assert.match(body.error, /invalid or reserved/i);
+  });
+
+  it('Test copyHandler allows a destination segment that merely contains da-versions', async () => {
+    const copyCalled = [];
+    const copyObject = (e, c, d, m) => {
+      copyCalled.push({
+        e, c, d, m,
+      });
+      return { status: 200 };
+    };
+
+    const copyHandler = await esmock('../../src/routes/copy.js', {
+      '../../src/storage/object/copy.js': {
+        default: copyObject,
+      },
+      '../../src/utils/auth.js': { hasPermission: () => true },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/myorg/my/my-da-versions-notes.html');
+    const req = {
+      formData: () => formdata,
+    };
+
+    const resp = await copyHandler({ req, env: {}, daCtx: { org: 'myorg', key: 'my/src.html' } });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(copyCalled.length, 1);
+    assert.strictEqual(copyCalled[0].d.destination, 'my/my-da-versions-notes.html');
+  });
 });

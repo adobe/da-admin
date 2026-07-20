@@ -9,6 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { hasReservedSegment } from '../storage/version/paths.js';
+
 const NO_DEST_ERROR = {
   body: JSON.stringify({ error: 'No destination provided.' }),
   status: 400,
@@ -21,6 +23,11 @@ const BAD_CONTENT_TYPE_ERROR = {
 
 const CROSS_ORG_ERROR = {
   body: JSON.stringify({ error: 'Destination must be in the same org as the source.' }),
+  status: 400,
+};
+
+const RESERVED_DEST_ERROR = {
+  body: JSON.stringify({ error: 'Invalid or reserved destination.' }),
   status: 400,
 };
 
@@ -43,6 +50,10 @@ export default async function copyHelper(req, daCtx) {
   if (destOrg !== daCtx.org) return { error: CROSS_ORG_ERROR };
 
   const destination = destParts.join('/');
+
+  // Reject destinations inside the reserved .da-versions folder
+  if (hasReservedSegment(destination)) return { error: RESERVED_DEST_ERROR };
+
   const source = daCtx.key;
   return { source, destination, continuationToken };
 }

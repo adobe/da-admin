@@ -123,4 +123,61 @@ describe('Move Route', () => {
     assert.strictEqual(1, moCalled.length);
     assert.strictEqual('somedest', moCalled[0].d.destination);
   });
+
+  it('Test moveRoute returns 400 when destination is in the reserved .da-versions folder', async () => {
+    const moCalled = [];
+    const moveObject = (e, c, d) => {
+      moCalled.push({ e, c, d });
+      return { status: 200 };
+    };
+
+    const moveRoute = await esmock('../../src/routes/move.js', {
+      '../../src/storage/object/move.js': {
+        default: moveObject,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission: () => true,
+      },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/someorg/my/.da-versions/1234/audit-9999999999.txt');
+    const req = {
+      formData: () => formdata,
+    };
+
+    const resp = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'my/decoy.html' } });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(0, moCalled.length);
+    const body = JSON.parse(resp.body);
+    assert.match(body.error, /invalid or reserved/i);
+  });
+
+  it('Test moveRoute allows a destination segment that merely contains da-versions', async () => {
+    const moCalled = [];
+    const moveObject = (e, c, d) => {
+      moCalled.push({ e, c, d });
+      return { status: 204 };
+    };
+
+    const moveRoute = await esmock('../../src/routes/move.js', {
+      '../../src/storage/object/move.js': {
+        default: moveObject,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission: () => true,
+      },
+    });
+
+    const formdata = new Map();
+    formdata.set('destination', '/someorg/my/my-da-versions-notes.html');
+    const req = {
+      formData: () => formdata,
+    };
+
+    const resp = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'abc.html' } });
+    assert.strictEqual(resp.status, 204);
+    assert.strictEqual(1, moCalled.length);
+    assert.strictEqual(moCalled[0].d.destination, 'my/my-da-versions-notes.html');
+  });
 });

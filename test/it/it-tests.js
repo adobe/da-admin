@@ -613,6 +613,44 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
     assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
   });
 
+  it('[super user] cannot copy or move into the reserved .da-versions folder', async () => {
+    // The generic copy/move routes take their destination from the request body.
+    // A destination inside {repo}/.da-versions/... lands in version and audit
+    // storage and forges a document's history. The destination guard must reject
+    // it with 400, whatever the caller's grants.
+    const {
+      serverUrl, org, repo, superUser,
+    } = ctx;
+
+    const copyForm = new FormData();
+    copyForm.append('destination', `/${org}/${repo}/.da-versions/forge-target/audit-9999999999.txt`);
+    let resp = await fetch(`${serverUrl}/copy/${org}/${repo}/test-folder/page1.html`, {
+      method: 'POST',
+      body: copyForm,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 400, `Expected 400 from the destination guard on copy, got ${resp.status} - user: ${superUser.email}`);
+    let body = await resp.json();
+    assert.match(body.error, /invalid or reserved/i, `Expected reserved-destination error, got ${body.error}`);
+
+    const moveForm = new FormData();
+    moveForm.append('destination', `/${org}/${repo}/.da-versions/forge-target/0000.html`);
+    resp = await fetch(`${serverUrl}/move/${org}/${repo}/test-folder/page1-copy.html`, {
+      method: 'POST',
+      body: moveForm,
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 400, `Expected 400 from the destination guard on move, got ${resp.status} - user: ${superUser.email}`);
+    body = await resp.json();
+    assert.match(body.error, /invalid or reserved/i, `Expected reserved-destination error, got ${body.error}`);
+
+    // the blocked move must leave the source in place
+    resp = await fetch(`${serverUrl}/source/${org}/${repo}/test-folder/page1-copy.html`, {
+      headers: { Authorization: `Bearer ${superUser.accessToken}` },
+    });
+    assert.strictEqual(resp.status, 200, `Expected 200 OK, got ${resp.status} - user: ${superUser.email}`);
+  });
+
   it('[anonymous] cannot delete an object', async () => {
     const {
       serverUrl, org, repo, key,

@@ -91,3 +91,14 @@ export function auditArchiveKey(repo, fileId, timestamp) {
 export function auditDirPrefix(repo, fileId) {
   return `${repo}/.da-versions/${fileId}/audit`;
 }
+
+/**
+ * True when any path segment is the reserved .da-versions folder. Keeps
+ * user-controlled destinations and keys out of version storage, which is
+ * only reachable through the ACL-aware version routes.
+ * @param {string} path org-stripped key or copy/move destination
+ * @returns {boolean}
+ */
+export function hasReservedSegment(path) {
+  return typeof path === 'string' && path.split('/').includes('.da-versions');
+}
