@@ -557,6 +557,7 @@ describe('DA auth', () => {
             { path: '/mysite/CONFIG', groups: 'reader@bloggs.org', actions: 'read' },
             { path: '/mysite/+**', groups: 'plus@bloggs.org', actions: 'read' },
             { path: '/mysite/**', groups: 'star@bloggs.org', actions: 'write' },
+            { path: '/mysite/CONFIG', groups: 'admin@bloggs.org', actions: 'write' },
           ],
         },
       };
@@ -579,11 +580,19 @@ describe('DA auth', () => {
       // A /mysite/+** read wildcard matches the site keyword.
       const plus = await ctxFor([{ email: 'plus@bloggs.org' }]);
       assert(hasPermission(plus, siteKey, 'read', true));
+      assert(!hasPermission(plus, siteKey, 'write', true));
 
-      // A /mysite/** write wildcard grants read+write on the site keyword.
+      // A /mysite/** write wildcard grants read but NOT write on the site keyword: site
+      // write access must not implicitly unlock config write, only an explicit CONFIG
+      // rule can grant that.
       const star = await ctxFor([{ email: 'star@bloggs.org' }]);
       assert(hasPermission(star, siteKey, 'read', true));
-      assert(hasPermission(star, siteKey, 'write', true));
+      assert(!hasPermission(star, siteKey, 'write', true));
+
+      // An explicit `write` rule on /mysite/CONFIG itself still grants write.
+      const admin = await ctxFor([{ email: 'admin@bloggs.org' }]);
+      assert(hasPermission(admin, siteKey, 'read', true));
+      assert(hasPermission(admin, siteKey, 'write', true));
     });
 
     it('test DA_OPS_IMS_ORG permissions', async () => {
