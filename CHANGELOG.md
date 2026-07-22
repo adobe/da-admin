@@ -1,3 +1,10 @@
+## [1.13.2](https://github.com/adobe/da-admin/compare/v1.13.1...v1.13.2) (2026-07-22)
+
+
+### Bug Fixes
+
+* site write access must not implicitly grant CONFIG write ([#306](https://github.com/adobe/da-admin/issues/306)) ([9545ea2](https://github.com/adobe/da-admin/commit/9545ea25068afa04d18eb5bcf38dc8a3d6500c4d))
+
 ## [1.13.1](https://github.com/adobe/da-admin/compare/v1.13.0...v1.13.1) (2026-07-20)
 
 
