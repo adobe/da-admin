@@ -401,6 +401,18 @@ export async function getAclCtx(env, org, users, key, api) {
       actionSet = actionSet.intersection(ua.actions);
       ua.trace.forEach((t) => actionTrace.push(t));
     });
+
+    // Site CONFIG access can also come from the org-level CONFIG keyword (see
+    // hasConfigPermission in the config route). Mirror that OR here so the cached
+    // actionSet - exposed to clients via the X-da-actions/X-da-child-actions headers -
+    // matches what the config route actually allows.
+    if (api === 'config' && k !== 'CONFIG') {
+      let orgActionSet = getUserActions(pathLookup, firstUser, 'CONFIG').actions;
+      otherUsers.forEach((u) => {
+        orgActionSet = orgActionSet.intersection(getUserActions(pathLookup, u, 'CONFIG').actions);
+      });
+      actionSet = actionSet.union(orgActionSet);
+    }
   } else {
     actionSet = new Set();
   }

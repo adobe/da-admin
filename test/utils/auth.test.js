@@ -595,6 +595,31 @@ describe('DA auth', () => {
       assert(hasPermission(admin, siteKey, 'write', true));
     });
 
+    it('getAclCtx actionSet for a config request includes org CONFIG fallback actions', async () => {
+      // Regression test: the cached actionSet built by getAclCtx() for api === 'config'
+      // used to only look up the site-specific /{site}/CONFIG keyword, never the
+      // org-level CONFIG keyword. Since this actionSet is what gets exposed to clients
+      // via the X-da-actions/X-da-child-actions headers (see daResp.js), a user who only
+      // holds the org-level CONFIG rule would pass the real write check in postConfig
+      // (hasConfigPermission ORs both keywords) but the header would still say
+      // read-only, permanently locking the config editor UI once the doc exists.
+      const orgOnlyConfig = {
+        test: {
+          ':type': 'sheet',
+          ':sheetname': 'permissions',
+          data: [
+            { path: 'CONFIG', groups: 'orgadmin@bloggs.org', actions: 'write' },
+          ],
+        },
+      };
+      const orgOnlyEnv = { DA_CONFIG: { get: (name) => orgOnlyConfig[name] } };
+      const users = [{ email: 'orgadmin@bloggs.org' }];
+
+      const aclCtx = await getAclCtx(orgOnlyEnv, 'test', users, 'mysite', 'config');
+      assert(aclCtx.actionSet.has('read'));
+      assert(aclCtx.actionSet.has('write'));
+    });
+
     it('test DA_OPS_IMS_ORG permissions', async () => {
       const opsOrg = 'MyOpsOrg';
       const envOps = {
