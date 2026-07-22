@@ -557,6 +557,7 @@ describe('DA auth', () => {
             { path: '/mysite/CONFIG', groups: 'reader@bloggs.org', actions: 'read' },
             { path: '/mysite/+**', groups: 'plus@bloggs.org', actions: 'read' },
             { path: '/mysite/**', groups: 'star@bloggs.org', actions: 'write' },
+            { path: '/mysite/CONFIG', groups: 'admin@bloggs.org', actions: 'write' },
           ],
         },
       };
@@ -579,11 +580,44 @@ describe('DA auth', () => {
       // A /mysite/+** read wildcard matches the site keyword.
       const plus = await ctxFor([{ email: 'plus@bloggs.org' }]);
       assert(hasPermission(plus, siteKey, 'read', true));
+      assert(!hasPermission(plus, siteKey, 'write', true));
 
-      // A /mysite/** write wildcard grants read+write on the site keyword.
+      // A /mysite/** write wildcard grants read but NOT write on the site keyword: site
+      // write access must not implicitly unlock config write, only an explicit CONFIG
+      // rule can grant that.
       const star = await ctxFor([{ email: 'star@bloggs.org' }]);
       assert(hasPermission(star, siteKey, 'read', true));
-      assert(hasPermission(star, siteKey, 'write', true));
+      assert(!hasPermission(star, siteKey, 'write', true));
+
+      // An explicit `write` rule on /mysite/CONFIG itself still grants write.
+      const admin = await ctxFor([{ email: 'admin@bloggs.org' }]);
+      assert(hasPermission(admin, siteKey, 'read', true));
+      assert(hasPermission(admin, siteKey, 'write', true));
+    });
+
+    it('getAclCtx actionSet for a config request includes org CONFIG fallback actions', async () => {
+      // Regression test: the cached actionSet built by getAclCtx() for api === 'config'
+      // used to only look up the site-specific /{site}/CONFIG keyword, never the
+      // org-level CONFIG keyword. Since this actionSet is what gets exposed to clients
+      // via the X-da-actions/X-da-child-actions headers (see daResp.js), a user who only
+      // holds the org-level CONFIG rule would pass the real write check in postConfig
+      // (hasConfigPermission ORs both keywords) but the header would still say
+      // read-only, permanently locking the config editor UI once the doc exists.
+      const orgOnlyConfig = {
+        test: {
+          ':type': 'sheet',
+          ':sheetname': 'permissions',
+          data: [
+            { path: 'CONFIG', groups: 'orgadmin@bloggs.org', actions: 'write' },
+          ],
+        },
+      };
+      const orgOnlyEnv = { DA_CONFIG: { get: (name) => orgOnlyConfig[name] } };
+      const users = [{ email: 'orgadmin@bloggs.org' }];
+
+      const aclCtx = await getAclCtx(orgOnlyEnv, 'test', users, 'mysite', 'config');
+      assert(aclCtx.actionSet.has('read'));
+      assert(aclCtx.actionSet.has('write'));
     });
 
     it('test DA_OPS_IMS_ORG permissions', async () => {

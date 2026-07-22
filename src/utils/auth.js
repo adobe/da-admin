@@ -207,8 +207,16 @@ function dotFolderVariant(prefix) {
   return `${trimmed.slice(0, slashIdx + 1)}.${lastSegment}/`;
 }
 
+// A CONFIG keyword (`CONFIG` or `/{site}/CONFIG`) grants read to anyone with access to the
+// site/org (matched via a wildcard rule below), but write only if a rule targets the keyword
+// itself explicitly. This keeps site content-write grants from implicitly unlocking config writes.
+function isConfigKeyword(target) {
+  return target === 'CONFIG' || target.endsWith('/CONFIG');
+}
+
 export function getUserActions(pathLookup, user, target) {
   const idents = getIdents(user);
+  const isConfigTarget = isConfigKeyword(target);
 
   const plVals = idents.map((key) => pathLookup.get(key) || []);
   const actions = plVals.map((entries) => entries
@@ -231,7 +239,10 @@ export function getUserActions(pathLookup, user, target) {
     .filter((a) => a);
 
   return {
-    actions: new Set(actions.flatMap(({ actions: acts }) => acts)),
+    actions: new Set(actions.flatMap(({ actions: acts, path }) => {
+      if (isConfigTarget && path !== target) return acts.filter((act) => act === 'read');
+      return acts;
+    })),
     trace: actions,
   };
 }
@@ -390,6 +401,18 @@ export async function getAclCtx(env, org, users, key, api) {
       actionSet = actionSet.intersection(ua.actions);
       ua.trace.forEach((t) => actionTrace.push(t));
     });
+
+    // Site CONFIG access can also come from the org-level CONFIG keyword (see
+    // hasConfigPermission in the config route). Mirror that OR here so the cached
+    // actionSet - exposed to clients via the X-da-actions/X-da-child-actions headers -
+    // matches what the config route actually allows.
+    if (api === 'config' && k !== 'CONFIG') {
+      let orgActionSet = getUserActions(pathLookup, firstUser, 'CONFIG').actions;
+      otherUsers.forEach((u) => {
+        orgActionSet = orgActionSet.intersection(getUserActions(pathLookup, u, 'CONFIG').actions);
+      });
+      actionSet = actionSet.union(orgActionSet);
+    }
   } else {
     actionSet = new Set();
   }
