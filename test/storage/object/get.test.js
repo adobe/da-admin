@@ -156,9 +156,34 @@ describe('Get Object', () => {
     assert.strictEqual(resp.status, 500);
     assert.strictEqual(resp.error, error.message);
     assert(errors.length > 0, 'get_failed must log the error so it appears in Cloudflare Logs');
-    assert(
-      errors[0].some((a) => a instanceof Error || typeof a === 'string'),
-      'logged value must include the error or a message',
-    );
+    assert.strictEqual(errors[0][0], 'Error getting object');
+    assert.strictEqual(errors[0][1], error);
+  });
+
+  it('logs a distinct message when the error has no httpStatusCode (network/timeout failure)', async () => {
+    const error = new Error('Network connection lost');
+    s3Mock.on(GetObjectCommand, {
+      Bucket: BUCKET,
+      Key: S3_KEY,
+    }).rejects(error);
+
+    const errors = [];
+    const origError = console.error;
+    console.error = (...args) => {
+      errors.push(args);
+    };
+    let resp;
+    try {
+      // eslint-disable-next-line no-shadow
+      const getObject = (await import('../../../src/storage/object/get.js')).default;
+      resp = await getObject({}, { bucket: BUCKET, org: ORG, key: KEY }, false);
+    } finally {
+      console.error = origError;
+    }
+
+    assert.strictEqual(resp.status, 500);
+    assert(errors.length > 0, 'must log the error so it appears in Cloudflare Logs');
+    assert.strictEqual(errors[0][0], 'Error getting object without httpStatusCode');
+    assert.strictEqual(errors[0][1], error);
   });
 });
