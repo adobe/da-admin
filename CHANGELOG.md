@@ -1,3 +1,10 @@
+## [1.13.3](https://github.com/adobe/da-admin/compare/v1.13.2...v1.13.3) (2026-07-23)
+
+
+### Bug Fixes
+
+* log R2 errors on source GET 500s ([#307](https://github.com/adobe/da-admin/issues/307)) ([db8f824](https://github.com/adobe/da-admin/commit/db8f8240ff739b35996125195b78e5aa90e396d7))
+
 ## [1.13.2](https://github.com/adobe/da-admin/compare/v1.13.1...v1.13.2) (2026-07-22)
 
 
