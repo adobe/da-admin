@@ -74,12 +74,12 @@ export default async function getObject(
         etag: resp.ETag,
       };
     } catch (e) {
-      if (!e.$metadata?.httpStatusCode) {
-        // eslint-disable-next-line no-console
-        console.error('Error getting object without httpStatusCode', e);
-      }
       // Handle conditional request failures (304 Not Modified, 412 Precondition Failed)
       const status = e.$metadata?.httpStatusCode || 500;
+      // eslint-disable-next-line no-console
+      if (status >= 500) {
+        console.error(e.$metadata?.httpStatusCode ? 'Error getting object' : 'Error getting object without httpStatusCode', e);
+      }
       if (status === 304 || status === 412) {
         // Include ETag in 304/412 responses per RFC 7232
         return {
