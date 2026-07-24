@@ -28,7 +28,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@adobe/eslint-config-helix": "3.0.16",
-    "@redocly/cli": "2.32.2",
+    "@redocly/cli": "2.38.0",
     "@semantic-release/changelog": "6.0.3",
     "@semantic-release/exec": "7.1.0",
     "@semantic-release/git": "10.0.1",
@@ -38,15 +38,15 @@
     "eslint": "9.4.0",
     "esmock": "2.7.6",
     "husky": "9.1.7",
-    "js-yaml": "4.1.1",
-    "lint-staged": "17.0.7",
+    "js-yaml": "4.3.0",
+    "lint-staged": "17.0.8",
     "mocha": "11.7.6",
     "s3rver": "3.7.1",
     "semantic-release": "25.0.5",
     "semantic-release-slack-bot": "4.0.2",
     "sinon": "22.0.0",
     "tree-kill": "1.2.2",
-    "wrangler": "4.100.0"
+    "wrangler": "4.110.0"
   },
   "lint-staged": {
     "*.js": "eslint",
@@ -56,7 +56,7 @@
     "@adobe/helix-shared-process-queue": "3.1.5",
     "@aws-sdk/client-s3": "3.726.1",
     "@aws-sdk/s3-request-presigner": "^3.468.0",
-    "@cloudflare/workers-types": "4.20260616.1",
+    "@cloudflare/workers-types": "4.20260702.1",
     "@ssttevee/cfw-formdata-polyfill": "0.2.1",
     "jose": "6.2.3"
   }
