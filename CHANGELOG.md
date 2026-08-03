@@ -1,3 +1,10 @@
+## [1.13.4](https://github.com/adobe/da-admin/compare/v1.13.3...v1.13.4) (2026-08-03)
+
+
+### Bug Fixes
+
+* return 422 instead of 500 for non-versionable labelled version requests ([#308](https://github.com/adobe/da-admin/issues/308)) ([dc03b91](https://github.com/adobe/da-admin/commit/dc03b9198f276735c3d34d09984332fde0a9ea9e)), closes [#288](https://github.com/adobe/da-admin/issues/288)
+
 ## [1.13.3](https://github.com/adobe/da-admin/compare/v1.13.2...v1.13.3) (2026-07-23)
 
 
