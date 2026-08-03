@@ -349,9 +349,7 @@ export async function putObjectWithVersion(
 }
 
 export async function postObjectVersionWithLabel(label, env, daCtx) {
-  const {
-    body, contentLength, contentType, status: currentStatus,
-  } = await getObject(env, daCtx);
+  const { body, contentLength, contentType } = await getObject(env, daCtx);
   // Buffer the ReadableStream so the body survives retries inside putObjectWithVersion.
   // A ReadableStream can only be consumed once; ArrayBuffer can be reused freely.
   const bodyBuffer = body instanceof ReadableStream ? await new Response(body).arrayBuffer() : body;
@@ -368,18 +366,8 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
 
   if (resp.status !== 200) return { status: resp.status };
   if (!resp.versionCreated) {
-    // Diagnostic: the silent-500 path lands here when the source object's contentType
-    // is not html/json (e.g. legacy imports with missing ContentType metadata) so
-    // shouldCreateVersion gates out and no version is written.
-    // eslint-disable-next-line no-console
-    console.error('Failed to version (no version created)', {
-      contentType,
-      inferredType,
-      ext: daCtx.ext,
-      hadLabel: label != null,
-      currentStatus,
-    });
-    return { status: 500, error: 'Version was not created' };
+    // Binary content can't be versioned — not a server error, so 422 not 500.
+    return { status: 422, error: 'Version was not created: content type is not versionable' };
   }
   return { status: 201 };
 }
