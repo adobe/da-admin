@@ -3414,11 +3414,15 @@ describe('Version Put', () => {
       assert.ok(auditCalls[0].entry.versionId);
     });
 
-    it('logs diagnostics and returns 500 when labelled version requested on non-versionable ext', async () => {
+    it('returns 422 when labelled version requested on non-versionable ext', async () => {
       // Preserves the binary-never-version semantics: when the file extension does not map
       // to a versionable mime (and the stored contentType is also not versionable), the
-      // labelled-version request still 500s and the diagnostic log fires with inferredType + ext
-      // captured so we can spot future legacy patterns in Cloudflare Logs.
+      // labelled-version request is rejected.
+      //
+      // Regression: this used to return 500, misclassifying an expected/permanent rejection
+      // (bulk media migrations calling POST /versionsource on jpg/png/pdf) as a server error.
+      // That inflated 5xx error-rate alerts with non-retryable, by-design rejections. 422
+      // (client asked for something that cannot be done) is correct; 500 is not.
       const mockGetObject = async () => ({
         body: 'binary content',
         contentType: 'application/octet-stream',
@@ -3446,28 +3450,10 @@ describe('Version Put', () => {
         bucket: 'b', org: 'o', site: 'mysite', key: 'mysite/data.bin', ext: 'bin', users: [],
       };
 
-      const errors = [];
-      const origError = console.error;
-      console.error = (...args) => {
-        errors.push(args);
-      };
-      let resp;
-      try {
-        resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
-      } finally {
-        console.error = origError;
-      }
+      const resp = await postObjectVersionWithLabel('My Label', {}, daCtx);
 
-      assert.strictEqual(resp.status, 500);
-      assert.strictEqual(resp.error, 'Version was not created');
-      assert(errors.length > 0, 'diagnostic log must fire for the unhealed octet-stream path');
-      const payload = errors[0].find((a) => a && typeof a === 'object');
-      assert(payload, 'log must include a structured diagnostic payload');
-      assert.strictEqual(payload.contentType, 'application/octet-stream');
-      assert.strictEqual(payload.inferredType, 'application/octet-stream', 'inference must fall through for unknown ext');
-      assert.strictEqual(payload.ext, 'bin');
-      assert.strictEqual(payload.hadLabel, true);
-      assert.strictEqual(payload.currentStatus, 200);
+      assert.strictEqual(resp.status, 422);
+      assert.strictEqual(resp.error, 'Version was not created: content type is not versionable');
     });
     it('plain PUT (no label) still skips auto-version for non-html/json contentType', async () => {
       // Companion regression: the labelled-path mime inference must NOT bleed into plain
