@@ -1,3 +1,10 @@
+## [1.13.6](https://github.com/adobe/da-admin/compare/v1.13.5...v1.13.6) (2026-08-04)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([#239](https://github.com/adobe/da-admin/issues/239)) ([f7a851a](https://github.com/adobe/da-admin/commit/f7a851ae38d4bb9e5e9ff9c4468ae36057fda681))
+
 ## [1.13.5](https://github.com/adobe/da-admin/compare/v1.13.4...v1.13.5) (2026-08-04)
 
 
