@@ -23,21 +23,21 @@ describe('getUsersForMetadata', () => {
     assert.deepStrictEqual(getUsersForMetadata(users), [{ email: 'jane@example.com' }]);
   });
 
-  it('appends "(agent)" to the email when the user is flagged as an agent', () => {
+  it('keeps the email clean and adds isAgentic when the user is an agent', () => {
     const users = [{ email: 'jane@example.com', ident: '123', isAgentic: true }];
     assert.deepStrictEqual(
       getUsersForMetadata(users),
-      [{ email: 'jane@example.com (agent)' }],
+      [{ email: 'jane@example.com', isAgentic: true }],
     );
   });
 
-  it('tags only the agent users in a mixed list', () => {
+  it('flags only the agent users in a mixed list', () => {
     const users = [
       { email: 'jane@example.com', isAgentic: true },
       { email: 'bob@example.com' },
     ];
     assert.deepStrictEqual(getUsersForMetadata(users), [
-      { email: 'jane@example.com (agent)' },
+      { email: 'jane@example.com', isAgentic: true },
       { email: 'bob@example.com' },
     ]);
   });
