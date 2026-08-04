@@ -94,12 +94,11 @@ describe('Source Route', () => {
 
     const resp = await postSource({ req, env, daCtx });
     assert.equal(200, resp.status);
-    // users passed to putObject are flagged so the version records "… (agent)"
+    // users passed to putObject are flagged so the version author is an agent
     assert.deepStrictEqual(
       putCalled[0].c.users,
       [{ email: 'jane@example.com', ident: '123', agent: true }],
     );
-    // 'mcp' !== 'collab', so live collab sessions are still notified
     assert.equal(1, callbacks.length);
   });
 

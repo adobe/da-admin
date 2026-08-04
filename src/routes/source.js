@@ -27,9 +27,8 @@ export async function deleteSource({ req, env, daCtx }) {
 export async function postSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
 
-  // Flag MCP-initiated writes so the recorded version/audit user reads
-  // "email (agent)" (see getUsersForMetadata). Done AFTER the permission check so
-  // the marker never reaches the ACL matching, which also reads daCtx.users[].email.
+  // Flag MCP-initiated writes so the version author is tagged as an agent.
+  // Done after the permission check, which also reads daCtx.users[].email.
   const initiator = req.headers.get('x-da-initiator');
   if (initiator === 'mcp' && Array.isArray(daCtx.users)) {
     daCtx.users = daCtx.users.map((user) => ({ ...user, agent: true }));
@@ -39,8 +38,6 @@ export async function postSource({ req, env, daCtx }) {
   const resp = await putObject(env, daCtx, obj);
 
   if (resp.status === 201 || resp.status === 200) {
-    // 'mcp' !== 'collab', so agent-initiated writes still notify live collab
-    // sessions; only collab's own writes skip the redundant sync.
     if (initiator !== 'collab') {
       await notifyCollab('syncadmin', req.url, env);
     }
