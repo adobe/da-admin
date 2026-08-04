@@ -45,6 +45,7 @@ export default defineConfig([
 
       // Quite useful to mark values as unused
       // 'no-underscore-dangle': 'off',    },
+      curly: ['error', 'multi-line'],
     },
     plugins: {
       import: recommended.plugins.import,
