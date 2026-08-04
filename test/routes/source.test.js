@@ -97,7 +97,7 @@ describe('Source Route', () => {
     // users passed to putObject are flagged so the version author is an agent
     assert.deepStrictEqual(
       putCalled[0].c.users,
-      [{ email: 'jane@example.com', ident: '123', agent: true }],
+      [{ email: 'jane@example.com', ident: '123', isAgentic: true }],
     );
     assert.equal(1, callbacks.length);
   });

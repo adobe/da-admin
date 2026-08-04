@@ -31,7 +31,7 @@ export async function postSource({ req, env, daCtx }) {
   // Done after the permission check, which also reads daCtx.users[].email.
   const initiator = req.headers.get('x-da-initiator');
   if (initiator === 'mcp' && Array.isArray(daCtx.users)) {
-    daCtx.users = daCtx.users.map((user) => ({ ...user, agent: true }));
+    daCtx.users = daCtx.users.map((user) => ({ ...user, isAgentic: true }));
   }
 
   const obj = await putHelper(req, env, daCtx);
