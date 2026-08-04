@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/adobe/da-admin/compare/v1.13.6...v1.14.0) (2026-08-04)
+
+
+### Features
+
+* tag MCP-initiated writes as agent in version history ([#310](https://github.com/adobe/da-admin/issues/310)) ([ae50c1b](https://github.com/adobe/da-admin/commit/ae50c1bcfbada69e0ac76747b09905eef1d821df)), closes [#309](https://github.com/adobe/da-admin/issues/309)
+
 ## [1.13.6](https://github.com/adobe/da-admin/compare/v1.13.5...v1.13.6) (2026-08-04)
 
 
