@@ -12,11 +12,11 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import yaml from 'js-yaml';
+import { load } from 'js-yaml';
 
 function loadYaml(relPath) {
   const url = new URL(relPath, import.meta.url);
-  return yaml.load(readFileSync(fileURLToPath(url), 'utf8'));
+  return load(readFileSync(fileURLToPath(url), 'utf8'));
 }
 
 describe('OpenAPI source contract', () => {
