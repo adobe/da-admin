@@ -55,6 +55,53 @@ describe('Source Route', () => {
     assert.deepStrictEqual(['https://localhost/api/v1/syncadmin?doc=http://localhost:9876/source/somedoc.html'], sb_callbacks);
   });
 
+  it('Test postSource from mcp flags users as agent and still notifies collab', async () => {
+    const putCalled = [];
+    const putCall = (e, c, o) => {
+      putCalled.push({ e, c, o });
+      return { status: 200 };
+    };
+
+    const { postSource } = await esmock('../../src/routes/source.js', {
+      '../../src/storage/object/put.js': {
+        default: putCall,
+      },
+      '../../src/utils/auth.js': {
+        hasPermission: () => true,
+      },
+    });
+
+    const callbacks = [];
+    const env = {
+      dacollab: {
+        fetch: async (url) => {
+          callbacks.push(url);
+          return { body: { cancel: () => {} } };
+        },
+      },
+      DA_COLLAB: 'http://localhost:1234',
+    };
+
+    const headers = new Map();
+    headers.set('x-da-initiator', 'mcp');
+
+    const req = { headers, url: 'http://localhost:8787/source/a/b/mydoc.html' };
+    const daCtx = {
+      key: '/a/b/mydoc.html',
+      aclCtx: { pathLookup: new Map() },
+      users: [{ email: 'jane@example.com', ident: '123' }],
+    };
+
+    const resp = await postSource({ req, env, daCtx });
+    assert.equal(200, resp.status);
+    // users passed to putObject are flagged so the version author is an agent
+    assert.deepStrictEqual(
+      putCalled[0].c.users,
+      [{ email: 'jane@example.com', ident: '123', isAgentic: true }],
+    );
+    assert.equal(1, callbacks.length);
+  });
+
   it('Test postSource from collab does not trigger invalidate callback', async () => {
     const { postSource } = await esmock('../../src/routes/source.js', {
       '../../src/storage/object/put.js': {

@@ -52,5 +52,8 @@ export function getUsersForMetadata(users) {
     return undefined;
   }
 
-  return users.map((user) => ({ email: user.email }));
+  return users.map((user) => ({
+    email: user.email,
+    ...(user.isAgentic && { isAgentic: true }),
+  }));
 }

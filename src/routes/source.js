@@ -26,11 +26,18 @@ export async function deleteSource({ req, env, daCtx }) {
 
 export async function postSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
+
+  // Flag MCP-initiated writes so the version author is tagged as an agent.
+  // Done after the permission check, which also reads daCtx.users[].email.
+  const initiator = req.headers.get('x-da-initiator');
+  if (initiator === 'mcp' && Array.isArray(daCtx.users)) {
+    daCtx.users = daCtx.users.map((user) => ({ ...user, isAgentic: true }));
+  }
+
   const obj = await putHelper(req, env, daCtx);
   const resp = await putObject(env, daCtx, obj);
 
   if (resp.status === 201 || resp.status === 200) {
-    const initiator = req.headers.get('x-da-initiator');
     if (initiator !== 'collab') {
       await notifyCollab('syncadmin', req.url, env);
     }
