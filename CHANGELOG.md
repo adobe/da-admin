@@ -1,3 +1,10 @@
+## [1.13.5](https://github.com/adobe/da-admin/compare/v1.13.4...v1.13.5) (2026-08-04)
+
+
+### Bug Fixes
+
+* **deps:** update external major (major) ([#297](https://github.com/adobe/da-admin/issues/297)) ([427606d](https://github.com/adobe/da-admin/commit/427606d60c01268ed56671fd290d38d6dd0c37c7))
+
 ## [1.13.4](https://github.com/adobe/da-admin/compare/v1.13.3...v1.13.4) (2026-08-03)
 
 
