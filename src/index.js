@@ -65,24 +65,29 @@ export default {
     }
 
     let respObj;
-    switch (req.method) {
-      case 'HEAD':
-        respObj = await headHandler({ env, daCtx });
-        break;
-      case 'GET':
-        respObj = await getHandler({ env, daCtx });
-        break;
-      case 'PUT':
-        respObj = await postHandler({ req, env, daCtx });
-        break;
-      case 'POST':
-        respObj = await postHandler({ req, env, daCtx });
-        break;
-      case 'DELETE':
-        respObj = await deleteHandler({ req, env, daCtx });
-        break;
-      default:
-        respObj = { status: 405 };
+    try {
+      switch (req.method) {
+        case 'HEAD':
+          respObj = await headHandler({ env, daCtx });
+          break;
+        case 'GET':
+          respObj = await getHandler({ env, daCtx });
+          break;
+        case 'PUT':
+          respObj = await postHandler({ req, env, daCtx });
+          break;
+        case 'POST':
+          respObj = await postHandler({ req, env, daCtx });
+          break;
+        case 'DELETE':
+          respObj = await deleteHandler({ req, env, daCtx });
+          break;
+        default:
+          respObj = { status: 405 };
+      }
+    } catch (e) {
+      console.error('Error handling request', e);
+      return daResp({ status: 500, error: e.message });
     }
 
     if (!respObj) return daResp({ status: 404 });
