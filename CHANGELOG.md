@@ -1,3 +1,10 @@
+## [1.14.1](https://github.com/adobe/da-admin/compare/v1.14.0...v1.14.1) (2026-08-06)
+
+
+### Bug Fixes
+
+* HEAD /list 500 crash when caller has no read permission ([#311](https://github.com/adobe/da-admin/issues/311)) ([5658b63](https://github.com/adobe/da-admin/commit/5658b636fce92c850fa3f3d46269c4c63da9b250))
+
 # [1.14.0](https://github.com/adobe/da-admin/compare/v1.13.6...v1.14.0) (2026-08-04)
 
 
