@@ -33,7 +33,7 @@ export default async function headHandler({ env, daCtx }) {
   if (path.startsWith('/list')) {
     const { body, contentType, status } = await getList({ env, daCtx });
     return {
-      contentLength: body.length,
+      contentLength: body?.length ?? 0,
       contentType,
       status,
     };
@@ -41,7 +41,7 @@ export default async function headHandler({ env, daCtx }) {
   if (path.startsWith('/versionlist')) {
     const { body, contentType, status } = await getVersionList({ env, daCtx });
     return {
-      contentLength: body.length,
+      contentLength: body?.length ?? 0,
       contentType,
       status,
     };

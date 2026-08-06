@@ -135,6 +135,27 @@ describe('fetch', () => {
     assert.strictEqual(resp.status, 500);
   });
 
+  it('should return 500 with x-error header when a handler throws unexpectedly', async () => {
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true,
+          users: [{ email: 'test@example.com' }],
+          path: '/source/org/repo/file.html',
+        }),
+      },
+      '../src/handlers/get.js': {
+        default: async () => {
+          throw new Error('Unexpected handler error');
+        },
+      },
+    });
+
+    const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/source/org/repo/file.html' }, {});
+    assert.strictEqual(resp.status, 500);
+    assert.strictEqual(resp.headers.get('x-error'), 'Unexpected handler error');
+  });
+
   it('should expose continuation token header for list responses', async () => {
     const hnd = await esmock('../src/index.js', {
       '../src/utils/daCtx.js': {
