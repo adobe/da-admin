@@ -34,6 +34,7 @@ const DA_CONFIG = {
 };
 
 const env = {
+  DA_CONTENT: 'https://stage-content.da.live',
   S3_DEF_URL: 'https://s3.com',
   S3_ACCESS_KEY_ID: 'an-id',
   S3_SECRET_ACCESS_KEY: 'too-many-secrets',

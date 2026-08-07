@@ -17,6 +17,8 @@ export interface Env {
   S3_SECRET_ACCESS_KEY: string;
   IMS_ORIGIN: string;
   AEM_BUCKET_NAME: string;
+  // base URL for source content links (eg https://content.da.live)
+  DA_CONTENT: string;
   // shared secret used as authorization when invoking the collab service (eg for syncadmin)
   COLLAB_SHARED_SECRET: string;
   DA_OPS_IMS_ORG: string;

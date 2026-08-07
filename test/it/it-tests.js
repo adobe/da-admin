@@ -263,7 +263,7 @@ export default (ctx) => describe('Integration Tests: it tests', function () {
 
     let body = await resp.json();
     assert.strictEqual(body.source.editUrl, `https://da.live/edit#/${org}/${repo}/${key}`);
-    assert.strictEqual(body.source.contentUrl, `https://content.da.live/${org}/${repo}/${key}`);
+    assert.strictEqual(body.source.contentUrl, `https://stage-content.da.live/${org}/${repo}/${key}`);
     assert.strictEqual(body.aem.previewUrl, `https://main--${repo}--${org}.aem.page/${key}`);
     assert.strictEqual(body.aem.liveUrl, `https://main--${repo}--${org}.aem.live/${key}`);
 

@@ -66,7 +66,7 @@ export default async function putObject(env, daCtx, obj) {
     await client.send(command);
   }
 
-  const body = sourceRespObject(daCtx);
+  const body = sourceRespObject(env, daCtx);
   return {
     body: JSON.stringify(body), status, contentType: 'application/json', metadata, etag,
   };
