@@ -16,7 +16,7 @@ import normalizeCharset from '../utils/charset.js';
  * Builds a source response
  * @param {*} key
  */
-export function sourceRespObject(daCtx) {
+export function sourceRespObject(env, daCtx) {
   const {
     org, site, isFile, pathname, aemPathname,
   } = daCtx;
@@ -24,7 +24,7 @@ export function sourceRespObject(daCtx) {
   const obj = {
     source: {
       editUrl: `https://da.live/${isFile ? 'edit#/' : ''}${org}${pathname}`,
-      contentUrl: `https://content.da.live/${org}${pathname}`,
+      contentUrl: `${env.DA_CONTENT}/${org}${pathname}`,
     },
   };
 
