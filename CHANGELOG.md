@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/adobe/da-admin/compare/v1.14.1...v1.15.0) (2026-08-07)
+
+
+### Features
+
+* derive source contentUrl from DA_CONTENT env var ([#312](https://github.com/adobe/da-admin/issues/312)) ([11e926f](https://github.com/adobe/da-admin/commit/11e926f34c6225bea4efa262faba383bc8a25a77))
+
 ## [1.14.1](https://github.com/adobe/da-admin/compare/v1.14.0...v1.14.1) (2026-08-06)
 
 
