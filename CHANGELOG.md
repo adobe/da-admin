@@ -1,3 +1,10 @@
+## [1.15.1](https://github.com/adobe/da-admin/compare/v1.15.0...v1.15.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([#313](https://github.com/adobe/da-admin/issues/313)) ([ccafa3c](https://github.com/adobe/da-admin/commit/ccafa3cd8f32f4ab15d4dcba510183629bac53e2))
+
 # [1.15.0](https://github.com/adobe/da-admin/compare/v1.14.1...v1.15.0) (2026-08-07)
 
 
