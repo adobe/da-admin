@@ -27,7 +27,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@adobe/eslint-config-helix": "3.0.30",
+    "@adobe/eslint-config-helix": "3.0.31",
     "@redocly/cli": "2.44.1",
     "@semantic-release/changelog": "7.0.0",
     "@semantic-release/exec": "7.1.0",
