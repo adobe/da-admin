@@ -28,7 +28,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@adobe/eslint-config-helix": "3.0.30",
-    "@redocly/cli": "2.44.1",
+    "@redocly/cli": "2.47.0",
     "@semantic-release/changelog": "7.0.0",
     "@semantic-release/exec": "7.1.0",
     "@semantic-release/git": "11.0.1",
@@ -38,7 +38,7 @@
     "eslint": "9.39.5",
     "esmock": "2.7.6",
     "husky": "9.1.7",
-    "js-yaml": "5.2.3",
+    "js-yaml": "5.3.0",
     "lint-staged": "17.3.0",
     "mocha": "11.8.0",
     "s3rver": "3.7.1",
@@ -46,7 +46,7 @@
     "semantic-release-slack-bot": "4.0.2",
     "sinon": "22.1.0",
     "tree-kill": "1.2.2",
-    "wrangler": "4.119.0"
+    "wrangler": "4.125.0"
   },
   "lint-staged": {
     "*.js": "eslint",
