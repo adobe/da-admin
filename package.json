@@ -38,7 +38,7 @@
     "eslint": "9.39.5",
     "esmock": "2.7.6",
     "husky": "9.1.7",
-    "js-yaml": "5.2.3",
+    "js-yaml": "5.4.1",
     "lint-staged": "17.3.0",
     "mocha": "11.8.0",
     "s3rver": "3.7.1",
