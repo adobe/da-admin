@@ -10,9 +10,10 @@
  * governing permissions and limitations under the License.
  */
 import assert from 'node:assert';
+import sinon from 'sinon';
 import {
   parseMigrationSites, getHlx6Target, syncSourcePut, syncSourceDelete,
-  syncCopy, syncMove, syncVersion,
+  syncCopy, syncMove, syncVersion, initHlx6,
 } from '../../src/utils/hlx6.js';
 
 const API = 'https://api.example.com';
@@ -25,11 +26,16 @@ describe('hlx6 propagation', () => {
   let savedFetch;
   let calls;
   let fetchStatus;
+  let logs;
+  let errors;
 
   beforeEach(() => {
     savedFetch = globalThis.fetch;
     calls = [];
     fetchStatus = () => 200;
+    logs = sinon.stub(console, 'log');
+    errors = sinon.stub(console, 'error');
+    sinon.stub(console, 'warn');
     globalThis.fetch = async (url, opts) => {
       calls.push({ url: url.toString(), opts });
       const status = fetchStatus(url.toString(), opts);
@@ -39,6 +45,7 @@ describe('hlx6 propagation', () => {
 
   afterEach(() => {
     globalThis.fetch = savedFetch;
+    sinon.restore();
   });
 
   const env = {
@@ -81,6 +88,21 @@ describe('hlx6 propagation', () => {
   });
 
   describe('getHlx6Target', () => {
+    it('logs setup once per configuration and refreshes changed mappings', () => {
+      const config = { HLX6_MIGRATION_SITES: ['setup/site -> target/one'] };
+      initHlx6(config);
+      assert.deepStrictEqual(getHlx6Target(config, 'setup', 'site'), { org: 'target', site: 'one' });
+      const count = logs.callCount;
+      initHlx6(config);
+      assert.strictEqual(logs.callCount, count);
+      assert(logs.getCalls().some(({ args }) => args.join(' ').includes('setup/site -> target/one')));
+
+      config.HLX6_MIGRATION_SITES = ['setup/site -> target/two'];
+      initHlx6(config);
+      assert.deepStrictEqual(getHlx6Target(config, 'setup', 'site'), { org: 'target', site: 'two' });
+      assert(logs.callCount > count);
+    });
+
     it('returns target for migrated sites only', () => {
       assert.deepStrictEqual(getHlx6Target(env, 'myorg', 'MySite'), { org: 'myorg', site: 'mysite' });
       assert.deepStrictEqual(getHlx6Target(env, 'myorg', 'other'), { org: 'org2', site: 'site2' });
@@ -91,6 +113,87 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncSourcePut', () => {
+    it('uses the default API and preserves binary bytes without a MIME type', async () => {
+      const bytes = new Uint8Array([0, 255, 128, 42]);
+      await syncSourcePut({
+        req: makeReq(),
+        env: { HLX6_MIGRATION_SITES: ['myorg/mysite'] },
+        daCtx: { org: 'myorg', key: 'mysite/image.png', ext: 'png' },
+        obj: { data: new Blob([bytes]) },
+        resp: { status: 201 },
+      });
+      assert.strictEqual(calls[0].url, 'https://api.aem.live/myorg/sites/mysite/source/image.png');
+      assert.deepStrictEqual(new Uint8Array(calls[0].opts.body), bytes);
+      assert.strictEqual(calls[0].opts.headers['content-type'], undefined);
+    });
+
+    it('posts JSON strings without serializing them twice', async () => {
+      await syncSourcePut({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/data.json', ext: 'json' },
+        obj: { data: '{"data":[1,2]}' },
+        resp: { status: 201 },
+      });
+      assert.strictEqual(calls[0].opts.body, '{"data":[1,2]}');
+      assert.strictEqual(calls[0].opts.headers['content-type'], 'application/json');
+    });
+
+    it('skips missing keys and an empty first authorization token', () => {
+      const base = {
+        req: makeReq(), env, obj: { data: 'x' }, resp: { status: 201 },
+      };
+      assert.strictEqual(syncSourcePut({ ...base, daCtx: { org: 'myorg' } }), undefined);
+      assert.strictEqual(syncSourcePut({
+        ...base,
+        req: makeReq(', Bearer second-token'),
+        daCtx: { org: 'myorg', key: 'mysite/a.html' },
+      }), undefined);
+      assert.strictEqual(calls.length, 0);
+    });
+
+    it('logs the entire successful response body and location', async () => {
+      const body = JSON.stringify({ copied: [{ src: '/a.html', dst: '/b.html' }] });
+      globalThis.fetch = async () => new Response(body, {
+        status: 201, headers: { location: '/myorg/sites/mysite/source/a.html' },
+      });
+      await syncSourcePut({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/a.html', ext: 'html' },
+        obj: { data: '<body></body>' },
+        resp: { status: 201 },
+      });
+      const output = logs.getCalls().map(({ args }) => args.join(' ')).join('\n');
+      assert(output.includes(`body: ${body}`));
+      assert(output.includes('location: /myorg/sites/mysite/source/a.html'));
+      assert(output.includes(': 201 in '));
+      assert.strictEqual(errors.callCount, 0);
+    });
+
+    it('settles the background task if reading the response body fails', async () => {
+      const response = new Response(null, { status: 201 });
+      sinon.stub(response, 'text').rejects(new Error('body stream interrupted'));
+      globalThis.fetch = async () => response;
+      const waited = [];
+      const promise = syncSourcePut({
+        req: makeReq(),
+        env,
+        daCtx: {
+          org: 'myorg',
+          key: 'mysite/a.html',
+          ext: 'html',
+          waitUntil: (task) => waited.push(task),
+        },
+        obj: { data: 'html' },
+        resp: { status: 201 },
+      });
+      assert.strictEqual(waited[0], promise);
+      await promise;
+      assert(response.text.calledOnce);
+      assert(logs.getCalls().some(({ args }) => args.join(' ').includes('body: (empty)')));
+    });
+
     it('posts a file with the user token and registers with waitUntil', async () => {
       const waited = [];
       const daCtx = {
@@ -152,6 +255,7 @@ describe('hlx6 propagation', () => {
       await syncSourcePut({
         req: makeReq(), env, daCtx, obj: { data: '<body></body>' }, resp: { status: 201 },
       });
+      assert(errors.getCalls().some(({ args }) => args.join(' ').includes('failed: 400')));
       assert.strictEqual(calls[0].opts.headers['content-type'], 'text/html');
 
       // failure with json body returned by api.aem.live
@@ -166,14 +270,53 @@ describe('hlx6 propagation', () => {
       await syncSourcePut({
         req: makeReq(), env, daCtx, obj: { data: '<body></body>' }, resp: { status: 201 },
       });
+      const output = errors.getCalls().map(({ args }) => args.join(' ')).join('\n');
+      assert(output.includes('x-error: Invalid HTML'));
+      assert(output.includes('body: {"message":"Validation failed"}'));
 
+      const failure = new Error('network');
       globalThis.fetch = async () => {
-        throw new Error('network');
+        throw failure;
       };
       await syncSourcePut({
         req: makeReq(), env, daCtx, obj: { data: 'x' }, resp: { status: 201 },
       });
+      assert(errors.getCalls().some(({ args }) => args[0].includes('propagation failed') && args[1] === failure));
       globalThis.fetch = origFetch;
+    });
+
+    describe('site root guards', () => {
+      [['copy', syncCopy], ['move', syncMove]].forEach(([name, sync]) => {
+        [
+          { source: 'mysite', destination: 'mysite/destination' },
+          { source: 'mysite/source', destination: 'mysite' },
+        ].forEach((details) => {
+          it(`skips ${name} with a site root: ${details.source} -> ${details.destination}`, () => {
+            assert.strictEqual(sync({
+              req: makeReq(), env, daCtx: { org: 'myorg' }, details, resp: { status: 204 },
+            }), undefined);
+            assert.strictEqual(calls.length, 0);
+          });
+        });
+      });
+
+      [['delete', syncSourceDelete], ['version', syncVersion]].forEach(([name, sync]) => {
+        it(`skips ${name} at the site root`, () => {
+          assert.strictEqual(sync({
+            req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite' }, resp: { status: 201 },
+          }), undefined);
+          assert.strictEqual(calls.length, 0);
+        });
+      });
+
+      it('skips versions when DA failed or the site is not migrated', () => {
+        for (const [key, status] of [['mysite/a.html', 400], ['unmigrated/a.html', 201]]) {
+          assert.strictEqual(syncVersion({
+            req: makeReq(), env, daCtx: { org: 'myorg', key }, resp: { status },
+          }), undefined);
+        }
+        assert.strictEqual(calls.length, 0);
+      });
     });
   });
 
@@ -281,6 +424,28 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncMove', () => {
+    it('waits for the copy response before deleting the source', async () => {
+      let finishCopy;
+      const copyResponse = new Promise((resolve) => {
+        finishCopy = resolve;
+      });
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return opts.method === 'PUT' ? copyResponse : new Response(null, { status: 204 });
+      };
+      const promise = syncMove({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+        details: { source: 'mysite/a.html', destination: 'mysite/b.html' },
+        resp: { status: 204 },
+      });
+      assert.deepStrictEqual(calls.map(({ opts }) => opts.method), ['PUT']);
+      finishCopy(new Response(null, { status: 201 }));
+      await promise;
+      assert.deepStrictEqual(calls.map(({ opts }) => opts.method), ['PUT', 'DELETE']);
+    });
+
     it('copies then deletes within the same hlx6 site', async () => {
       await syncMove({
         req: makeReq(),
