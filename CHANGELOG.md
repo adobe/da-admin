@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/adobe/da-admin/compare/v1.15.1...v1.16.0) (2026-10-15)
+
+
+### Features
+
+* add hlx6 migration dual writes ([#321](https://github.com/adobe/da-admin/issues/321)) ([ec06d64](https://github.com/adobe/da-admin/commit/ec06d64c1bb2f7b87269010ac871b7ce40df9b30))
+
 ## [1.15.1](https://github.com/adobe/da-admin/compare/v1.15.0...v1.15.1) (2026-08-19)
 
 
