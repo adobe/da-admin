@@ -23,6 +23,42 @@ describe('fetch', () => {
     assert.strictEqual(resp.status, 204);
   });
 
+  it('binds waitUntil to the execution context without awaiting background work', async () => {
+    let complete;
+    const task = new Promise((resolve) => {
+      complete = resolve;
+    });
+    const waited = [];
+    const ctx = {
+      waitUntil(promise) {
+        assert.strictEqual(this, ctx);
+        waited.push(promise);
+      },
+    };
+    const hnd = await esmock('../src/index.js', {
+      '../src/utils/daCtx.js': {
+        default: async () => ({
+          authorized: true, users: [{ email: 'test@example.com' }], key: 'site/a.html',
+        }),
+      },
+      '../src/handlers/post.js': {
+        default: async ({ daCtx }) => {
+          daCtx.waitUntil(task);
+          return { status: 201, body: '{"source":"DA"}', etag: '"da-etag"' };
+        },
+      },
+    });
+    try {
+      const resp = await hnd.fetch({ method: 'PUT' }, {}, ctx);
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(await resp.text(), '{"source":"DA"}');
+      assert.strictEqual(resp.headers.get('etag'), '"da-etag"');
+      assert.deepStrictEqual(waited, [task]);
+    } finally {
+      complete();
+    }
+  });
+
   it('should return a response object for unknown', async () => {
     const hnd = await esmock('../src/index.js', {
       '../src/utils/daCtx.js': {

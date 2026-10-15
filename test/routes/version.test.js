@@ -119,4 +119,43 @@ describe('Version Route', () => {
     assert.strictEqual('aaaa/bbbb.html', govCalled[1].c.key);
     assert(!govCalled[1].h);
   });
+  it('post version propagates to hlx6 for migrated sites', async () => {
+    const { postVersionSource } = await esmock('../../src/routes/version.js', {
+      '../../src/storage/version/put.js': {
+        postObjectVersion: async (req) => {
+          await req.json();
+          return { status: 201 };
+        },
+      },
+      '../../src/utils/auth.js': { hasPermission: () => true },
+    });
+
+    const savedFetch = globalThis.fetch;
+    const calls = [];
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: url.toString(), opts });
+      return new Response(null, { status: 201 });
+    };
+    try {
+      const env = { AEM_API: 'https://api.example.com', HLX6_MIGRATION_SITES: ['myorg/mysite'] };
+      const waited = [];
+      const daCtx = { org: 'myorg', key: 'mysite/a.html', waitUntil: (p) => waited.push(p) };
+      const mkReq = () => new Request('https://admin.da.live/versionsource/myorg/mysite/a.html', {
+        method: 'POST',
+        headers: { authorization: 'Bearer tok' },
+        body: JSON.stringify({ label: 'release' }),
+      });
+      const resp = await postVersionSource({ req: mkReq(), env, daCtx });
+      assert.strictEqual(resp.status, 201);
+      await Promise.all(waited);
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].url, 'https://api.example.com/myorg/sites/mysite/source/a.html/.versions?comment=release');
+
+      // non migrated site: no propagation
+      await postVersionSource({ req: mkReq(), env, daCtx: { ...daCtx, key: 'other/a.html' } });
+      assert.strictEqual(calls.length, 1);
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+  });
 });

@@ -23,6 +23,11 @@ export interface Env {
   COLLAB_SHARED_SECRET: string;
   DA_OPS_IMS_ORG: string;
   DA_OPS_IMS_BOT_EMAIL: string;
+  // hlx6 api service base URL (eg https://api.aem.live)
+  AEM_API?: string;
+  // sites in migration to hlx6, as "org/site" or "org/site -> org2/site2".
+  // Modifications on these sites are propagated to the hlx6 source bus.
+  HLX6_MIGRATION_SITES?: string[] | string;
 
   DA_AUTH: KVNamespace,
   DA_CONFIG: KVNamespace,

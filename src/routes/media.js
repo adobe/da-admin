@@ -13,6 +13,7 @@
 import { hasPermission } from '../utils/auth.js';
 import { MEDIA_TYPES } from '../utils/constants.js';
 import { getFileBody, putHelper } from '../helpers/source.js';
+import { logMediaMigration } from '../utils/hlx6.js';
 
 export default async function postMedia({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
@@ -42,5 +43,9 @@ export default async function postMedia({ req, env, daCtx }) {
     return { status: resp.status, headers: resp.headers };
   }
   const data = await resp.json();
-  return { status: 200, body: JSON.stringify(data), contentType: 'application/json' };
+  const result = { status: 200, body: JSON.stringify(data), contentType: 'application/json' };
+  logMediaMigration({
+    req, env, daCtx, resp: result,
+  });
+  return result;
 }
