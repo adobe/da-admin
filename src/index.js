@@ -16,14 +16,18 @@ import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
+import { initHlx6 } from './utils/hlx6.js';
 
 export default {
   /**
    * @param {Request} req
    * @param {Env} env
+   * @param {ExecutionContext} [ctx]
    * @returns {Promise<Response>}
    */
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
+    initHlx6(env);
+
     if (req.method === 'OPTIONS') {
       return daResp({ status: 204 });
     }
@@ -38,6 +42,9 @@ export default {
       console.error('Error computing context', e);
       return daResp({ status: 500, error: e.message });
     }
+
+    // Allows background work (eg hlx6 propagation) to outlive the response
+    if (ctx?.waitUntil) daCtx.waitUntil = ctx.waitUntil.bind(ctx);
 
     const {
       users, authorized, key, api,

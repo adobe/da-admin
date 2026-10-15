@@ -17,11 +17,16 @@ import { notifyCollab } from '../storage/utils/object.js';
 import { putHelper } from '../helpers/source.js';
 import deleteHelper from '../helpers/delete.js';
 import { hasPermission } from '../utils/auth.js';
+import { syncSourceDelete, syncSourcePut } from '../utils/hlx6.js';
 
 export async function deleteSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
   const details = await deleteHelper(req);
-  return /* await */ deleteObjects(env, daCtx, details);
+  const resp = await deleteObjects(env, daCtx, details);
+  syncSourceDelete({
+    req, env, daCtx, details, resp,
+  });
+  return resp;
 }
 
 export async function postSource({ req, env, daCtx }) {
@@ -42,6 +47,9 @@ export async function postSource({ req, env, daCtx }) {
       await notifyCollab('syncadmin', req.url, env);
     }
   }
+  syncSourcePut({
+    req, env, daCtx, obj, resp,
+  });
   return resp;
 }
 

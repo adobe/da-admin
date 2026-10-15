@@ -42,3 +42,10 @@ Browse to `http://localhost:8787/list` to ensure you see the expected buckets.
 
 1. You can make your own buckets tied to your own Cloudflare account or you can request a `.dev.vars` file.
 2. Cloudflare KV, which is used for org properties and session login info is locally stored when developing locally. You will need to make your own local KVs to test against.
+
+### Helix 6 migration (dual write)
+Sites listed in the `HLX6_MIGRATION_SITES` env variable (see `wrangler.toml`) are being migrated to Helix 6. Every successful modification on those sites (source create/update/delete, folder creation, copy, move, version creation) is also propagated, in the background, to the Helix 6 source bus at `AEM_API` (`https://api.aem.live`) using the caller's IMS token. Failures are logged but do not affect the DA response.
+
+Entries are either:
+- `org/site`: the same org/site on Helix 6
+- `org/site -> org2/site2`: a different Helix 6 org/site (e.g. for testing)

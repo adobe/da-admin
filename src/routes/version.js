@@ -14,6 +14,7 @@ import { getObjectVersion } from '../storage/version/get.js';
 import { listObjectVersions } from '../storage/version/list.js';
 import { postObjectVersion } from '../storage/version/put.js';
 import { hasPermission } from '../utils/auth.js';
+import { getHlx6Target, syncVersion } from '../utils/hlx6.js';
 
 export async function getVersionList({ env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'read')) return { status: 403 };
@@ -32,5 +33,14 @@ export async function getVersionSource({ env, daCtx, head }) {
 
 export async function postVersionSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
-  return postObjectVersion(req, env, daCtx);
+  const site = daCtx.key?.split('/')[0];
+  const syncReq = getHlx6Target(env, daCtx.org, site) ? req.clone() : undefined;
+  const resp = await postObjectVersion(req, env, daCtx);
+  if (syncReq) {
+    const label = await syncReq.json().then((json) => json?.label).catch(() => undefined);
+    syncVersion({
+      req, env, daCtx, label, resp,
+    });
+  }
+  return resp;
 }
