@@ -13,7 +13,7 @@ import assert from 'node:assert';
 import sinon from 'sinon';
 import {
   parseMigrationSites, getHlx6Target, syncSourcePut, syncSourceDelete,
-  syncCopy, syncMove, syncVersion, initHlx6,
+  syncCopy, syncMove, syncVersion, initHlx6, logMediaMigration,
 } from '../../src/utils/hlx6.js';
 
 const API = 'https://api.example.com';
@@ -52,6 +52,186 @@ describe('hlx6 propagation', () => {
     AEM_API: API,
     HLX6_MIGRATION_SITES: ['myorg/mysite', 'myorg/other -> org2/site2', 'myorg/third -> org2/site2'],
   };
+
+  function events() {
+    return logs.getCalls()
+      .filter(({ args }) => args[0] === '[hlx6:event]')
+      .map(({ args }) => JSON.parse(args[1]));
+  }
+
+  describe('structured migration audit', () => {
+    const context = {
+      org: 'myorg', key: 'mysite/a.html', isFile: true, ext: 'html',
+    };
+
+    it('correlates DA revision, payload, receiver response and final success without secrets', async () => {
+      const body = '<body><main>café</main></body>';
+      const req = new Request('https://admin.da.live/source/myorg/mysite/a.html', {
+        method: 'PUT',
+        headers: { authorization: 'Bearer secret-ims-token', 'cf-ray': 'incoming-ray' },
+      });
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return new Response('{"stored":true}', {
+          status: 201,
+          headers: {
+            'x-request-id': 'receiver-id', 'cf-ray': 'receiver-ray', location: '/a.html',
+          },
+        });
+      };
+      await syncSourcePut({
+        req,
+        env: { ...env, ENVIRONMENT: 'stage', VERSION: 'test-deployment' },
+        daCtx: context,
+        obj: { data: body },
+        resp: { status: 201, etag: '"da-revision"', metadata: { id: 'da-id' } },
+      });
+      const records = events();
+      assert.deepStrictEqual(records.map(({ event }) => event), [
+        'operation_observed', 'operation_started', 'request_started',
+        'request_completed', 'operation_completed',
+      ]);
+      assert.strictEqual(new Set(records.map(({ operationId }) => operationId)).size, 1);
+      for (const record of records) {
+        assert.strictEqual(record.component, 'hlx6-migration');
+        assert.strictEqual(record.schemaVersion, 1);
+        assert.strictEqual(record.environment, 'stage');
+        assert.strictEqual(record.deploymentVersion, 'test-deployment');
+        assert.strictEqual(record.daRequestId, 'incoming-ray');
+        assert.strictEqual(record.daMethod, 'PUT');
+        assert.strictEqual(record.daEtag, '"da-revision"');
+        assert.strictEqual(record.daDocumentId, 'da-id');
+        assert.deepStrictEqual(record.target, { org: 'myorg', site: 'mysite' });
+        assert(!Number.isNaN(Date.parse(record.timestamp)));
+      }
+      const started = records[2];
+      assert.strictEqual(started.bytes, new TextEncoder().encode(body).length);
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
+      const expectedHash = Buffer.from(digest).toString('hex');
+      assert.strictEqual(started.payloadSha256, expectedHash);
+      assert.strictEqual(started.requestId, calls[0].opts.headers['x-request-id']);
+      assert.strictEqual(records[3].requestId, started.requestId);
+      assert.strictEqual(records[3].responseRequestId, 'receiver-id');
+      assert.strictEqual(records[3].responseRayId, 'receiver-ray');
+      assert.strictEqual(records[3].responseBody, '{"stored":true}');
+      assert.strictEqual(records[3].responseBodyTruncated, false);
+      assert.strictEqual(records[4].outcome, 'succeeded');
+      const serialized = JSON.stringify(records);
+      assert(!serialized.includes('secret-ims-token'));
+      assert(!serialized.includes(body));
+    });
+
+    it('marks HTTP failures as failed, never succeeded', async () => {
+      fetchStatus = () => 503;
+      await syncSourcePut({
+        req: makeReq(), env, daCtx: context, obj: { data: 'html' }, resp: { status: 201 },
+      });
+      const records = events();
+      assert.strictEqual(records.find(({ event }) => event === 'request_completed').status, 503);
+      const terminal = records.filter(({ event }) => event === 'operation_completed');
+      assert.strictEqual(terminal.length, 1);
+      assert.strictEqual(terminal[0].outcome, 'failed');
+      assert(terminal[0].error.includes('503'));
+      assert(!records.some(({ outcome }) => outcome === 'succeeded'));
+    });
+
+    it('records network failures with the same request ID and a failed terminal event', async () => {
+      globalThis.fetch = async () => {
+        throw new Error('connection refused');
+      };
+      await syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 204 },
+      });
+      const records = events();
+      const started = records.find(({ event }) => event === 'request_started');
+      const failed = records.find(({ event }) => event === 'request_failed');
+      assert.strictEqual(failed.requestId, started.requestId);
+      assert.strictEqual(failed.reason, 'network_error');
+      assert.strictEqual(failed.error, 'connection refused');
+      assert.strictEqual(records.at(-1).outcome, 'failed');
+    });
+
+    it('records unreadable response bodies distinctly from empty bodies', async () => {
+      const response = new Response(null, { status: 201 });
+      sinon.stub(response, 'text').rejects(new Error('broken body'));
+      globalThis.fetch = async () => response;
+      await syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 204 },
+      });
+      const record = events().find(({ event }) => event === 'request_completed');
+      assert.strictEqual(record.bodyReadError, 'broken body');
+      assert.strictEqual(record.status, 201);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert(errors.getCalls().some(({ args }) => args[0].includes('Unable to read')));
+    });
+
+    it('bounds structured response previews and explicitly records truncation', async () => {
+      globalThis.fetch = async () => new Response('x'.repeat(9000), { status: 201 });
+      await syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 204 },
+      });
+      const record = events().find(({ event }) => event === 'request_completed');
+      assert.strictEqual(record.responseBody.length, 8192);
+      assert.strictEqual(record.responseBodyTruncated, true);
+    });
+
+    it('records continuation skips, partial DA responses and unsupported media', () => {
+      syncCopy({
+        req: makeReq(),
+        env,
+        daCtx: context,
+        details: { source: 'mysite/a.html', destination: 'other/b.html', continuationToken: 'token' },
+        resp: { status: 206 },
+      });
+      let record = events().at(-1);
+      assert.strictEqual(record.reason, 'continuation');
+      assert.strictEqual(record.daPartial, true);
+      assert.strictEqual(record.continuation, true);
+      assert.deepStrictEqual(record.sourceTarget, { org: 'myorg', site: 'mysite' });
+      assert.deepStrictEqual(record.destinationTarget, { org: 'org2', site: 'site2' });
+      logMediaMigration({
+        req: makeReq(), env, daCtx: context, resp: { status: 200 },
+      });
+      record = events().at(-1);
+      assert.strictEqual(record.operation, 'MEDIA');
+      assert.strictEqual(record.reason, 'media_upload_not_propagated');
+      assert.strictEqual(record.event, 'operation_skipped');
+      assert.strictEqual(calls.length, 0);
+    });
+
+    it('does not report unsupported folder copies as successful', async () => {
+      await syncCopy({
+        req: makeReq(),
+        env,
+        daCtx: { ...context, isFile: false },
+        details: { source: 'mysite/folder', destination: 'other/folder' },
+        resp: { status: 204 },
+      });
+      assert(events().some(({ reason }) => reason === 'cross_site_folder'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('reports an unsupported cross-site folder move without deleting its source', async () => {
+      await syncMove({
+        req: makeReq(),
+        env,
+        daCtx: { ...context, isFile: false },
+        details: { source: 'mysite/folder', destination: 'other/folder' },
+        resp: { status: 204 },
+      });
+      assert(events().some(({ reason }) => reason === 'cross_site_folder'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+      assert.strictEqual(calls.length, 0);
+    });
+
+    it('uses unique operation IDs for separate writes to the same path', async () => {
+      await Promise.all([1, 2].map(() => syncVersion({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      })));
+      const observed = events().filter(({ event }) => event === 'operation_observed');
+      assert.strictEqual(new Set(observed.map(({ operationId }) => operationId)).size, 2);
+    });
+  });
 
   describe('parseMigrationSites', () => {
     it('parses both formats, normalizes and skips invalid entries', () => {

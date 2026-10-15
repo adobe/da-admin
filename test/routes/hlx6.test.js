@@ -29,6 +29,33 @@ describe('Migration route wiring', () => {
 
   afterEach(() => sinon.restore());
 
+  it('records successful legacy media uploads as not propagated to hlx6', async () => {
+    const postMedia = await esmock('../../src/routes/media.js', {
+      '../../src/utils/auth.js': { hasPermission: () => true },
+    });
+    const data = new FormData();
+    data.set('data', new File(['image'], 'image.jpg', { type: 'image/jpeg' }));
+    const req = new Request('https://admin.da.live/media/org/site/image.jpg', {
+      method: 'POST', headers: { authorization: 'Bearer test-token' }, body: data,
+    });
+    fetchStub.callsFake(async () => new Response('{"uri":"https://legacy.example/media.jpg"}'));
+    const daCtx = {
+      org: 'org', key: 'site/image.jpg', site: 'site', aemPathname: '/image.jpg',
+    };
+    const response = await postMedia.default({
+      req, daCtx, env: { ...env, AEM_ADMIN_MEDIA_API: 'https://legacy.example/media' },
+    });
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(JSON.parse(response.body).uri, 'https://legacy.example/media.jpg');
+    assert(fetchStub.calledOnce);
+    const records = console.log.getCalls()
+      .filter(({ args }) => args[0] === '[hlx6:event]')
+      .map(({ args }) => JSON.parse(args[1]));
+    assert.strictEqual(records.at(-1).reason, 'media_upload_not_propagated');
+    assert.strictEqual(records.at(-1).operation, 'MEDIA');
+    assert.strictEqual(records.at(-1).daKey, 'site/image.jpg');
+  });
+
   it('preserves a successful DA write when the background request rejects', async () => {
     const response = { status: 201, body: '{"source":"DA"}' };
     const routes = await esmock('../../src/routes/source.js', {

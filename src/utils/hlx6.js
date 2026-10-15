@@ -142,23 +142,46 @@ function getAuthHeaders(req) {
   };
 }
 
-async function hlx6Fetch(url, opts) {
-  const size = opts.body?.byteLength ?? opts.body?.length;
+async function hlx6Fetch(url, opts, audit, metadata) {
+  const requestId = crypto.randomUUID();
+  const size = typeof opts.body === 'string'
+    ? new TextEncoder().encode(opts.body).byteLength : opts.body?.byteLength;
   const type = opts.headers?.['content-type'];
   const details = [type, size !== undefined ? `${size} bytes` : undefined].filter((d) => d);
   log(`-> ${opts.method} ${url}${details.length ? ` (${details.join(', ')})` : ''}`);
   const start = Date.now();
-  const resp = await fetch(url, opts);
+  const request = {
+    ...metadata,
+    requestId,
+    method: opts.method,
+    url: url.toString(),
+    contentType: type,
+    bytes: size,
+  };
+  audit('request_started', request);
+  let resp;
+  try {
+    resp = await fetch(url, {
+      ...opts, headers: { ...opts.headers, 'x-request-id': requestId },
+    });
+  } catch (e) {
+    audit('request_failed', {
+      ...request, reason: 'network_error', error: e.message, durationMs: Date.now() - start,
+    });
+    throw e;
+  }
   const duration = Date.now() - start;
 
   let bodyText = '';
+  let bodyReadError;
   try {
     bodyText = await resp.text();
-  } catch {
-    // ignore
+  } catch (e) {
+    bodyReadError = e.message;
+    console.error('[hlx6] Unable to read response body', e);
   }
 
-  const detailsList = [];
+  const detailsList = [`requestId: ${requestId}`];
   const location = resp.headers?.get('location');
   if (location) detailsList.push(`location: ${location}`);
   const xError = resp.headers?.get('x-error');
@@ -169,24 +192,45 @@ async function hlx6Fetch(url, opts) {
     detailsList.push('body: (empty)');
   }
   const detailsSuffix = ` [${detailsList.join(', ')}]`;
+  audit('request_completed', {
+    ...request,
+    status: resp.status,
+    ok: resp.ok,
+    durationMs: Date.now() - start,
+    location,
+    xError,
+    responseRequestId: resp.headers?.get('x-request-id'),
+    responseRayId: resp.headers?.get('cf-ray'),
+    bodyReadError,
+    responseBody: bodyText.slice(0, 8192),
+    responseBodyTruncated: bodyText.length > 8192,
+  });
 
   if (resp.ok) {
     log(`<- ${opts.method} ${url}: ${resp.status} in ${duration}ms${detailsSuffix}`);
   } else {
     // eslint-disable-next-line no-console
     console.error(`[hlx6] <- ${opts.method} ${url} failed: ${resp.status} in ${duration}ms${detailsSuffix}`);
+    throw new Error(`hlx6 ${opts.method} ${url} returned ${resp.status}`);
   }
   return resp;
 }
 
-function schedule(daCtx, label, fn) {
+function schedule(daCtx, label, fn, audit) {
   const background = typeof daCtx.waitUntil === 'function';
+  const start = Date.now();
+  audit('operation_started', { background });
   log(`${label}: propagating${background ? ' (background)' : ' (no waitUntil, not awaited)'}`);
   const promise = (async () => {
     try {
-      await fn();
-      log(`${label}: finished`);
+      const result = await fn();
+      const outcome = result === false ? 'failed' : 'succeeded';
+      audit('operation_completed', { outcome, durationMs: Date.now() - start });
+      log(`${label}: ${outcome}`);
     } catch (e) {
+      audit('operation_completed', {
+        outcome: 'failed', error: e.message, durationMs: Date.now() - start,
+      });
       // eslint-disable-next-line no-console
       console.error(`[hlx6] ${label}: propagation failed`, e);
     }
@@ -197,20 +241,70 @@ function schedule(daCtx, label, fn) {
 
 /**
  * Checks the common preconditions and logs why a propagation is skipped.
- * @returns {object|undefined} the auth headers if propagation should happen
+ * @returns {object|undefined} propagation helpers if propagation should happen
  */
-function checkSync(label, { req, resp, migrated }) {
-  if (!migrated) {
-    log(`${label}: skipped, site not in migration`);
-    return undefined;
-  }
+function checkSync(label, {
+  req, resp, migrated, env, daCtx, details, target, src, dest,
+}) {
+  if (!migrated) return undefined;
+  const context = {
+    schemaVersion: 1,
+    component: 'hlx6-migration',
+    operationId: crypto.randomUUID(),
+    operation: label.split(' ')[0],
+    environment: env.ENVIRONMENT,
+    deploymentVersion: env.VERSION,
+    daRequestId: req?.headers?.get('cf-ray') || req?.headers?.get('x-request-id'),
+    daMethod: req?.method,
+    daOrg: daCtx.org,
+    daKey: daCtx.key,
+    daStatus: resp?.status,
+    daEtag: resp?.etag,
+    daDocumentId: resp?.metadata?.id,
+    source: details?.source,
+    destination: details?.destination,
+    continuation: !!details?.continuationToken,
+    daPartial: resp?.status === 206,
+    target,
+    sourceTarget: src?.target,
+    destinationTarget: dest?.target,
+  };
+  const audit = (event, fields = {}) => {
+    console.log('[hlx6:event]', JSON.stringify({
+      ...context, event, timestamp: new Date().toISOString(), ...fields,
+    }));
+  };
+  audit('operation_observed');
+  const skip = (reason) => audit('operation_skipped', { reason });
   if (!SUCCESS.includes(resp?.status)) {
+    skip('da_unsuccessful');
     log(`${label}: skipped, DA status ${resp?.status}`);
     return undefined;
   }
   const headers = getAuthHeaders(req);
-  if (!headers) log(`${label}: skipped, no authorization header`);
-  return headers;
+  if (!headers) {
+    skip('missing_authorization');
+    return undefined;
+  }
+  return {
+    audit,
+    skip,
+    fetch: (url, opts, metadata) => hlx6Fetch(url, {
+      ...opts, headers: { ...headers, ...opts.headers },
+    }, audit, metadata),
+    schedule: (fn) => schedule(daCtx, label, fn, audit),
+  };
+}
+
+export function logMediaMigration({
+  req, env, daCtx, resp,
+}) {
+  const { site } = splitKey(daCtx.key);
+  const target = getHlx6Target(env, daCtx.org, site);
+  const sync = checkSync(`MEDIA ${daCtx.org}/${daCtx.key}`, {
+    req, resp, migrated: !!target, env, daCtx, target,
+  });
+  if (sync) sync.skip('media_upload_not_propagated');
 }
 
 async function toBody(data, ext) {
@@ -223,13 +317,17 @@ async function toBody(data, ext) {
   return { body: JSON.stringify(data), type: 'application/json' };
 }
 
-async function postFile(env, headers, target, path, data, ext) {
+async function postFile(env, sync, target, path, data, ext) {
   const { body, type } = await toBody(data, ext);
-  return hlx6Fetch(sourceUrl(env, target, path), {
+  const bytes = typeof body === 'string' ? new TextEncoder().encode(body) : body;
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const payloadSha256 = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return sync.fetch(sourceUrl(env, target, path), {
     method: 'POST',
-    headers: { ...headers, ...(type ? { 'content-type': type } : {}) },
+    headers: type ? { 'content-type': type } : {},
     body,
-  });
+  }, { payloadSha256 });
 }
 
 function fmtTarget(target) {
@@ -248,19 +346,23 @@ export function syncSourcePut({
   const { site, path } = splitKey(daCtx.key);
   const target = getHlx6Target(env, daCtx.org, site);
   const label = `PUT ${daCtx.org}/${daCtx.key} (hlx6: ${fmtTarget(target)})`;
-  const headers = checkSync(label, { req, resp, migrated: !!target });
-  if (!headers) return undefined;
+  const sync = checkSync(label, {
+    req, resp, migrated: !!target, env, daCtx, target,
+  });
+  if (!sync) return undefined;
   if (!path) {
+    sync.skip('site_root');
     log(`${label}: skipped, site root`);
     return undefined;
   }
 
   if (obj?.data) {
-    return schedule(daCtx, label, () => postFile(env, headers, target, path, obj.data, daCtx.ext));
+    return sync.schedule(() => postFile(env, sync, target, path, obj.data, daCtx.ext));
   }
   if (!obj) {
-    return schedule(daCtx, `${label} [folder]`, () => hlx6Fetch(sourceUrl(env, target, path, true), { method: 'POST', headers }));
+    return sync.schedule(() => sync.fetch(sourceUrl(env, target, path, true), { method: 'POST' }));
   }
+  sync.skip('missing_data');
   log(`${label}: skipped, no data in request`);
   return undefined;
 }
@@ -275,20 +377,24 @@ export function syncSourceDelete({
   const { site, path } = splitKey(daCtx.key);
   const target = getHlx6Target(env, daCtx.org, site);
   const label = `DELETE ${daCtx.org}/${daCtx.key} (hlx6: ${fmtTarget(target)})`;
-  const headers = checkSync(label, { req, resp, migrated: !!target });
-  if (!headers) return undefined;
+  const sync = checkSync(label, {
+    req, resp, migrated: !!target, env, daCtx, details, target,
+  });
+  if (!sync) return undefined;
   if (details?.continuationToken) {
+    sync.skip('continuation');
     log(`${label}: skipped, continuation request (already propagated)`);
     return undefined;
   }
   if (!path) {
+    sync.skip('site_root');
     log(`${label}: skipped, site root`);
     return undefined;
   }
 
-  return schedule(daCtx, label, () => hlx6Fetch(
+  return sync.schedule(() => sync.fetch(
     sourceUrl(env, target, path, !daCtx.isFile),
-    { method: 'DELETE', headers },
+    { method: 'DELETE' },
   ));
 }
 
@@ -302,17 +408,18 @@ function sameTarget(a, b) {
  * cannot be propagated and are only logged.
  * @returns {Promise<boolean>} true if the copy was propagated successfully
  */
-async function copyOnHlx6(env, daCtx, headers, src, dest) {
+async function copyOnHlx6(env, daCtx, sync, src, dest) {
   const isFolder = !daCtx.isFile;
   if (sameTarget(src.target, dest.target)) {
     log(`server side ${isFolder ? 'folder' : 'file'} copy ${src.path} -> ${dest.path} on ${fmtTarget(dest.target)}`);
     const url = sourceUrl(env, dest.target, dest.path, isFolder);
     url.searchParams.set('source', isFolder ? `${src.path}/` : src.path);
     url.searchParams.set('collision', 'overwrite');
-    const resp = await hlx6Fetch(url, { method: 'PUT', headers });
+    const resp = await sync.fetch(url, { method: 'PUT' });
     return resp.ok;
   }
   if (isFolder) {
+    sync.audit('propagation_unsupported', { reason: 'cross_site_folder' });
     // eslint-disable-next-line no-console
     console.warn(`[hlx6] Cross-site folder copy to ${daCtx.org}/${dest.site}${dest.path} is not propagated`);
     return false;
@@ -321,12 +428,13 @@ async function copyOnHlx6(env, daCtx, headers, src, dest) {
   log(`cross-site file copy: re-uploading ${key} from DA to ${fmtTarget(dest.target)}`);
   const obj = await env.AEM_CONTENT.get(key);
   if (!obj) {
+    sync.audit('propagation_failed', { reason: 'da_object_missing', key });
     // eslint-disable-next-line no-console
     console.error(`[hlx6] Copied object ${key} not found in DA`);
     return false;
   }
   const data = new Blob([await obj.arrayBuffer()], { type: obj.httpMetadata?.contentType });
-  const resp = await postFile(env, headers, dest.target, dest.path, data, daCtx.ext);
+  const resp = await postFile(env, sync, dest.target, dest.path, data, daCtx.ext);
   return resp.ok;
 }
 
@@ -347,18 +455,22 @@ export function syncCopy({
 }) {
   const { src, dest } = resolveCopyMove(env, daCtx, details);
   const label = `COPY ${daCtx.org}/${details?.source} -> ${daCtx.org}/${details?.destination} (hlx6: ${fmtTarget(src.target)} -> ${fmtTarget(dest.target)})`;
-  const headers = checkSync(label, { req, resp, migrated: !!dest.target });
-  if (!headers) return undefined;
+  const sync = checkSync(label, {
+    req, resp, migrated: !!dest.target, env, daCtx, details, src, dest,
+  });
+  if (!sync) return undefined;
   if (details?.continuationToken) {
+    sync.skip('continuation');
     log(`${label}: skipped, continuation request (already propagated)`);
     return undefined;
   }
   if (!src.path || !dest.path) {
+    sync.skip('site_root');
     log(`${label}: skipped, site root`);
     return undefined;
   }
 
-  return schedule(daCtx, label, () => copyOnHlx6(env, daCtx, headers, src, dest));
+  return sync.schedule(() => copyOnHlx6(env, daCtx, sync, src, dest));
 }
 
 /**
@@ -370,24 +482,28 @@ export function syncMove({
 }) {
   const { src, dest } = resolveCopyMove(env, daCtx, details);
   const label = `MOVE ${daCtx.org}/${details?.source} -> ${daCtx.org}/${details?.destination} (hlx6: ${fmtTarget(src.target)} -> ${fmtTarget(dest.target)})`;
-  const headers = checkSync(label, { req, resp, migrated: !!(src.target || dest.target) });
-  if (!headers) return undefined;
+  const sync = checkSync(label, {
+    req, resp, migrated: !!(src.target || dest.target), env, daCtx, details, src, dest,
+  });
+  if (!sync) return undefined;
   if (!src.path || !dest.path) {
+    sync.skip('site_root');
     log(`${label}: skipped, site root`);
     return undefined;
   }
 
-  return schedule(daCtx, label, async () => {
+  return sync.schedule(async () => {
     if (dest.target) {
-      const copied = await copyOnHlx6(env, daCtx, headers, src, dest);
+      const copied = await copyOnHlx6(env, daCtx, sync, src, dest);
       if (!copied) {
         log(`${label}: copy failed, source not deleted on hlx6`);
-        return;
+        return false;
       }
     }
     if (src.target) {
-      await hlx6Fetch(sourceUrl(env, src.target, src.path, !daCtx.isFile), { method: 'DELETE', headers });
+      await sync.fetch(sourceUrl(env, src.target, src.path, !daCtx.isFile), { method: 'DELETE' });
     }
+    return true;
   });
 }
 
@@ -400,14 +516,17 @@ export function syncVersion({
   const { site, path } = splitKey(daCtx.key);
   const target = getHlx6Target(env, daCtx.org, site);
   const label = `VERSION ${daCtx.org}/${daCtx.key} (hlx6: ${fmtTarget(target)})`;
-  const headers = checkSync(label, { req, resp, migrated: !!target });
-  if (!headers) return undefined;
+  const sync = checkSync(label, {
+    req, resp, migrated: !!target, env, daCtx, target,
+  });
+  if (!sync) return undefined;
   if (!path) {
+    sync.skip('site_root');
     log(`${label}: skipped, site root`);
     return undefined;
   }
 
   const url = new URL(`${sourceUrl(env, target, path)}/.versions`);
   if (comment) url.searchParams.set('comment', comment);
-  return schedule(daCtx, label, () => hlx6Fetch(url, { method: 'POST', headers }));
+  return sync.schedule(() => sync.fetch(url, { method: 'POST' }));
 }

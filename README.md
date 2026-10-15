@@ -49,3 +49,40 @@ Sites listed in the `HLX6_MIGRATION_SITES` env variable (see `wrangler.toml`) ar
 Entries are either:
 - `org/site`: the same org/site on Helix 6
 - `org/site -> org2/site2`: a different Helix 6 org/site (e.g. for testing)
+
+#### Migration analysis after deployment
+
+`[hlx6:event]` console entries contain JSON with `component: "hlx6-migration"`
+and `schemaVersion: 1`. Each observed mutation of a configured migration site
+has a unique `operationId`, DA status/path/revision (when available), source and
+destination mappings, incoming request/ray ID, environment, and deployment version.
+Credentials and uploaded document bytes are not logged.
+Raw-body uploads record their byte length and SHA-256 digest, so distinct payloads
+can be identified without storing document contents in logs.
+
+- `operation_observed` must be followed by `operation_skipped` (with a reason) or
+  `operation_started` and `operation_completed` (`succeeded` or `failed`).
+- Outbound steps have distinct `requestId` values, also sent as `x-request-id`.
+  `request_started` is followed by `request_completed` or `request_failed`.
+  Responses include status, timing, error/location headers, receiver IDs, and
+  an 8192-character body preview with an explicit truncation flag. Existing
+  debug logs retain the full response body.
+- HTTP and network errors fail the operation, not the DA response. A body-read
+  error is recorded separately; a 2xx response still means the remote mutation
+  succeeded, even if its response body could not be read.
+- Missing terminal events indicate interrupted work or missing logs, **not success**.
+  A partial DA response (`daPartial`) and continuation skips must be reviewed;
+  whole-folder propagation does not prove per-file parity. Cross-site folder
+  operations and dedicated media uploads are explicitly reported as unsupported.
+
+For a two-week review, count observed operations by deployment, operation, and
+mapped site; reconcile every operation and request with its terminal event;
+inspect failures, skips, partials, and body-read errors. A successful HTTP
+response proves API acceptance, not byte-for-byte parity or correct write ordering.
+These events do not provide replay, retries, or an authoritative per-file audit
+of folder changes.
+
+Before enabling migration, the DA log pipeline must be verified to ingest these
+worker console entries without sampling, retain them for at least 14 days (plus
+analysis time), and preserve the structured event fields. Retention and ingestion
+are managed outside this repository; this configuration does not establish them.
