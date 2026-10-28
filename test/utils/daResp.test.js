@@ -27,13 +27,14 @@ describe('DA Resp', () => {
     assert.strictEqual(200, resp.status);
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
-    assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
+    assert.strictEqual('Authorization, *', resp.headers.get('Access-Control-Allow-Headers'));
     assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag, x-error', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('text/plain; charset=utf-8', resp.headers.get('Content-Type'));
     assert.strictEqual('777', resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/bar.html=read,write', resp.headers.get('X-da-actions'));
     assert.strictEqual('1234', resp.headers.get('X-da-id'));
     assert.strictEqual('Mon, 24 Jun 2024 13:20:00 GMT', resp.headers.get('Last-Modified'));
+    assert.strictEqual('private, no-cache', resp.headers.get('Cache-Control'));
     assert(resp.headers.get('X-da-acltrace') === null);
   });
 
@@ -48,12 +49,13 @@ describe('DA Resp', () => {
     assert.strictEqual(404, resp.status);
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
-    assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
+    assert.strictEqual('Authorization, *', resp.headers.get('Access-Control-Allow-Headers'));
     assert.strictEqual('X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag, x-error', resp.headers.get('Access-Control-Expose-Headers'));
     assert.strictEqual('application/json', resp.headers.get('Content-Type'));
     assert(!resp.headers.get('Content-Length'));
     assert.strictEqual('/foo/blah.html=read', resp.headers.get('X-da-actions'));
     assert.deepStrictEqual(actionTrace, JSON.parse(resp.headers.get('X-da-acltrace')));
+    assert.strictEqual('private, no-cache', resp.headers.get('Cache-Control'));
     assert(resp.headers.get('X-da-id') === null);
   });
 
@@ -64,7 +66,7 @@ describe('DA Resp', () => {
     assert.strictEqual(500, resp.status);
     assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Origin'));
     assert.strictEqual('HEAD, GET, PUT, POST, DELETE', resp.headers.get('Access-Control-Allow-Methods'));
-    assert.strictEqual('*', resp.headers.get('Access-Control-Allow-Headers'));
+    assert.strictEqual('Authorization, *', resp.headers.get('Access-Control-Allow-Headers'));
     assert(resp.headers.get('X-da-actions') === null);
     assert(resp.headers.get('X-da-child-actions') === null);
     assert(resp.headers.get('X-da-acltrace') === null);
