@@ -644,6 +644,103 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncSourceDelete', () => {
+    [true, false].forEach((isFile) => {
+      ['[admin] Not found', '[AWS] Not Found'].forEach((xError) => {
+        it(`accepts an already absent ${isFile ? 'file' : 'folder'}: ${xError}`, async () => {
+          globalThis.fetch = async () => new Response(null, {
+            status: 404, headers: { 'x-error': xError },
+          });
+          const context = {
+            req: makeReq(),
+            env,
+            daCtx: { org: 'myorg', key: 'mysite/absent', isFile },
+            resp: { status: 204 },
+          };
+          await syncSourceDelete(context);
+          await syncSourceDelete(context);
+          const responses = events().filter(({ event }) => event === 'request_completed');
+          assert.strictEqual(responses.length, 2);
+          for (const response of responses) {
+            assert.strictEqual(response.status, 404);
+            assert.strictEqual(response.ok, false);
+            assert.strictEqual(response.xError, xError);
+            assert.strictEqual(response.outcome, 'already_absent');
+          }
+          const completed = events().filter(({ event }) => event === 'operation_completed');
+          assert.strictEqual(completed.length, 2);
+          assert(completed.every(({ outcome }) => outcome === 'succeeded'));
+          assert.strictEqual(errors.callCount, 0);
+        });
+      });
+    });
+
+    [
+      [404, undefined],
+      [404, '[admin] Failed to version document before moving to trash'],
+      [404, '[admin] source does not exist: unknown'],
+      [403, '[admin] not authorized'],
+      [500, '[admin] Not found'],
+    ].forEach(([status, xError]) => {
+      it(`preserves DELETE failure ${status}: ${xError}`, async () => {
+        globalThis.fetch = async () => new Response(null, {
+          status, headers: xError ? { 'x-error': xError } : {},
+        });
+        await syncSourceDelete({
+          req: makeReq(),
+          env,
+          daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+          resp: { status: 204 },
+        });
+        assert.strictEqual(events().at(-1).outcome, 'failed');
+        assert(errors.called);
+      });
+    });
+
+    it('does not normalize a missing-target response whose body could not be read', async () => {
+      const response = new Response(null, {
+        status: 404, headers: { 'x-error': '[admin] Not found' },
+      });
+      sinon.stub(response, 'text').rejects(new Error('broken body'));
+      globalThis.fetch = async () => response;
+      await syncSourceDelete({
+        req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html' }, resp: { status: 204 },
+      });
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('still fails PUT and VERSION operations returning ordinary not-found responses', async () => {
+      globalThis.fetch = async () => new Response(null, {
+        status: 404, headers: { 'x-error': '[admin] Not found' },
+      });
+      const context = {
+        req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html' }, resp: { status: 201 },
+      };
+      await syncSourcePut({ ...context, obj: { data: 'html' } });
+      await syncVersion(context);
+      const completed = events().filter(({ event }) => event === 'operation_completed');
+      assert.strictEqual(completed.length, 2);
+      assert(completed.every(({ outcome }) => outcome === 'failed'));
+    });
+
+    it('completes a MOVE when its copied source is already absent', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return opts.method === 'DELETE'
+          ? new Response(null, { status: 404, headers: { 'x-error': '[AWS] Not Found' } })
+          : new Response(null, { status: 200 });
+      };
+      await syncMove({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+        details: { source: 'mysite/a.html', destination: 'mysite/b.html' },
+        resp: { status: 204 },
+      });
+      assert.deepStrictEqual(calls.map(({ opts }) => opts.method), ['PUT', 'DELETE']);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert.strictEqual(events().filter(({ outcome }) => outcome === 'already_absent').length, 1);
+    });
+
     it('deletes files and folders', async () => {
       await syncSourceDelete({
         req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true }, details: {}, resp: { status: 204 },
