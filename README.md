@@ -85,8 +85,20 @@ For a two-week review, count observed operations by deployment, operation, and
 mapped site; reconcile every operation and request with its terminal event;
 inspect failures, skips, partials, and body-read errors. A successful HTTP
 response proves API acceptance, not byte-for-byte parity or correct write ordering.
-These events do not provide replay, retries, or an authoritative per-file audit
-of folder changes.
+Outbound requests retry explicit HTTP 429 rejections at most three times total
+(including the initial attempt), using the original caller's token. All steps
+of an operation share a 20-second deadline, including response-body reads and
+backoff. `Retry-After` seconds/dates are honored only when they fit the budget;
+otherwise bounded exponential backoff with jitter is used. Network errors and
+5xx responses have uncertain mutation outcomes and are not automatically
+replayed, especially for VERSION. Permanent 4xx responses are not retried.
+`request_retry_scheduled` and `request_exhausted` events record attempts and
+decisions. Events include actor emails when available, never bearer tokens.
+
+This is best-effort delivery, not a durable queue or an ordering guarantee.
+Failure logs retain operation/path/revision and payload-hash evidence for later
+investigation; they cannot restore overwritten or deleted bytes without
+available source history. Folder events are not an authoritative per-file audit.
 
 Before enabling migration, the DA log pipeline must be verified to ingest these
 worker console entries without sampling, retain them for at least 14 days (plus

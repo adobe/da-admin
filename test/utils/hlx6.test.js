@@ -59,6 +59,149 @@ describe('hlx6 propagation', () => {
       .map(({ args }) => JSON.parse(args[1]));
   }
 
+  describe('bounded retries', () => {
+    const context = {
+      org: 'myorg',
+      key: 'mysite/a.html',
+      isFile: true,
+      ext: 'html',
+      users: [{ email: 'editor@example.com', token: 'never-log-this' }],
+    };
+
+    it('retries 429 with the caller token, fresh request IDs and a stable operation ID', async () => {
+      const clock = sinon.useFakeTimers();
+      fetchStatus = () => (calls.length < 3 ? 429 : 201);
+      const promise = syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 204 },
+      });
+      await clock.tickAsync(5000);
+      await promise;
+      assert.strictEqual(calls.length, 3);
+      const auth = calls[0].opts.headers.authorization;
+      assert(calls.every(({ opts }) => opts.headers.authorization === auth));
+      assert.strictEqual(new Set(calls.map(({ opts }) => opts.headers['x-request-id'])).size, 3);
+      assert.strictEqual(new Set(events().map(({ operationId }) => operationId)).size, 1);
+      assert.deepStrictEqual(events()[0].actors, ['editor@example.com']);
+      assert(!JSON.stringify(events()).includes('never-log-this'));
+      assert.strictEqual(events().filter(({ event }) => event === 'request_retry_scheduled').length, 2);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+    });
+
+    it('stops after three rejections', async () => {
+      const clock = sinon.useFakeTimers();
+      fetchStatus = () => 429;
+      const promise = syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 204 },
+      });
+      await clock.tickAsync(5000);
+      await promise;
+      assert.strictEqual(calls.length, 3);
+      assert.strictEqual(events().find(({ event }) => event === 'request_exhausted').attempts, 3);
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('honors Retry-After seconds and HTTP dates', async () => {
+      const clock = sinon.useFakeTimers();
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return new Response(null, {
+          status: calls.length < 3 ? 429 : 201,
+          headers: { 'retry-after': calls.length === 1 ? '2' : new Date(Date.now() + 3000).toUTCString() },
+        });
+      };
+      const promise = syncVersion({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      });
+      await clock.tickAsync(1999);
+      assert.strictEqual(calls.length, 1);
+      await clock.tickAsync(1);
+      assert.strictEqual(calls.length, 2);
+      await clock.tickAsync(2999);
+      assert.strictEqual(calls.length, 2);
+      await clock.tickAsync(1);
+      await promise;
+      assert.strictEqual(calls.length, 3);
+    });
+
+    it('does not shorten Retry-After when it exceeds the remaining budget', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return new Response(null, { status: 429, headers: { 'retry-after': '60' } });
+      };
+      await syncVersion({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      });
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    [401, 403, 413, 502, 503].forEach((status) => {
+      it(`does not replay a permanent or uncertain mutation response: ${status}`, async () => {
+        fetchStatus = () => status;
+        await syncVersion({
+          req: makeReq(), env, daCtx: context, resp: { status: 201 },
+        });
+        assert.strictEqual(calls.length, 1);
+        assert.strictEqual(events().at(-1).outcome, 'failed');
+      });
+    });
+
+    it('bounds a hung fetch and marks its remote outcome unknown', async () => {
+      const clock = sinon.useFakeTimers();
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url, opts });
+        return new Promise(() => {});
+      };
+      const promise = syncVersion({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      });
+      await clock.tickAsync(20000);
+      await promise;
+      assert(calls[0].opts.signal.aborted);
+      assert.strictEqual(calls.length, 1);
+      assert(events().some(({ reason, remoteOutcomeUnknown }) => reason === 'deadline_exceeded' && remoteOutcomeUnknown));
+      assert.strictEqual(events().find(({ event }) => event === 'operation_completed').outcome, 'failed');
+    });
+
+    it('bounds response-body reads without replaying an accepted mutation', async () => {
+      const clock = sinon.useFakeTimers();
+      const response = new Response(null, { status: 201 });
+      sinon.stub(response, 'text').returns(new Promise(() => {}));
+      globalThis.fetch = async () => response;
+      const promise = syncVersion({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      });
+      await clock.tickAsync(20000);
+      await promise;
+      assert.strictEqual(events().find(({ event }) => event === 'operation_completed').outcome, 'failed');
+      assert(events().some(({ bodyReadError }) => bodyReadError?.includes('20-second')));
+    });
+
+    it('bounds local preparation and prevents a late preparation from starting a remote write', async () => {
+      const clock = sinon.useFakeTimers();
+      let release;
+      const promise = syncCopy({
+        req: makeReq(),
+        env: {
+          ...env,
+          AEM_CONTENT: { get: () => new Promise((resolve) => { release = resolve; }) },
+        },
+        daCtx: context,
+        details: { source: 'other/a.html', destination: 'mysite/a.html' },
+        resp: { status: 204 },
+      });
+      await clock.tickAsync(20000);
+      await promise;
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+      release({
+        arrayBuffer: async () => new ArrayBuffer(0),
+        httpMetadata: { contentType: 'text/html' },
+      });
+      await clock.tickAsync(1);
+      assert.strictEqual(calls.length, 0);
+    });
+  });
+
   describe('structured migration audit', () => {
     const context = {
       org: 'myorg', key: 'mysite/a.html', isFile: true, ext: 'html',
