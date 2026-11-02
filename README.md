@@ -128,6 +128,15 @@ and receiver error. The upload is not retried. There is no guessed local size
 limit or automatic switch to the unrelated media API: use a verified
 target-supported upload mechanism or reduce the payload, then reconcile.
 
+COPY/MOVE record `operation_checkpoint` events for completed copy and started/
+completed delete steps. A recognized remote source-not-found during file copy
+falls back to uploading the current committed DA destination, recording its
+ETag and document ID when available. It does not reconstruct an older revision.
+Missing remote folders require manual reconciliation; the source is not deleted.
+Partial/continuation DA MOVEs are explicitly skipped rather than deleting an
+entire target source after only partial DA success. Checkpoint logs support
+manual reconstruction, not automatic resumption or exactly-once execution.
+
 Before enabling migration, the DA log pipeline must be verified to ingest these
 worker console entries without sampling, retain them for at least 14 days (plus
 analysis time), and preserve the structured event fields. Retention and ingestion
