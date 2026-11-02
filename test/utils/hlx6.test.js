@@ -109,7 +109,7 @@ describe('hlx6 propagation', () => {
           headers: { 'retry-after': calls.length === 1 ? '2' : new Date(Date.now() + 3000).toUTCString() },
         });
       };
-      const promise = syncVersion({
+      const promise = syncSourceDelete({
         req: makeReq(), env, daCtx: context, resp: { status: 201 },
       });
       await clock.tickAsync(1999);
@@ -128,7 +128,7 @@ describe('hlx6 propagation', () => {
         calls.push({ url: url.toString(), opts });
         return new Response(null, { status: 429, headers: { 'retry-after': '60' } });
       };
-      await syncVersion({
+      await syncSourceDelete({
         req: makeReq(), env, daCtx: context, resp: { status: 201 },
       });
       assert.strictEqual(calls.length, 1);
@@ -138,7 +138,7 @@ describe('hlx6 propagation', () => {
     [401, 403, 413, 502, 503].forEach((status) => {
       it(`does not replay a permanent or uncertain mutation response: ${status}`, async () => {
         fetchStatus = () => status;
-        await syncVersion({
+        await syncSourceDelete({
           req: makeReq(), env, daCtx: context, resp: { status: 201 },
         });
         assert.strictEqual(calls.length, 1);
@@ -152,7 +152,7 @@ describe('hlx6 propagation', () => {
         calls.push({ url, opts });
         return new Promise(() => {});
       };
-      const promise = syncVersion({
+      const promise = syncSourceDelete({
         req: makeReq(), env, daCtx: context, resp: { status: 201 },
       });
       await clock.tickAsync(20000);
@@ -168,7 +168,7 @@ describe('hlx6 propagation', () => {
       const response = new Response(null, { status: 201 });
       sinon.stub(response, 'text').returns(new Promise(() => {}));
       globalThis.fetch = async () => response;
-      const promise = syncVersion({
+      const promise = syncSourceDelete({
         req: makeReq(), env, daCtx: context, resp: { status: 201 },
       });
       await clock.tickAsync(20000);
@@ -1038,17 +1038,83 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncVersion', () => {
-    it('creates a version with the label as comment', async () => {
-      await syncVersion({
-        req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html' }, label: 'v 1', resp: { status: 201 },
-      });
-      await syncVersion({
-        req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html' }, resp: { status: 201 },
-      });
-      assert.deepStrictEqual(calls.map((c) => [c.opts.method, c.url]), [
-        ['POST', `${API}/myorg/sites/mysite/source/a.html/.versions?comment=v+1`],
-        ['POST', `${API}/myorg/sites/mysite/source/a.html/.versions`],
+    const snapshotKey = 'mysite/.da-versions/document/version.html';
+    const base = `${API}/myorg/sites/mysite/source/a.html`;
+    const options = () => ({
+      req: makeReq(),
+      env: {
+        ...env,
+        AEM_CONTENT: {
+          get: async (key) => {
+            assert.strictEqual(key, `myorg/${snapshotKey}`);
+            return { arrayBuffer: async () => new TextEncoder().encode('snapshot').buffer };
+          },
+        },
+      },
+      daCtx: { org: 'myorg', key: 'mysite/a.html' },
+      label: 'v 1',
+      resp: { status: 201, versionSnapshot: { key: snapshotKey } },
+    });
+
+    it('checks current and created version content against the immutable DA snapshot', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return opts.method === 'POST'
+          ? new Response(null, { status: 201, headers: { location: `${base}/.versions/id` } })
+          : new Response('snapshot');
+      };
+      await syncVersion(options());
+      assert.deepStrictEqual(calls.map(({ opts, url }) => [opts.method, url]), [
+        ['GET', base],
+        ['POST', `${base}/.versions?comment=v+1`],
+        ['GET', `${base}/.versions/id`],
       ]);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert.deepStrictEqual(events()[0].daVersionSnapshot, { key: snapshotKey });
+    });
+
+    it('does not create a version of content that differs from the DA snapshot', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url, opts });
+        return new Response('newer edit');
+      };
+      await syncVersion(options());
+      assert.strictEqual(calls.length, 1);
+      assert(events().some(({ reason }) => reason === 'version_content_mismatch'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('reports concurrent-edit version mismatches instead of claiming success', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        if (opts.method === 'POST') {
+          return new Response(null, { status: 201, headers: { location: `${base}/.versions/id` } });
+        }
+        return new Response(calls.length === 1 ? 'snapshot' : 'concurrent edit');
+      };
+      await syncVersion(options());
+      assert.strictEqual(calls.length, 3);
+      assert(events().some(({ step }) => step === 'version_created'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('does not leak caller credentials to an unexpected version location', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url, opts });
+        return opts.method === 'POST'
+          ? new Response(null, { status: 201, headers: { location: 'https://other.example/version' } })
+          : new Response('snapshot');
+      };
+      await syncVersion(options());
+      assert.strictEqual(calls.length, 2);
+      assert(events().some(({ reason }) => reason === 'version_location_unavailable'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('refuses version creation without a recoverable DA snapshot reference', async () => {
+      await syncVersion({ ...options(), resp: { status: 201 } });
+      assert.strictEqual(calls.length, 0);
+      assert(events().some(({ reason }) => reason === 'version_snapshot_missing'));
     });
   });
 });

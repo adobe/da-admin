@@ -318,6 +318,13 @@ export async function putObjectWithVersion(
       metadata: { id: ID },
       etag: resp.ETag,
       versionCreated,
+      ...(versionCreated && daCtx.captureVersionSnapshot ? {
+        versionSnapshot: {
+          key: versionKey(daCtx.site, ID, Version, daCtx.ext),
+          documentId: ID,
+          versionId: Version,
+        },
+      } : {}),
     };
   } catch (e) {
     const status = e.$metadata?.httpStatusCode || 500;
@@ -369,7 +376,10 @@ export async function postObjectVersionWithLabel(label, env, daCtx) {
     // Binary content can't be versioned — not a server error, so 422 not 500.
     return { status: 422, error: 'Version was not created: content type is not versionable' };
   }
-  return { status: 201 };
+  return {
+    status: 201,
+    ...(resp.versionSnapshot ? { versionSnapshot: resp.versionSnapshot } : {}),
+  };
 }
 
 export async function postObjectVersion(req, env, daCtx) {

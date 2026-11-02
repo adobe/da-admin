@@ -35,7 +35,9 @@ export async function postVersionSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
   const site = daCtx.key?.split('/')[0];
   const syncReq = getHlx6Target(env, daCtx.org, site) ? req.clone() : undefined;
-  const resp = await postObjectVersion(req, env, daCtx);
+  const resp = await postObjectVersion(req, env, {
+    ...daCtx, captureVersionSnapshot: !!syncReq,
+  });
   if (syncReq) {
     const label = await syncReq.json().then((json) => json?.label).catch(() => undefined);
     syncVersion({

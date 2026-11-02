@@ -137,6 +137,20 @@ Partial/continuation DA MOVEs are explicitly skipped rather than deleting an
 entire target source after only partial DA success. Checkpoint logs support
 manual reconstruction, not automatic resumption or exactly-once execution.
 
+VERSION captures the immutable DA snapshot key in its operation events. It
+compares the current target content with that snapshot before requesting a
+version, then reads the returned same-target version URL to verify its content.
+Missing snapshots or mismatched content fail explicitly; no attempt is made to
+overwrite newer target content to force a historical version. Target HTML
+transformations can cause a conservative mismatch requiring manual inspection.
+The target version API currently has no caller-supplied revision precondition:
+a concurrent edit between the check and creation can still create an incorrect
+version, which post-verification reports as failure with its target URL. This
+is detection, not an atomic history-ordering guarantee. Never blindly replay
+an accepted version creation whose subsequent verification failed.
+GET response document bodies used for verification are omitted from both
+structured and debug logs.
+
 Before enabling migration, the DA log pipeline must be verified to ingest these
 worker console entries without sampling, retain them for at least 14 days (plus
 analysis time), and preserve the structured event fields. Retention and ingestion
