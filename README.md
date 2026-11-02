@@ -70,6 +70,12 @@ can be identified without storing document contents in logs.
 - HTTP and network errors fail the operation, not the DA response. A body-read
   error is recorded separately; a 2xx response still means the remote mutation
   succeeded, even if its response body could not be read.
+- DELETE 404 responses with the exact `x-error` value `[admin] Not found` or
+  `[AWS] Not Found` and a readable response body are idempotent success, including
+  the delete step of a MOVE. Their `request_completed` event retains HTTP
+  `status: 404` and `ok: false`, with `outcome: "already_absent"`; the operation
+  completes as `succeeded`. Count these separately from actual deletions.
+  Other 404s (including version-before-trash failures) remain failures.
 - Missing terminal events indicate interrupted work or missing logs, **not success**.
   A partial DA response (`daPartial`) and continuation skips must be reviewed;
   whole-folder propagation does not prove per-file parity. Cross-site folder

@@ -185,6 +185,8 @@ async function hlx6Fetch(url, opts, audit, metadata) {
   const location = resp.headers?.get('location');
   if (location) detailsList.push(`location: ${location}`);
   const xError = resp.headers?.get('x-error');
+  const alreadyAbsent = opts.method === 'DELETE' && resp.status === 404
+    && !bodyReadError && ['[admin] Not found', '[AWS] Not Found'].includes(xError);
   if (xError) detailsList.push(`x-error: ${xError}`);
   if (bodyText) {
     detailsList.push(`body: ${bodyText}`);
@@ -204,9 +206,12 @@ async function hlx6Fetch(url, opts, audit, metadata) {
     bodyReadError,
     responseBody: bodyText.slice(0, 8192),
     responseBodyTruncated: bodyText.length > 8192,
+    ...(alreadyAbsent ? { outcome: 'already_absent' } : {}),
   });
 
-  if (resp.ok) {
+  if (alreadyAbsent) {
+    log(`<- ${opts.method} ${url}: already absent (404) in ${duration}ms${detailsSuffix}`);
+  } else if (resp.ok) {
     log(`<- ${opts.method} ${url}: ${resp.status} in ${duration}ms${detailsSuffix}`);
   } else {
     // eslint-disable-next-line no-console
