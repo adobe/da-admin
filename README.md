@@ -120,6 +120,14 @@ content parity are not verified. Schedule exports and this command in the
 existing operations system and route nonzero exit codes to its alerting;
 no scheduler or alert destination is provisioned by this tool.
 
+Source uploads use the target source API's raw POST mechanism. A target HTTP 413
+is a permanent compatibility failure, not a reason to reject the successful DA
+write. `propagation_unsupported` with `reason: "target_payload_too_large"` records
+the exact bytes, MIME type, SHA-256, source revision/document ID when available,
+and receiver error. The upload is not retried. There is no guessed local size
+limit or automatic switch to the unrelated media API: use a verified
+target-supported upload mechanism or reduce the payload, then reconcile.
+
 Before enabling migration, the DA log pipeline must be verified to ingest these
 worker console entries without sampling, retain them for at least 14 days (plus
 analysis time), and preserve the structured event fields. Retention and ingestion
