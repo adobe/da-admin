@@ -303,23 +303,36 @@ async function hlx6Fetch(url, opts, audit, metadata, deadline) {
   throw new Error('hlx6 retry attempts exhausted');
 }
 
-function schedule(daCtx, label, fn, audit) {
+function schedule(daCtx, label, fn, audit, deadline) {
   const background = typeof daCtx.waitUntil === 'function';
   const start = Date.now();
   audit('operation_started', { background });
   log(`${label}: propagating${background ? ' (background)' : ' (no waitUntil, not awaited)'}`);
   const promise = (async () => {
+    let timer;
     try {
-      const result = await fn();
+      const timeout = new Promise((resolve, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error('hlx6 operation exceeded its 20-second budget; inspect logs for its remote outcome');
+          error.remoteOutcomeUnknown = true;
+          reject(error);
+        }, Math.max(0, deadline - Date.now()));
+      });
+      const result = await Promise.race([fn(), timeout]);
       const outcome = result === false ? 'failed' : 'succeeded';
       audit('operation_completed', { outcome, durationMs: Date.now() - start });
       log(`${label}: ${outcome}`);
     } catch (e) {
       audit('operation_completed', {
-        outcome: 'failed', error: e.message, durationMs: Date.now() - start,
+        outcome: 'failed',
+        error: e.message,
+        remoteOutcomeUnknown: e.remoteOutcomeUnknown === true,
+        durationMs: Date.now() - start,
       });
       // eslint-disable-next-line no-console
       console.error(`[hlx6] ${label}: propagation failed`, e);
+    } finally {
+      clearTimeout(timer);
     }
   })();
   if (background) daCtx.waitUntil(promise);
@@ -381,7 +394,7 @@ function checkSync(label, {
     fetch: (url, opts, metadata) => hlx6Fetch(url, {
       ...opts, headers: { ...headers, ...opts.headers },
     }, audit, metadata, deadline),
-    schedule: (fn) => schedule(daCtx, label, fn, audit),
+    schedule: (fn) => schedule(daCtx, label, fn, audit, deadline),
   };
 }
 
