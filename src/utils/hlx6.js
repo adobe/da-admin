@@ -216,7 +216,9 @@ async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
   if (location) detailsList.push(`location: ${location}`);
   const xError = resp.headers?.get('x-error');
   if (xError) detailsList.push(`x-error: ${xError}`);
-  if (bodyText) {
+  if (opts.method === 'GET') {
+    detailsList.push('body: (content omitted)');
+  } else if (bodyText) {
     detailsList.push(`body: ${bodyText}`);
   } else {
     detailsList.push('body: (empty)');
@@ -232,8 +234,8 @@ async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
     responseRequestId: resp.headers?.get('x-request-id'),
     responseRayId: resp.headers?.get('cf-ray'),
     bodyReadError,
-    responseBody: bodyText.slice(0, 8192),
-    responseBodyTruncated: bodyText.length > 8192,
+    responseBody: opts.method === 'GET' ? '' : bodyText.slice(0, 8192),
+    responseBodyTruncated: opts.method !== 'GET' && bodyText.length > 8192,
     retryAfter: resp.headers?.get('retry-after'),
   });
 
@@ -248,7 +250,9 @@ async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
     error.remoteOutcomeUnknown = resp.status >= 500;
     throw error;
   }
-  return resp;
+  return {
+    ok: resp.ok, status: resp.status, headers: resp.headers, bodyText, bodyReadError,
+  };
 }
 
 async function hlx6Fetch(url, opts, audit, metadata, deadline) {
@@ -338,6 +342,7 @@ function checkSync(label, {
     daStatus: resp?.status,
     daEtag: resp?.etag,
     daDocumentId: resp?.metadata?.id,
+    daVersionSnapshot: resp?.versionSnapshot,
     source: details?.source,
     destination: details?.destination,
     continuation: !!details?.continuationToken,
@@ -607,5 +612,52 @@ export function syncVersion({
 
   const url = new URL(`${sourceUrl(env, target, path)}/.versions`);
   if (comment) url.searchParams.set('comment', comment);
-  return sync.schedule(() => sync.fetch(url, { method: 'POST' }));
+  return sync.schedule(async () => {
+    if (!resp.versionSnapshot) {
+      sync.audit('propagation_failed', {
+        reason: 'version_snapshot_missing',
+        recovery: 'Resolve the exact DA snapshot before creating a target version.',
+      });
+      return false;
+    }
+    const snapshot = await env.AEM_CONTENT.get(`${daCtx.org}/${resp.versionSnapshot.key}`);
+    if (!snapshot) {
+      sync.audit('propagation_failed', { reason: 'version_snapshot_unavailable' });
+      return false;
+    }
+    const expected = new TextDecoder().decode(await snapshot.arrayBuffer());
+    const current = await sync.fetch(sourceUrl(env, target, path), { method: 'GET' });
+    if (current.bodyReadError || current.bodyText !== expected) {
+      sync.audit('propagation_failed', {
+        reason: 'version_content_mismatch',
+        recovery: 'Reconcile the target with the DA snapshot; no target version was requested.',
+      });
+      return false;
+    }
+    const version = await sync.fetch(url, { method: 'POST' });
+    const location = version.headers.get('location');
+    const targetVersionUrl = location ? new URL(location, url) : undefined;
+    const prefix = `${sourceUrl(env, target, path)}/.versions/`;
+    if (!targetVersionUrl || !targetVersionUrl.href.startsWith(prefix)
+      || targetVersionUrl.search || targetVersionUrl.hash) {
+      sync.audit('propagation_failed', {
+        reason: 'version_location_unavailable',
+        recovery: 'Target accepted the version but its contents could not be verified; do not blindly recreate it.',
+      });
+      return false;
+    }
+    sync.audit('operation_checkpoint', {
+      step: 'version_created', targetVersionUrl: targetVersionUrl.href,
+    });
+    const saved = await sync.fetch(targetVersionUrl, { method: 'GET' });
+    if (saved.bodyReadError || saved.bodyText !== expected) {
+      sync.audit('propagation_failed', {
+        reason: 'version_content_mismatch',
+        targetVersionUrl: targetVersionUrl.href,
+        recovery: 'A concurrent target edit may have been snapshotted. Inspect the created version; do not blindly recreate it.',
+      });
+      return false;
+    }
+    return true;
+  });
 }

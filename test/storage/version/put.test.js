@@ -3026,10 +3026,14 @@ describe('Version Put', () => {
         },
       });
 
-      await putObjectWithVersion(
+      const result = await putObjectWithVersion(
         {},
         {
-          org: 'myorg', ext: 'html', site: 'myrepo', users: [{ email: 'u@x.com' }],
+          org: 'myorg',
+          ext: 'html',
+          site: 'myrepo',
+          users: [{ email: 'u@x.com' }],
+          captureVersionSnapshot: true,
         },
         {
           org: 'myorg', key: 'myrepo/page.html', body: 'updated', type: 'text/html',
@@ -3038,6 +3042,7 @@ describe('Version Put', () => {
       );
 
       assert.strictEqual(auditCalls.length, 1, 'audit entry must be written on plain edit');
+      assert.strictEqual(result.versionSnapshot, undefined);
       const snapshotToDaVersions = snapshotWrites.filter((p) => p.Key?.includes('.da-versions/'));
       assert.strictEqual(snapshotToDaVersions.length, 0, 'plain edit must not write a snapshot object');
     });
@@ -3076,10 +3081,14 @@ describe('Version Put', () => {
         '../../../src/storage/version/audit.js': { writeAuditEntry: async () => {} },
       });
 
-      await putObjectWithVersion(
+      const result = await putObjectWithVersion(
         {},
         {
-          org: 'myorg', ext: 'html', site: 'myrepo', users: [{ email: 'u@x.com' }],
+          org: 'myorg',
+          ext: 'html',
+          site: 'myrepo',
+          users: [{ email: 'u@x.com' }],
+          captureVersionSnapshot: true,
         },
         {
           org: 'myorg',
@@ -3093,6 +3102,11 @@ describe('Version Put', () => {
 
       const snapshot = snapshotWrites.find((p) => p.Key?.includes('.da-versions/'));
       assert.ok(snapshot, 'snapshot must be written for labeled version in Mode B');
+      assert.deepStrictEqual(result.versionSnapshot, {
+        key: 'myrepo/.da-versions/doc-id/v1.html',
+        documentId: 'doc-id',
+        versionId: 'v1',
+      });
       assert.ok(
         snapshot.Key.startsWith('myorg/myrepo/.da-versions/'),
         `snapshot must use repo-scoped new path (org/repo/.da-versions/); got: ${snapshot.Key}`,
