@@ -22,6 +22,18 @@
 export const DEFAULT_AEM_API = 'https://api.aem.live';
 
 const SUCCESS = [200, 201, 204, 206];
+const RETRY_BUDGET_MS = 20000;
+const MAX_ATTEMPTS = 3;
+
+function retryDelay(value, attempt) {
+  if (value) {
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    const date = Date.parse(value);
+    if (Number.isFinite(date)) return Math.max(0, date - Date.now());
+  }
+  return Math.floor((500 * (2 ** (attempt - 1))) * (0.5 + Math.random() * 0.5));
+}
 
 function log(...args) {
   // eslint-disable-next-line no-console
@@ -142,7 +154,7 @@ function getAuthHeaders(req) {
   };
 }
 
-async function hlx6Fetch(url, opts, audit, metadata) {
+async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
   const requestId = crypto.randomUUID();
   const size = typeof opts.body === 'string'
     ? new TextEncoder().encode(opts.body).byteLength : opts.body?.byteLength;
@@ -152,6 +164,7 @@ async function hlx6Fetch(url, opts, audit, metadata) {
   const start = Date.now();
   const request = {
     ...metadata,
+    attempt,
     requestId,
     method: opts.method,
     url: url.toString(),
@@ -160,13 +173,28 @@ async function hlx6Fetch(url, opts, audit, metadata) {
   };
   audit('request_started', request);
   let resp;
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error('hlx6 operation exceeded its 20-second budget'));
+    }, Math.max(0, deadline - Date.now()));
+  });
   try {
-    resp = await fetch(url, {
-      ...opts, headers: { ...opts.headers, 'x-request-id': requestId },
-    });
+    resp = await Promise.race([fetch(url, {
+      ...opts,
+      signal: controller.signal,
+      headers: { ...opts.headers, 'x-request-id': requestId },
+    }), timeout]);
   } catch (e) {
+    clearTimeout(timer);
     audit('request_failed', {
-      ...request, reason: 'network_error', error: e.message, durationMs: Date.now() - start,
+      ...request,
+      reason: controller.signal.aborted ? 'deadline_exceeded' : 'network_error',
+      error: e.message,
+      remoteOutcomeUnknown: true,
+      durationMs: Date.now() - start,
     });
     throw e;
   }
@@ -175,10 +203,12 @@ async function hlx6Fetch(url, opts, audit, metadata) {
   let bodyText = '';
   let bodyReadError;
   try {
-    bodyText = await resp.text();
+    bodyText = await Promise.race([resp.text(), timeout]);
   } catch (e) {
     bodyReadError = e.message;
     console.error('[hlx6] Unable to read response body', e);
+  } finally {
+    clearTimeout(timer);
   }
 
   const detailsList = [`requestId: ${requestId}`];
@@ -204,6 +234,7 @@ async function hlx6Fetch(url, opts, audit, metadata) {
     bodyReadError,
     responseBody: bodyText.slice(0, 8192),
     responseBodyTruncated: bodyText.length > 8192,
+    retryAfter: resp.headers?.get('retry-after'),
   });
 
   if (resp.ok) {
@@ -211,9 +242,55 @@ async function hlx6Fetch(url, opts, audit, metadata) {
   } else {
     // eslint-disable-next-line no-console
     console.error(`[hlx6] <- ${opts.method} ${url} failed: ${resp.status} in ${duration}ms${detailsSuffix}`);
-    throw new Error(`hlx6 ${opts.method} ${url} returned ${resp.status}`);
+    const error = new Error(`hlx6 ${opts.method} ${url} returned ${resp.status}`);
+    error.status = resp.status;
+    error.retryAfter = resp.headers?.get('retry-after');
+    error.remoteOutcomeUnknown = resp.status >= 500;
+    throw error;
   }
   return resp;
+}
+
+async function hlx6Fetch(url, opts, audit, metadata, deadline) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    if (Date.now() >= deadline) {
+      throw new Error('hlx6 operation exceeded its 20-second budget');
+    }
+    try {
+      // Reusing a mutation after an unknown remote outcome can duplicate versions
+      // or overwrite a later edit. Only an explicit rate-limit rejection is retried.
+      // eslint-disable-next-line no-await-in-loop
+      return await hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt);
+    } catch (error) {
+      const delayMs = retryDelay(error.retryAfter, attempt);
+      if (error.status !== 429 || attempt === MAX_ATTEMPTS
+        || Date.now() + delayMs >= deadline) {
+        audit('request_exhausted', {
+          ...metadata,
+          method: opts.method,
+          url: url.toString(),
+          attempts: attempt,
+          status: error.status,
+          reason: error.status === 429 ? 'retry_limit' : 'not_retryable',
+          remoteOutcomeUnknown: error.remoteOutcomeUnknown === true,
+        });
+        throw error;
+      }
+      audit('request_retry_scheduled', {
+        ...metadata,
+        method: opts.method,
+        url: url.toString(),
+        attempt,
+        delayMs,
+        status: error.status,
+      });
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => {
+        setTimeout(resolve, delayMs);
+      });
+    }
+  }
+  throw new Error('hlx6 retry attempts exhausted');
 }
 
 function schedule(daCtx, label, fn, audit) {
@@ -268,6 +345,7 @@ function checkSync(label, {
     target,
     sourceTarget: src?.target,
     destinationTarget: dest?.target,
+    actors: daCtx.users?.map(({ email }) => email).filter(Boolean),
   };
   const audit = (event, fields = {}) => {
     console.log('[hlx6:event]', JSON.stringify({
@@ -286,12 +364,13 @@ function checkSync(label, {
     skip('missing_authorization');
     return undefined;
   }
+  const deadline = Date.now() + RETRY_BUDGET_MS;
   return {
     audit,
     skip,
     fetch: (url, opts, metadata) => hlx6Fetch(url, {
       ...opts, headers: { ...headers, ...opts.headers },
-    }, audit, metadata),
+    }, audit, metadata, deadline),
     schedule: (fn) => schedule(daCtx, label, fn, audit),
   };
 }
