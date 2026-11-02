@@ -94,6 +94,26 @@ Failure logs retain operation/path/revision and payload-hash evidence for later
 investigation; they cannot restore overwritten or deleted bytes without
 available source history. Folder events are not an authoritative per-file audit.
 
+For read-only analysis of a JSON-array or NDJSON export of worker rows (`logs`
+arrays) or structured events:
+
+```sh
+node scripts/hlx6-report.js export.json --org adobecom --site da-events \
+  --start 2026-10-19T08:45:07Z --end 2026-11-02T08:45:07Z
+```
+
+The JSON report deduplicates operations/requests, groups outcomes and HTTP
+statuses, and includes actor/revision/hash evidence and step checkpoints for
+failed or incomplete operations. It excludes both E2E folders under
+`drafts/esp-dev` and `drafts/esp-stage`, considering COPY/MOVE source and
+destination as well as the request key. It never writes content or replays work.
+Exit codes: 0 = no failed/incomplete operations in the supplied export,
+2 = investigation required, 1 = invalid input/read failure. Skips are reported
+separately and must also be reviewed. Export retention/completeness and current
+content parity are not verified. Schedule exports and this command in the
+existing operations system and route nonzero exit codes to its alerting;
+no scheduler or alert destination is provisioned by this tool.
+
 Before enabling migration, the DA log pipeline must be verified to ingest these
 worker console entries without sampling, retain them for at least 14 days (plus
 analysis time), and preserve the structured event fields. Retention and ingestion
