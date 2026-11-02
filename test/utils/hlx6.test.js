@@ -160,7 +160,7 @@ describe('hlx6 propagation', () => {
       assert(calls[0].opts.signal.aborted);
       assert.strictEqual(calls.length, 1);
       assert(events().some(({ reason, remoteOutcomeUnknown }) => reason === 'deadline_exceeded' && remoteOutcomeUnknown));
-      assert.strictEqual(events().at(-1).outcome, 'failed');
+      assert.strictEqual(events().find(({ event }) => event === 'operation_completed').outcome, 'failed');
     });
 
     it('bounds response-body reads without replaying an accepted mutation', async () => {
@@ -173,8 +173,32 @@ describe('hlx6 propagation', () => {
       });
       await clock.tickAsync(20000);
       await promise;
-      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert.strictEqual(events().find(({ event }) => event === 'operation_completed').outcome, 'failed');
       assert(events().some(({ bodyReadError }) => bodyReadError?.includes('20-second')));
+    });
+
+    it('bounds local preparation and prevents a late preparation from starting a remote write', async () => {
+      const clock = sinon.useFakeTimers();
+      let release;
+      const promise = syncCopy({
+        req: makeReq(),
+        env: {
+          ...env,
+          AEM_CONTENT: { get: () => new Promise((resolve) => { release = resolve; }) },
+        },
+        daCtx: context,
+        details: { source: 'other/a.html', destination: 'mysite/a.html' },
+        resp: { status: 204 },
+      });
+      await clock.tickAsync(20000);
+      await promise;
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+      release({
+        arrayBuffer: async () => new ArrayBuffer(0),
+        httpMetadata: { contentType: 'text/html' },
+      });
+      await clock.tickAsync(1);
+      assert.strictEqual(calls.length, 0);
     });
   });
 
