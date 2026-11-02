@@ -215,6 +215,16 @@ async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
   const location = resp.headers?.get('location');
   if (location) detailsList.push(`location: ${location}`);
   const xError = resp.headers?.get('x-error');
+  const uploadTooLarge = resp.status === 413 && size !== undefined;
+  if (uploadTooLarge) {
+    audit('propagation_unsupported', {
+      ...request,
+      reason: 'target_payload_too_large',
+      status: resp.status,
+      xError,
+      recovery: 'Use a target-supported upload mechanism or reduce the payload; unchanged retries cannot resolve HTTP 413.',
+    });
+  }
   if (xError) detailsList.push(`x-error: ${xError}`);
   if (bodyText) {
     detailsList.push(`body: ${bodyText}`);

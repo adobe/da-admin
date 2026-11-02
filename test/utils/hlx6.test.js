@@ -412,6 +412,41 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncSourcePut', () => {
+    it('reports target upload size rejection with exact bytes and payload hash, without retrying', async () => {
+      const body = new Uint8Array(19958221);
+      fetchStatus = () => 413;
+      await syncSourcePut({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/video.mp4', ext: 'mp4' },
+        obj: { data: new Blob([body], { type: 'video/mp4' }) },
+        resp: { status: 201, etag: '"source-revision"', metadata: { id: 'document-id' } },
+      });
+      assert.strictEqual(calls.length, 1);
+      const unsupported = events().find(({ reason }) => reason === 'target_payload_too_large');
+      assert.strictEqual(unsupported.bytes, body.byteLength);
+      assert.strictEqual(unsupported.contentType, 'video/mp4');
+      assert.strictEqual(unsupported.daEtag, '"source-revision"');
+      assert.strictEqual(unsupported.daDocumentId, 'document-id');
+      assert.match(unsupported.payloadSha256, /^[a-f0-9]{64}$/);
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('does not impose a guessed size limit on a target-supported upload', async () => {
+      const data = new Blob([new Uint8Array(20000000)], { type: 'video/mp4' });
+      await syncSourcePut({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/video.mp4', ext: 'mp4' },
+        obj: { data },
+        resp: { status: 201 },
+      });
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].opts.body.byteLength, data.size);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert(!events().some(({ reason }) => reason === 'target_payload_too_large'));
+    });
+
     it('uses the default API and preserves binary bytes without a MIME type', async () => {
       const bytes = new Uint8Array([0, 255, 128, 42]);
       await syncSourcePut({
