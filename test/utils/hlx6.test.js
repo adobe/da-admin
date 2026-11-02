@@ -642,6 +642,85 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncCopy', () => {
+    it('recovers a missing remote file source from the committed DA destination', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return opts.method === 'PUT'
+          ? new Response(null, { status: 404, headers: { 'x-error': '[admin] Not found' } })
+          : new Response(null, { status: 201 });
+      };
+      await syncCopy({
+        req: makeReq(),
+        env: {
+          ...env,
+          AEM_CONTENT: {
+            get: async (key) => {
+              assert.strictEqual(key, 'myorg/mysite/b.html');
+              return {
+                arrayBuffer: async () => new TextEncoder().encode('committed copy').buffer,
+                httpMetadata: { contentType: 'text/html' },
+                etag: 'destination-etag',
+              };
+            },
+          },
+        },
+        daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+        details: { source: 'mysite/a.html', destination: 'mysite/b.html' },
+        resp: { status: 204 },
+      });
+      assert.deepStrictEqual(calls.map(({ opts }) => opts.method), ['PUT', 'POST']);
+      assert.strictEqual(new TextDecoder().decode(calls[1].opts.body), 'committed copy');
+      assert(events().some(({ destinationEtag }) => destinationEtag === 'destination-etag'));
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+    });
+
+    it('does not delete a missing remote folder source or claim folder recovery succeeded', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return new Response(null, { status: 404, headers: { 'x-error': '[admin] Not found' } });
+      };
+      await syncMove({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/folder', isFile: false },
+        details: { source: 'mysite/folder', destination: 'mysite/renamed' },
+        resp: { status: 204 },
+      });
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].opts.method, 'PUT');
+      assert(events().some(({ step }) => step === 'copy_source_missing'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('leaves explicit copy completion evidence if the MOVE delete fails', async () => {
+      fetchStatus = (url, opts) => (opts.method === 'DELETE' ? 403 : 200);
+      await syncMove({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+        details: { source: 'mysite/a.html', destination: 'mysite/b.html' },
+        resp: { status: 204 },
+      });
+      assert(events().some(({ step }) => step === 'copy_completed'));
+      assert(events().some(({ step }) => step === 'delete_started'));
+      assert(!events().some(({ step }) => step === 'delete_completed'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('does not propagate a partial or continuation MOVE', () => {
+      [{ resp: { status: 206 } }, { details: { continuationToken: 'next' } }].forEach((part) => {
+        syncMove({
+          req: makeReq(),
+          env,
+          daCtx: { org: 'myorg', key: 'mysite/folder', isFile: false },
+          details: { source: 'mysite/folder', destination: 'mysite/renamed', ...part.details },
+          resp: part.resp || { status: 204 },
+        });
+        assert.strictEqual(events().at(-1).reason, 'partial_move');
+      });
+      assert.strictEqual(calls.length, 0);
+    });
+
     it('uses server side copy within the same hlx6 site', async () => {
       await syncCopy({
         req: makeReq(),

@@ -244,6 +244,7 @@ async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
     console.error(`[hlx6] <- ${opts.method} ${url} failed: ${resp.status} in ${duration}ms${detailsSuffix}`);
     const error = new Error(`hlx6 ${opts.method} ${url} returned ${resp.status}`);
     error.status = resp.status;
+    error.xError = xError;
     error.retryAfter = resp.headers?.get('retry-after');
     error.remoteOutcomeUnknown = resp.status >= 500;
     throw error;
@@ -494,8 +495,22 @@ async function copyOnHlx6(env, daCtx, sync, src, dest) {
     const url = sourceUrl(env, dest.target, dest.path, isFolder);
     url.searchParams.set('source', isFolder ? `${src.path}/` : src.path);
     url.searchParams.set('collision', 'overwrite');
-    const resp = await sync.fetch(url, { method: 'PUT' });
-    return resp.ok;
+    try {
+      const resp = await sync.fetch(url, { method: 'PUT' }, { step: 'copy' });
+      sync.audit('operation_checkpoint', { step: 'copy_completed' });
+      return resp.ok;
+    } catch (error) {
+      if (error.status !== 404 || !['[admin] Not found', '[AWS] Not Found'].includes(error.xError)) {
+        throw error;
+      }
+      sync.audit('operation_checkpoint', {
+        step: 'copy_source_missing',
+        source: `${src.site}${src.path}`,
+        destination: `${dest.site}${dest.path}`,
+        recovery: isFolder ? 'Reconcile the DA destination folder before deleting the target source.' : 'Upload the committed DA destination.',
+      });
+      if (isFolder) return false;
+    }
   }
   if (isFolder) {
     sync.audit('propagation_unsupported', { reason: 'cross_site_folder' });
@@ -513,7 +528,14 @@ async function copyOnHlx6(env, daCtx, sync, src, dest) {
     return false;
   }
   const data = new Blob([await obj.arrayBuffer()], { type: obj.httpMetadata?.contentType });
+  sync.audit('operation_checkpoint', {
+    step: 'destination_read',
+    key,
+    destinationEtag: obj.etag,
+    destinationDocumentId: obj.customMetadata?.id,
+  });
   const resp = await postFile(env, sync, dest.target, dest.path, data, daCtx.ext);
+  sync.audit('operation_checkpoint', { step: 'copy_completed', key });
   return resp.ok;
 }
 
@@ -565,6 +587,11 @@ export function syncMove({
     req, resp, migrated: !!(src.target || dest.target), env, daCtx, details, src, dest,
   });
   if (!sync) return undefined;
+  if (details?.continuationToken || resp?.status === 206) {
+    sync.skip('partial_move');
+    log(`${label}: skipped, partial DA move requires reconciliation`);
+    return undefined;
+  }
   if (!src.path || !dest.path) {
     sync.skip('site_root');
     log(`${label}: skipped, site root`);
@@ -580,7 +607,13 @@ export function syncMove({
       }
     }
     if (src.target) {
-      await sync.fetch(sourceUrl(env, src.target, src.path, !daCtx.isFile), { method: 'DELETE' });
+      sync.audit('operation_checkpoint', { step: 'delete_started' });
+      await sync.fetch(
+        sourceUrl(env, src.target, src.path, !daCtx.isFile),
+        { method: 'DELETE' },
+        { step: 'delete' },
+      );
+      sync.audit('operation_checkpoint', { step: 'delete_completed' });
     }
     return true;
   });
