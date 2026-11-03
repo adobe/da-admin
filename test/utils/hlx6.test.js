@@ -1116,5 +1116,14 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(calls.length, 0);
       assert(events().some(({ reason }) => reason === 'version_snapshot_missing'));
     });
+
+    it('refuses version creation when the DA snapshot object is unavailable', async () => {
+      const context = options();
+      context.env.AEM_CONTENT.get = async () => null;
+      await syncVersion(context);
+      assert.strictEqual(calls.length, 0);
+      assert(events().some(({ reason }) => reason === 'version_snapshot_unavailable'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
   });
 });
