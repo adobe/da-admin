@@ -1127,6 +1127,50 @@ describe('DA auth', () => {
     );
   });
 
+  it('exact page grant also covers the page\'s dot asset folder', () => {
+    const patharr = [
+      { path: '/site/promotions', actions: ['write'] },
+      { path: '/site/terms.html', actions: ['write'] },
+      { path: '/site/redirects.json', actions: ['write'] },
+      { path: '/site/+**', actions: ['read'] },
+    ];
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', patharr);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+    const actions = (target) => [...getUserActions(pathlookup, user, target).actions];
+
+    assert.deepStrictEqual(['write'], actions('/site/promotions.html'));
+    assert.deepStrictEqual(['write'], actions('/site/.promotions/banner.png'));
+    assert.deepStrictEqual(['write'], actions('/site/.terms/logo.png'));
+    assert.deepStrictEqual(['read'], actions('/site/.promotionsx/banner.png'));
+    assert.deepStrictEqual(['read'], actions('/site/promotions/sub.html'));
+    assert.deepStrictEqual(['read'], actions('/site/.redirects/x.png'));
+    assert.deepStrictEqual(['read'], actions('/site/.redirects.json/x.png'));
+  });
+
+  it('exact page deny also covers the page\'s dot asset folder', () => {
+    const patharr = [
+      { path: '/site/promotions', actions: [] },
+      { path: '/site/+**', actions: ['write'] },
+    ];
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', patharr);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual(
+      [],
+      [...getUserActions(pathlookup, user, '/site/.promotions/banner.png').actions],
+    );
+  });
+
   it('test logout', async () => {
     const deleteCalled = [];
     const deleteFunc = async (id) => {
