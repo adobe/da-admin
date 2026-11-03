@@ -11,6 +11,9 @@
  */
 import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parseExport, report } from '../../scripts/hlx6-report.js';
 
 const options = {
@@ -32,26 +35,33 @@ const makeEvent = (fields = {}) => ({
 
 describe('hlx6 exported-log report', () => {
   it('returns distinct CLI exit codes for clean, actionable and invalid exports', () => {
-    const args = [
-      'scripts/hlx6-report.js', '/dev/stdin',
-      '--org', options.org, '--site', options.site,
-      '--start', options.start, '--end', options.end,
-    ];
-    const clean = spawnSync(process.execPath, args, {
-      input: JSON.stringify([makeEvent({ event: 'operation_completed', outcome: 'succeeded' })]),
-      encoding: 'utf8',
-    });
-    assert.strictEqual(clean.status, 0, clean.stderr);
-    assert.strictEqual(JSON.parse(clean.stdout).actionable.length, 0);
-    const failed = spawnSync(process.execPath, args, {
-      input: JSON.stringify([makeEvent({ event: 'operation_completed', outcome: 'failed' })]),
-      encoding: 'utf8',
-    });
-    assert.strictEqual(failed.status, 2, failed.stderr);
-    assert.strictEqual(JSON.parse(failed.stdout).actionable.length, 1);
-    const invalid = spawnSync(process.execPath, args, { input: '{broken', encoding: 'utf8' });
-    assert.strictEqual(invalid.status, 1);
-    assert(invalid.stderr.length > 0);
+    const dir = mkdtempSync(join(tmpdir(), 'hlx6-report-'));
+    const run = (name, content) => {
+      const file = join(dir, name);
+      writeFileSync(file, content);
+      return spawnSync(process.execPath, [
+        'scripts/hlx6-report.js', file,
+        '--org', options.org, '--site', options.site,
+        '--start', options.start, '--end', options.end,
+      ], { encoding: 'utf8' });
+    };
+    try {
+      const clean = run('clean.json', JSON.stringify([
+        makeEvent({ event: 'operation_completed', outcome: 'succeeded' }),
+      ]));
+      assert.strictEqual(clean.status, 0, clean.stderr);
+      assert.strictEqual(JSON.parse(clean.stdout).actionable.length, 0);
+      const failed = run('failed.json', JSON.stringify([
+        makeEvent({ event: 'operation_completed', outcome: 'failed' }),
+      ]));
+      assert.strictEqual(failed.status, 2, failed.stderr);
+      assert.strictEqual(JSON.parse(failed.stdout).actionable.length, 1);
+      const invalid = run('invalid.json', '{broken');
+      assert.strictEqual(invalid.status, 1);
+      assert(invalid.stderr.length > 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('accepts worker JSON arrays and structured NDJSON without parsing debug messages', () => {
