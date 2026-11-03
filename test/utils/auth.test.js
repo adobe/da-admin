@@ -1131,25 +1131,62 @@ describe('DA auth', () => {
     const patharr = [
       { path: '/site/promotions', actions: ['write'] },
       { path: '/site/terms.html', actions: ['write'] },
+      { path: '/site/about.us.html', actions: ['write'] },
       { path: '/site/redirects.json', actions: ['write'] },
+      { path: '/site', actions: ['write'] },
       { path: '/site/+**', actions: ['read'] },
     ];
     const pathlookup = new Map();
     pathlookup.set('joe@acme.com', patharr);
+    pathlookup.forEach((value) => value.sort(pathSorter));
 
     const user = {
       email: 'joe@acme.com',
       ident: 'AAAA@bbb.e',
     };
-    const actions = (target) => [...getUserActions(pathlookup, user, target).actions];
 
-    assert.deepStrictEqual(['write'], actions('/site/promotions.html'));
-    assert.deepStrictEqual(['write'], actions('/site/.promotions/banner.png'));
-    assert.deepStrictEqual(['write'], actions('/site/.terms/logo.png'));
-    assert.deepStrictEqual(['read'], actions('/site/.promotionsx/banner.png'));
-    assert.deepStrictEqual(['read'], actions('/site/promotions/sub.html'));
-    assert.deepStrictEqual(['read'], actions('/site/.redirects/x.png'));
-    assert.deepStrictEqual(['read'], actions('/site/.redirects.json/x.png'));
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/promotions.html').actions]);
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/.promotions/banner.png').actions]);
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/.terms/logo.png').actions]);
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/.terms/ab').actions]);
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/.about.us/x.png').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.promotionsx/banner.png').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/promotions/sub.html').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.redirects.json/x.png').actions]);
+    assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/.site/x.png').actions]);
+  });
+
+  it('a rule on the asset folder beats an exact .html page rule there', () => {
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', [
+      { path: '/site/foo.html', actions: ['read'] },
+      { path: '/site/.foo/+**', actions: ['read', 'write'] },
+      { path: '/site/bar.html', actions: ['read', 'write'] },
+      { path: '/site/.bar/+**', actions: [] },
+      { path: '/site/baz.html', actions: ['read'] },
+      { path: '/site/baz/**', actions: ['read', 'write'] },
+    ]);
+    pathlookup.forEach((value) => value.sort(pathSorter));
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual(['read', 'write'], [...getUserActions(pathlookup, user, '/site/.foo/banner.png').actions]);
+    assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/site/.bar/banner.png').actions]);
+    assert.deepStrictEqual(['read', 'write'], [...getUserActions(pathlookup, user, '/site/bar.html').actions]);
+    assert.deepStrictEqual(['read', 'write'], [...getUserActions(pathlookup, user, '/site/.baz/banner.png').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/baz.html').actions]);
+  });
+
+  it('an exact .html page rule sorts ahead of the same page without .html', () => {
+    const rules = [
+      { path: '/site/foo', actions: ['write'] },
+      { path: '/site/foo.html', actions: ['read'] },
+    ];
+    rules.sort(pathSorter);
+    assert.deepStrictEqual(['/site/foo.html', '/site/foo'], rules.map(({ path }) => path));
   });
 
   it('exact page deny also covers the page\'s dot asset folder', () => {
