@@ -197,8 +197,8 @@ function getIdents(user) {
 }
 
 // A page's assets live in a dot-folder next to it (e.g. `foo.html`'s images live under
-// `.foo/`). A recursive grant on `foo` or `foo/**` must also cover `.foo/**` so uploading
-// to a page's asset folder doesn't require a separate ACL entry.
+// `.foo/`). A grant on `foo`, `foo.html`, `foo/**` or `foo/+**` must also cover `.foo/**` so
+// uploading to a page's asset folder doesn't require a separate ACL entry.
 function dotFolderVariant(prefix) {
   const trimmed = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
   const slashIdx = trimmed.lastIndexOf('/');
@@ -233,6 +233,9 @@ export function getUserActions(pathLookup, user, target) {
         const dotPrefix = dotFolderVariant(prefix);
         return target.startsWith(prefix) || (dotPrefix && target.startsWith(dotPrefix));
       }
+      const page = path.endsWith('.html') ? path.slice(0, -5) : path;
+      const dotPrefix = !page.slice(page.lastIndexOf('/') + 1).includes('.') && dotFolderVariant(page);
+      if (dotPrefix && target.startsWith(dotPrefix)) return true;
       if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
       return target === path;
     }))
