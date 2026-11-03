@@ -227,14 +227,17 @@ export function getUserActions(pathLookup, user, target) {
         return target.startsWith(prefix) || target === path.slice(0, -4)
           || (dotPrefix && target.startsWith(dotPrefix));
       }
-      if (target.length < path.length) return false;
       if (path.endsWith('/**')) {
+        if (target.length < path.length) return false;
         const prefix = path.slice(0, -2);
         const dotPrefix = dotFolderVariant(prefix);
         return target.startsWith(prefix) || (dotPrefix && target.startsWith(dotPrefix));
       }
-      const page = path.endsWith('.html') ? path.slice(0, -5) : path;
-      const dotPrefix = !page.slice(page.lastIndexOf('/') + 1).includes('.') && dotFolderVariant(page);
+      const isHtml = path.endsWith('.html');
+      const page = isHtml ? path.slice(0, -5) : path;
+      const slashIdx = page.lastIndexOf('/');
+      const isPage = slashIdx > 0 && (isHtml || !page.slice(slashIdx + 1).includes('.'));
+      const dotPrefix = isPage && dotFolderVariant(page);
       if (dotPrefix && target.startsWith(dotPrefix)) return true;
       if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
       return target === path;
@@ -253,13 +256,15 @@ export function getUserActions(pathLookup, user, target) {
 function prepPathForSort(path) {
   if (path.endsWith('/+**')) return path.slice(0, -3);
   if (path.endsWith('/**')) return path.slice(0, -2);
+  // An exact page rule also matches the page's dot folder, so rules on that folder must win.
+  if (path.endsWith('.html')) return path.slice(0, -5);
   return path;
 }
 
 export function pathSorter({ path: path1 }, { path: path2 }) {
   const sp1 = prepPathForSort(path1);
   const sp2 = prepPathForSort(path2);
-  return sp2.length - sp1.length;
+  return sp2.length - sp1.length || path2.endsWith('.html') - path1.endsWith('.html');
 }
 
 /**
