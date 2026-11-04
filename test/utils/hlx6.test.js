@@ -291,7 +291,9 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(failed.requestId, started.requestId);
       assert.strictEqual(failed.reason, 'network_error');
       assert.strictEqual(failed.error, 'connection refused');
+      assert.strictEqual(records.find(({ event }) => event === 'request_exhausted').remoteOutcomeUnknown, true);
       assert.strictEqual(records.at(-1).outcome, 'failed');
+      assert.strictEqual(records.at(-1).remoteOutcomeUnknown, true);
     });
 
     it('records unreadable response bodies distinctly from empty bodies', async () => {
@@ -1107,7 +1109,9 @@ describe('hlx6 propagation', () => {
       };
       await syncVersion(options());
       assert.strictEqual(calls.length, 2);
-      assert(events().some(({ reason }) => reason === 'version_location_unavailable'));
+      const failure = events().find(({ reason }) => reason === 'version_location_unavailable');
+      assert.strictEqual(failure.location, 'https://other.example/version');
+      assert.match(failure.recovery, /do not blindly recreate/);
       assert.strictEqual(events().at(-1).outcome, 'failed');
     });
 

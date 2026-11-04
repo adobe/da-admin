@@ -38,6 +38,7 @@ function evidence(event) {
     'reason', 'step', 'key', 'method', 'url', 'targetVersionUrl',
     'payloadSha256', 'bytes', 'contentType', 'responseRequestId', 'responseRayId',
     'remoteOutcomeUnknown', 'delayMs', 'destinationEtag', 'destinationDocumentId',
+    'error', 'xError', 'bodyReadError', 'recovery', 'location',
   ];
   return Object.fromEntries(keys.filter((key) => event[key] !== undefined)
     .map((key) => [key, event[key]]));

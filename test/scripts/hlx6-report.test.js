@@ -93,6 +93,32 @@ describe('hlx6 exported-log report', () => {
     assert(!JSON.stringify(result).includes('do not include'));
   });
 
+  it('retains safe diagnostic and recovery evidence', () => {
+    const result = report([
+      makeEvent({
+        event: 'request_failed',
+        requestId: 'req',
+        error: 'connection reset',
+        xError: '[admin] failed',
+        bodyReadError: 'aborted',
+      }),
+      makeEvent({
+        event: 'propagation_failed',
+        location: 'https://other.example/version',
+        recovery: 'do not blindly recreate it',
+        responseBody: 'document body',
+      }),
+      makeEvent({ event: 'operation_completed', outcome: 'failed' }),
+    ], options);
+    const [failure, location] = result.actionable[0].timeline;
+    assert.strictEqual(failure.error, 'connection reset');
+    assert.strictEqual(failure.xError, '[admin] failed');
+    assert.strictEqual(failure.bodyReadError, 'aborted');
+    assert.strictEqual(location.location, 'https://other.example/version');
+    assert.strictEqual(location.recovery, 'do not blindly recreate it');
+    assert(!JSON.stringify(result).includes('document body'));
+  });
+
   it('excludes either E2E endpoint of COPY/MOVE with exact folder boundaries', () => {
     const events = [
       makeEvent({ operationId: '1', daKey: 'da-events/drafts/esp-dev/a.html' }),

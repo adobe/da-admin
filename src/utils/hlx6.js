@@ -196,6 +196,7 @@ async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
       remoteOutcomeUnknown: true,
       durationMs: Date.now() - start,
     });
+    e.remoteOutcomeUnknown = true;
     throw e;
   }
   const duration = Date.now() - start;
@@ -703,6 +704,7 @@ export function syncVersion({
       || targetVersionUrl.search || targetVersionUrl.hash) {
       sync.audit('propagation_failed', {
         reason: 'version_location_unavailable',
+        location,
         recovery: 'Target accepted the version but its contents could not be verified; do not blindly recreate it.',
       });
       return false;
