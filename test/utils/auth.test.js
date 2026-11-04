@@ -1192,6 +1192,45 @@ describe('DA auth', () => {
     assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/.site/x.png').actions]);
   });
 
+  it('page and folder rules don\'t cover reserved dot folders like .da', () => {
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', [
+      { path: '/site/sub/da.html', actions: ['read', 'write'] },
+      { path: '/site/da.html', actions: ['read', 'write'] },
+      { path: '/site/trash', actions: ['read', 'write'] },
+      { path: '/site/snapshots/+**', actions: ['read', 'write'] },
+      { path: '/site/+**', actions: ['read'] },
+    ]);
+    pathlookup.forEach((value) => value.sort(pathSorter));
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual(['read', 'write'], [...getUserActions(pathlookup, user, '/site/da.html').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.da/translate.json').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/sub/.da/media-insights/x.json').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.trash/old.html').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.snapshots/s1/index.html').actions]);
+  });
+
+  it('an exact rule with no page name doesn\'t cover a dot folder', () => {
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', [
+      { path: '/site/foo/.html', actions: ['read', 'write'] },
+      { path: '/site/.html', actions: ['read', 'write'] },
+    ]);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/site/.foo/x.png').actions]);
+    assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/.site/x.png').actions]);
+  });
+
   it('an exact .html page rule sorts ahead of the same page without .html', () => {
     const rules = [
       { path: '/site/foo', actions: ['write'] },
