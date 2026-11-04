@@ -70,6 +70,12 @@ can be identified without storing document contents in logs.
 - HTTP and network errors fail the operation, not the DA response. A body-read
   error is recorded separately; a 2xx response still means the remote mutation
   succeeded, even if its response body could not be read.
+- DELETE 404 responses with the exact `x-error` value `[admin] Not found` or
+  `[AWS] Not Found` and a readable response body are idempotent success, including
+  the delete step of a MOVE. Their `request_completed` event retains HTTP
+  `status: 404` and `ok: false`, with `outcome: "already_absent"`; the operation
+  completes as `succeeded`. Count these separately from actual deletions.
+  Other 404s (including version-before-trash failures) remain failures.
 - Missing terminal events indicate interrupted work or missing logs, **not success**.
   A partial DA response (`daPartial`) and continuation skips must be reviewed;
   whole-folder propagation does not prove per-file parity. Cross-site folder
@@ -79,8 +85,71 @@ For a two-week review, count observed operations by deployment, operation, and
 mapped site; reconcile every operation and request with its terminal event;
 inspect failures, skips, partials, and body-read errors. A successful HTTP
 response proves API acceptance, not byte-for-byte parity or correct write ordering.
-These events do not provide replay, retries, or an authoritative per-file audit
-of folder changes.
+Outbound requests retry explicit HTTP 429 rejections at most three times total
+(including the initial attempt), using the original caller's token. All steps
+of an operation share a 20-second deadline, including response-body reads and
+backoff. `Retry-After` seconds/dates are honored only when they fit the budget;
+otherwise bounded exponential backoff with jitter is used. Network errors and
+5xx responses have uncertain mutation outcomes and are not automatically
+replayed, especially for VERSION. Permanent 4xx responses are not retried.
+`request_retry_scheduled` and `request_exhausted` events record attempts and
+decisions. Events include actor emails when available, never bearer tokens.
+
+This is best-effort delivery, not a durable queue or an ordering guarantee.
+Failure logs retain operation/path/revision and payload-hash evidence for later
+investigation; they cannot restore overwritten or deleted bytes without
+available source history. Folder events are not an authoritative per-file audit.
+
+For read-only analysis of a JSON-array or NDJSON export of worker rows (`logs`
+arrays) or structured events:
+
+```sh
+node scripts/hlx6-report.js export.json --org adobecom --site da-events \
+  --start 2026-10-19T08:45:07Z --end 2026-11-02T08:45:07Z
+```
+
+The JSON report deduplicates operations/requests, groups outcomes and HTTP
+statuses, and includes actor/revision/hash evidence and step checkpoints for
+failed or incomplete operations. It excludes both E2E folders under
+`drafts/esp-dev` and `drafts/esp-stage`, considering COPY/MOVE source and
+destination as well as the request key. It never writes content or replays work.
+Exit codes: 0 = no failed/incomplete operations in the supplied export,
+2 = investigation required, 1 = invalid input/read failure. Skips are reported
+separately and must also be reviewed. Export retention/completeness and current
+content parity are not verified. Schedule exports and this command in the
+existing operations system and route nonzero exit codes to its alerting;
+no scheduler or alert destination is provisioned by this tool.
+
+Source uploads use the target source API's raw POST mechanism. A target HTTP 413
+is a permanent compatibility failure, not a reason to reject the successful DA
+write. `propagation_unsupported` with `reason: "target_payload_too_large"` records
+the exact bytes, MIME type, SHA-256, source revision/document ID when available,
+and receiver error. The upload is not retried. There is no guessed local size
+limit or automatic switch to the unrelated media API: use a verified
+target-supported upload mechanism or reduce the payload, then reconcile.
+
+COPY/MOVE record `operation_checkpoint` events for completed copy and started/
+completed delete steps. A recognized remote source-not-found during file copy
+falls back to uploading the current committed DA destination, recording its
+ETag and document ID when available. It does not reconstruct an older revision.
+Missing remote folders require manual reconciliation; the source is not deleted.
+Partial/continuation DA MOVEs are explicitly skipped rather than deleting an
+entire target source after only partial DA success. Checkpoint logs support
+manual reconstruction, not automatic resumption or exactly-once execution.
+
+VERSION captures the immutable DA snapshot key in its operation events. It
+compares the current target content with that snapshot before requesting a
+version, then reads the returned same-target version URL to verify its content.
+Missing snapshots or mismatched content fail explicitly; no attempt is made to
+overwrite newer target content to force a historical version. Target HTML
+transformations can cause a conservative mismatch requiring manual inspection.
+The target version API currently has no caller-supplied revision precondition:
+a concurrent edit between the check and creation can still create an incorrect
+version, which post-verification reports as failure with its target URL. This
+is detection, not an atomic history-ordering guarantee. Never blindly replay
+an accepted version creation whose subsequent verification failed.
+GET response document bodies used for verification are omitted from both
+structured and debug logs.
 
 Before enabling migration, the DA log pipeline must be verified to ingest these
 worker console entries without sampling, retain them for at least 14 days (plus
