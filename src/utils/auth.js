@@ -198,12 +198,17 @@ function getIdents(user) {
 
 // A page's assets live in a dot-folder next to it (e.g. `foo.html`'s images live under
 // `.foo/`). A grant on `foo`, `foo.html`, `foo/**` or `foo/+**` must also cover `.foo/**` so
-// uploading to a page's asset folder doesn't require a separate ACL entry.
+// uploading to a page's asset folder doesn't require a separate ACL entry. DA's own dot folders
+// (`.da/`, `.trash/`, ...) are never a page's asset folder.
+const RESERVED_DOT_FOLDERS = ['da', 'da-versions', 'helix', 'snapshots', 'trash', 'versions'];
+
 function dotFolderVariant(prefix) {
   const trimmed = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
   const slashIdx = trimmed.lastIndexOf('/');
   const lastSegment = trimmed.slice(slashIdx + 1);
-  if (!lastSegment || lastSegment.startsWith('.')) return null;
+  if (!lastSegment || lastSegment.startsWith('.') || RESERVED_DOT_FOLDERS.includes(lastSegment)) {
+    return null;
+  }
   return `${trimmed.slice(0, slashIdx + 1)}.${lastSegment}/`;
 }
 
@@ -236,7 +241,8 @@ export function getUserActions(pathLookup, user, target) {
       const isHtml = path.endsWith('.html');
       const page = isHtml ? path.slice(0, -5) : path;
       const slashIdx = page.lastIndexOf('/');
-      const isPage = slashIdx > 0 && (isHtml || !page.slice(slashIdx + 1).includes('.'));
+      const name = page.slice(slashIdx + 1);
+      const isPage = slashIdx > 0 && name && (isHtml || !name.includes('.'));
       const dotPrefix = isPage && dotFolderVariant(page);
       if (dotPrefix && target.startsWith(dotPrefix)) return true;
       if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
