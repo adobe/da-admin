@@ -44,7 +44,14 @@ Browse to `http://localhost:8787/list` to ensure you see the expected buckets.
 2. Cloudflare KV, which is used for org properties and session login info is locally stored when developing locally. You will need to make your own local KVs to test against.
 
 ### Helix 6 migration (dual write)
-Sites listed in the `HLX6_MIGRATION_SITES` env variable (see `wrangler.toml`) are being migrated to Helix 6. Every successful modification on those sites (source create/update/delete, folder creation, copy, move, version creation) is also propagated, in the background, to the Helix 6 source bus at `AEM_API` (`https://api.aem.live`) using the caller's IMS token. Failures are logged but do not affect the DA response.
+Sites listed in the `HLX6_MIGRATION_SITES` env variable are being migrated to Helix 6. Every successful modification on those sites (source create/update/delete, folder creation, copy, move, version creation) is also propagated, in the background, to the Helix 6 source bus at `AEM_API` (`https://api.aem.live`) using the caller's IMS token. Failures are logged but do not affect the DA response.
+
+For production and stage, manage `HLX6_MIGRATION_SITES` in the Cloudflare dashboard.
+It is intentionally omitted from those environments in `wrangler.toml`:
+`keep_vars = true` preserves dashboard values, but an explicit declaration would
+override them on deployment. Local and test environments retain their own defaults.
+If a previous deployment cleared the value, restore it in the dashboard; this
+configuration change cannot recover the previous value.
 
 Entries are either:
 - `org/site`: the same org/site on Helix 6
