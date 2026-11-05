@@ -1,3 +1,10 @@
+## [1.16.2](https://github.com/adobe/da-admin/compare/v1.16.1...v1.16.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* preserve dashboard migration sites on deploy ([#337](https://github.com/adobe/da-admin/issues/337)) ([47c01ea](https://github.com/adobe/da-admin/commit/47c01eaa9aad343ac324193789d7afa548d43dd5))
+
 ## [1.16.1](https://github.com/adobe/da-admin/compare/v1.16.0...v1.16.1) (2026-11-04)
 
 
