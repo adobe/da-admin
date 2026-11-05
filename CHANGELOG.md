@@ -1,3 +1,17 @@
+## [1.16.2](https://github.com/adobe/da-admin/compare/v1.16.1...v1.16.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* preserve dashboard migration sites on deploy ([#337](https://github.com/adobe/da-admin/issues/337)) ([47c01ea](https://github.com/adobe/da-admin/commit/47c01eaa9aad343ac324193789d7afa548d43dd5))
+
+## [1.16.1](https://github.com/adobe/da-admin/compare/v1.16.0...v1.16.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **hlx6:** improve dual-write reliability ([#336](https://github.com/adobe/da-admin/issues/336)) ([cb692a2](https://github.com/adobe/da-admin/commit/cb692a28bfb96e4b144e172a6bab9b606aed6bff)), closes [#328](https://github.com/adobe/da-admin/issues/328) [#324](https://github.com/adobe/da-admin/issues/324) [#326](https://github.com/adobe/da-admin/issues/326) [#327](https://github.com/adobe/da-admin/issues/327)
+
 # [1.16.0](https://github.com/adobe/da-admin/compare/v1.15.1...v1.16.0) (2026-10-15)
 
 

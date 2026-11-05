@@ -59,6 +59,149 @@ describe('hlx6 propagation', () => {
       .map(({ args }) => JSON.parse(args[1]));
   }
 
+  describe('bounded retries', () => {
+    const context = {
+      org: 'myorg',
+      key: 'mysite/a.html',
+      isFile: true,
+      ext: 'html',
+      users: [{ email: 'editor@example.com', token: 'never-log-this' }],
+    };
+
+    it('retries 429 with the caller token, fresh request IDs and a stable operation ID', async () => {
+      const clock = sinon.useFakeTimers();
+      fetchStatus = () => (calls.length < 3 ? 429 : 201);
+      const promise = syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 204 },
+      });
+      await clock.tickAsync(5000);
+      await promise;
+      assert.strictEqual(calls.length, 3);
+      const auth = calls[0].opts.headers.authorization;
+      assert(calls.every(({ opts }) => opts.headers.authorization === auth));
+      assert.strictEqual(new Set(calls.map(({ opts }) => opts.headers['x-request-id'])).size, 3);
+      assert.strictEqual(new Set(events().map(({ operationId }) => operationId)).size, 1);
+      assert.deepStrictEqual(events()[0].actors, ['editor@example.com']);
+      assert(!JSON.stringify(events()).includes('never-log-this'));
+      assert.strictEqual(events().filter(({ event }) => event === 'request_retry_scheduled').length, 2);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+    });
+
+    it('stops after three rejections', async () => {
+      const clock = sinon.useFakeTimers();
+      fetchStatus = () => 429;
+      const promise = syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 204 },
+      });
+      await clock.tickAsync(5000);
+      await promise;
+      assert.strictEqual(calls.length, 3);
+      assert.strictEqual(events().find(({ event }) => event === 'request_exhausted').attempts, 3);
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('honors Retry-After seconds and HTTP dates', async () => {
+      const clock = sinon.useFakeTimers();
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return new Response(null, {
+          status: calls.length < 3 ? 429 : 201,
+          headers: { 'retry-after': calls.length === 1 ? '2' : new Date(Date.now() + 3000).toUTCString() },
+        });
+      };
+      const promise = syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      });
+      await clock.tickAsync(1999);
+      assert.strictEqual(calls.length, 1);
+      await clock.tickAsync(1);
+      assert.strictEqual(calls.length, 2);
+      await clock.tickAsync(2999);
+      assert.strictEqual(calls.length, 2);
+      await clock.tickAsync(1);
+      await promise;
+      assert.strictEqual(calls.length, 3);
+    });
+
+    it('does not shorten Retry-After when it exceeds the remaining budget', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return new Response(null, { status: 429, headers: { 'retry-after': '60' } });
+      };
+      await syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      });
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    [401, 403, 413, 502, 503].forEach((status) => {
+      it(`does not replay a permanent or uncertain mutation response: ${status}`, async () => {
+        fetchStatus = () => status;
+        await syncSourceDelete({
+          req: makeReq(), env, daCtx: context, resp: { status: 201 },
+        });
+        assert.strictEqual(calls.length, 1);
+        assert.strictEqual(events().at(-1).outcome, 'failed');
+      });
+    });
+
+    it('bounds a hung fetch and marks its remote outcome unknown', async () => {
+      const clock = sinon.useFakeTimers();
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url, opts });
+        return new Promise(() => {});
+      };
+      const promise = syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      });
+      await clock.tickAsync(20000);
+      await promise;
+      assert(calls[0].opts.signal.aborted);
+      assert.strictEqual(calls.length, 1);
+      assert(events().some(({ reason, remoteOutcomeUnknown }) => reason === 'deadline_exceeded' && remoteOutcomeUnknown));
+      assert.strictEqual(events().find(({ event }) => event === 'operation_completed').outcome, 'failed');
+    });
+
+    it('bounds response-body reads without replaying an accepted mutation', async () => {
+      const clock = sinon.useFakeTimers();
+      const response = new Response(null, { status: 201 });
+      sinon.stub(response, 'text').returns(new Promise(() => {}));
+      globalThis.fetch = async () => response;
+      const promise = syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 201 },
+      });
+      await clock.tickAsync(20000);
+      await promise;
+      assert.strictEqual(events().find(({ event }) => event === 'operation_completed').outcome, 'failed');
+      assert(events().some(({ bodyReadError }) => bodyReadError?.includes('20-second')));
+    });
+
+    it('bounds local preparation and prevents a late preparation from starting a remote write', async () => {
+      const clock = sinon.useFakeTimers();
+      let release;
+      const promise = syncCopy({
+        req: makeReq(),
+        env: {
+          ...env,
+          AEM_CONTENT: { get: () => new Promise((resolve) => { release = resolve; }) },
+        },
+        daCtx: context,
+        details: { source: 'other/a.html', destination: 'mysite/a.html' },
+        resp: { status: 204 },
+      });
+      await clock.tickAsync(20000);
+      await promise;
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+      release({
+        arrayBuffer: async () => new ArrayBuffer(0),
+        httpMetadata: { contentType: 'text/html' },
+      });
+      await clock.tickAsync(1);
+      assert.strictEqual(calls.length, 0);
+    });
+  });
+
   describe('structured migration audit', () => {
     const context = {
       org: 'myorg', key: 'mysite/a.html', isFile: true, ext: 'html',
@@ -148,7 +291,9 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(failed.requestId, started.requestId);
       assert.strictEqual(failed.reason, 'network_error');
       assert.strictEqual(failed.error, 'connection refused');
+      assert.strictEqual(records.find(({ event }) => event === 'request_exhausted').remoteOutcomeUnknown, true);
       assert.strictEqual(records.at(-1).outcome, 'failed');
+      assert.strictEqual(records.at(-1).remoteOutcomeUnknown, true);
     });
 
     it('records unreadable response bodies distinctly from empty bodies', async () => {
@@ -293,6 +438,41 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncSourcePut', () => {
+    it('reports target upload size rejection with exact bytes and payload hash, without retrying', async () => {
+      const body = new Uint8Array(19958221);
+      fetchStatus = () => 413;
+      await syncSourcePut({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/video.mp4', ext: 'mp4' },
+        obj: { data: new Blob([body], { type: 'video/mp4' }) },
+        resp: { status: 201, etag: '"source-revision"', metadata: { id: 'document-id' } },
+      });
+      assert.strictEqual(calls.length, 1);
+      const unsupported = events().find(({ reason }) => reason === 'target_payload_too_large');
+      assert.strictEqual(unsupported.bytes, body.byteLength);
+      assert.strictEqual(unsupported.contentType, 'video/mp4');
+      assert.strictEqual(unsupported.daEtag, '"source-revision"');
+      assert.strictEqual(unsupported.daDocumentId, 'document-id');
+      assert.match(unsupported.payloadSha256, /^[a-f0-9]{64}$/);
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('does not impose a guessed size limit on a target-supported upload', async () => {
+      const data = new Blob([new Uint8Array(20000000)], { type: 'video/mp4' });
+      await syncSourcePut({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/video.mp4', ext: 'mp4' },
+        obj: { data },
+        resp: { status: 201 },
+      });
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].opts.body.byteLength, data.size);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert(!events().some(({ reason }) => reason === 'target_payload_too_large'));
+    });
+
     it('uses the default API and preserves binary bytes without a MIME type', async () => {
       const bytes = new Uint8Array([0, 255, 128, 42]);
       await syncSourcePut({
@@ -501,6 +681,103 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncSourceDelete', () => {
+    [true, false].forEach((isFile) => {
+      ['[admin] Not found', '[AWS] Not Found'].forEach((xError) => {
+        it(`accepts an already absent ${isFile ? 'file' : 'folder'}: ${xError}`, async () => {
+          globalThis.fetch = async () => new Response(null, {
+            status: 404, headers: { 'x-error': xError },
+          });
+          const context = {
+            req: makeReq(),
+            env,
+            daCtx: { org: 'myorg', key: 'mysite/absent', isFile },
+            resp: { status: 204 },
+          };
+          await syncSourceDelete(context);
+          await syncSourceDelete(context);
+          const responses = events().filter(({ event }) => event === 'request_completed');
+          assert.strictEqual(responses.length, 2);
+          for (const response of responses) {
+            assert.strictEqual(response.status, 404);
+            assert.strictEqual(response.ok, false);
+            assert.strictEqual(response.xError, xError);
+            assert.strictEqual(response.outcome, 'already_absent');
+          }
+          const completed = events().filter(({ event }) => event === 'operation_completed');
+          assert.strictEqual(completed.length, 2);
+          assert(completed.every(({ outcome }) => outcome === 'succeeded'));
+          assert.strictEqual(errors.callCount, 0);
+        });
+      });
+    });
+
+    [
+      [404, undefined],
+      [404, '[admin] Failed to version document before moving to trash'],
+      [404, '[admin] source does not exist: unknown'],
+      [403, '[admin] not authorized'],
+      [500, '[admin] Not found'],
+    ].forEach(([status, xError]) => {
+      it(`preserves DELETE failure ${status}: ${xError}`, async () => {
+        globalThis.fetch = async () => new Response(null, {
+          status, headers: xError ? { 'x-error': xError } : {},
+        });
+        await syncSourceDelete({
+          req: makeReq(),
+          env,
+          daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+          resp: { status: 204 },
+        });
+        assert.strictEqual(events().at(-1).outcome, 'failed');
+        assert(errors.called);
+      });
+    });
+
+    it('does not normalize a missing-target response whose body could not be read', async () => {
+      const response = new Response(null, {
+        status: 404, headers: { 'x-error': '[admin] Not found' },
+      });
+      sinon.stub(response, 'text').rejects(new Error('broken body'));
+      globalThis.fetch = async () => response;
+      await syncSourceDelete({
+        req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html' }, resp: { status: 204 },
+      });
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('still fails PUT and VERSION operations returning ordinary not-found responses', async () => {
+      globalThis.fetch = async () => new Response(null, {
+        status: 404, headers: { 'x-error': '[admin] Not found' },
+      });
+      const context = {
+        req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html' }, resp: { status: 201 },
+      };
+      await syncSourcePut({ ...context, obj: { data: 'html' } });
+      await syncVersion(context);
+      const completed = events().filter(({ event }) => event === 'operation_completed');
+      assert.strictEqual(completed.length, 2);
+      assert(completed.every(({ outcome }) => outcome === 'failed'));
+    });
+
+    it('completes a MOVE when its copied source is already absent', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return opts.method === 'DELETE'
+          ? new Response(null, { status: 404, headers: { 'x-error': '[AWS] Not Found' } })
+          : new Response(null, { status: 200 });
+      };
+      await syncMove({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+        details: { source: 'mysite/a.html', destination: 'mysite/b.html' },
+        resp: { status: 204 },
+      });
+      assert.deepStrictEqual(calls.map(({ opts }) => opts.method), ['PUT', 'DELETE']);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert.strictEqual(events().filter(({ outcome }) => outcome === 'already_absent').length, 1);
+    });
+
     it('deletes files and folders', async () => {
       await syncSourceDelete({
         req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true }, details: {}, resp: { status: 204 },
@@ -523,6 +800,85 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncCopy', () => {
+    it('recovers a missing remote file source from the committed DA destination', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return opts.method === 'PUT'
+          ? new Response(null, { status: 404, headers: { 'x-error': '[admin] Not found' } })
+          : new Response(null, { status: 201 });
+      };
+      await syncCopy({
+        req: makeReq(),
+        env: {
+          ...env,
+          AEM_CONTENT: {
+            get: async (key) => {
+              assert.strictEqual(key, 'myorg/mysite/b.html');
+              return {
+                arrayBuffer: async () => new TextEncoder().encode('committed copy').buffer,
+                httpMetadata: { contentType: 'text/html' },
+                etag: 'destination-etag',
+              };
+            },
+          },
+        },
+        daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+        details: { source: 'mysite/a.html', destination: 'mysite/b.html' },
+        resp: { status: 204 },
+      });
+      assert.deepStrictEqual(calls.map(({ opts }) => opts.method), ['PUT', 'POST']);
+      assert.strictEqual(new TextDecoder().decode(calls[1].opts.body), 'committed copy');
+      assert(events().some(({ destinationEtag }) => destinationEtag === 'destination-etag'));
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+    });
+
+    it('does not delete a missing remote folder source or claim folder recovery succeeded', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return new Response(null, { status: 404, headers: { 'x-error': '[admin] Not found' } });
+      };
+      await syncMove({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/folder', isFile: false },
+        details: { source: 'mysite/folder', destination: 'mysite/renamed' },
+        resp: { status: 204 },
+      });
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].opts.method, 'PUT');
+      assert(events().some(({ step }) => step === 'copy_source_missing'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('leaves explicit copy completion evidence if the MOVE delete fails', async () => {
+      fetchStatus = (url, opts) => (opts.method === 'DELETE' ? 403 : 200);
+      await syncMove({
+        req: makeReq(),
+        env,
+        daCtx: { org: 'myorg', key: 'mysite/a.html', isFile: true },
+        details: { source: 'mysite/a.html', destination: 'mysite/b.html' },
+        resp: { status: 204 },
+      });
+      assert(events().some(({ step }) => step === 'copy_completed'));
+      assert(events().some(({ step }) => step === 'delete_started'));
+      assert(!events().some(({ step }) => step === 'delete_completed'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('does not propagate a partial or continuation MOVE', () => {
+      [{ resp: { status: 206 } }, { details: { continuationToken: 'next' } }].forEach((part) => {
+        syncMove({
+          req: makeReq(),
+          env,
+          daCtx: { org: 'myorg', key: 'mysite/folder', isFile: false },
+          details: { source: 'mysite/folder', destination: 'mysite/renamed', ...part.details },
+          resp: part.resp || { status: 204 },
+        });
+        assert.strictEqual(events().at(-1).reason, 'partial_move');
+      });
+      assert.strictEqual(calls.length, 0);
+    });
+
     it('uses server side copy within the same hlx6 site', async () => {
       await syncCopy({
         req: makeReq(),
@@ -684,17 +1040,94 @@ describe('hlx6 propagation', () => {
   });
 
   describe('syncVersion', () => {
-    it('creates a version with the label as comment', async () => {
-      await syncVersion({
-        req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html' }, label: 'v 1', resp: { status: 201 },
-      });
-      await syncVersion({
-        req: makeReq(), env, daCtx: { org: 'myorg', key: 'mysite/a.html' }, resp: { status: 201 },
-      });
-      assert.deepStrictEqual(calls.map((c) => [c.opts.method, c.url]), [
-        ['POST', `${API}/myorg/sites/mysite/source/a.html/.versions?comment=v+1`],
-        ['POST', `${API}/myorg/sites/mysite/source/a.html/.versions`],
+    const snapshotKey = 'mysite/.da-versions/document/version.html';
+    const base = `${API}/myorg/sites/mysite/source/a.html`;
+    const options = () => ({
+      req: makeReq(),
+      env: {
+        ...env,
+        AEM_CONTENT: {
+          get: async (key) => {
+            assert.strictEqual(key, `myorg/${snapshotKey}`);
+            return { arrayBuffer: async () => new TextEncoder().encode('snapshot').buffer };
+          },
+        },
+      },
+      daCtx: { org: 'myorg', key: 'mysite/a.html' },
+      label: 'v 1',
+      resp: { status: 201, versionSnapshot: { key: snapshotKey } },
+    });
+
+    it('checks current and created version content against the immutable DA snapshot', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        return opts.method === 'POST'
+          ? new Response(null, { status: 201, headers: { location: `${base}/.versions/id` } })
+          : new Response('snapshot');
+      };
+      await syncVersion(options());
+      assert.deepStrictEqual(calls.map(({ opts, url }) => [opts.method, url]), [
+        ['GET', base],
+        ['POST', `${base}/.versions?comment=v+1`],
+        ['GET', `${base}/.versions/id`],
       ]);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert.deepStrictEqual(events()[0].daVersionSnapshot, { key: snapshotKey });
+    });
+
+    it('does not create a version of content that differs from the DA snapshot', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url, opts });
+        return new Response('newer edit');
+      };
+      await syncVersion(options());
+      assert.strictEqual(calls.length, 1);
+      assert(events().some(({ reason }) => reason === 'version_content_mismatch'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('reports concurrent-edit version mismatches instead of claiming success', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        if (opts.method === 'POST') {
+          return new Response(null, { status: 201, headers: { location: `${base}/.versions/id` } });
+        }
+        return new Response(calls.length === 1 ? 'snapshot' : 'concurrent edit');
+      };
+      await syncVersion(options());
+      assert.strictEqual(calls.length, 3);
+      assert(events().some(({ step }) => step === 'version_created'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('does not leak caller credentials to an unexpected version location', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url, opts });
+        return opts.method === 'POST'
+          ? new Response(null, { status: 201, headers: { location: 'https://other.example/version' } })
+          : new Response('snapshot');
+      };
+      await syncVersion(options());
+      assert.strictEqual(calls.length, 2);
+      const failure = events().find(({ reason }) => reason === 'version_location_unavailable');
+      assert.strictEqual(failure.location, 'https://other.example/version');
+      assert.match(failure.recovery, /do not blindly recreate/);
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('refuses version creation without a recoverable DA snapshot reference', async () => {
+      await syncVersion({ ...options(), resp: { status: 201 } });
+      assert.strictEqual(calls.length, 0);
+      assert(events().some(({ reason }) => reason === 'version_snapshot_missing'));
+    });
+
+    it('refuses version creation when the DA snapshot object is unavailable', async () => {
+      const context = options();
+      context.env.AEM_CONTENT.get = async () => null;
+      await syncVersion(context);
+      assert.strictEqual(calls.length, 0);
+      assert(events().some(({ reason }) => reason === 'version_snapshot_unavailable'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
     });
   });
 });

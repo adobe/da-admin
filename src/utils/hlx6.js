@@ -22,6 +22,18 @@
 export const DEFAULT_AEM_API = 'https://api.aem.live';
 
 const SUCCESS = [200, 201, 204, 206];
+const RETRY_BUDGET_MS = 20000;
+const MAX_ATTEMPTS = 3;
+
+function retryDelay(value, attempt) {
+  if (value) {
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    const date = Date.parse(value);
+    if (Number.isFinite(date)) return Math.max(0, date - Date.now());
+  }
+  return Math.floor((500 * (2 ** (attempt - 1))) * (0.5 + Math.random() * 0.5));
+}
 
 function log(...args) {
   // eslint-disable-next-line no-console
@@ -142,7 +154,7 @@ function getAuthHeaders(req) {
   };
 }
 
-async function hlx6Fetch(url, opts, audit, metadata) {
+async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
   const requestId = crypto.randomUUID();
   const size = typeof opts.body === 'string'
     ? new TextEncoder().encode(opts.body).byteLength : opts.body?.byteLength;
@@ -152,6 +164,7 @@ async function hlx6Fetch(url, opts, audit, metadata) {
   const start = Date.now();
   const request = {
     ...metadata,
+    attempt,
     requestId,
     method: opts.method,
     url: url.toString(),
@@ -160,14 +173,30 @@ async function hlx6Fetch(url, opts, audit, metadata) {
   };
   audit('request_started', request);
   let resp;
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error('hlx6 operation exceeded its 20-second budget'));
+    }, Math.max(0, deadline - Date.now()));
+  });
   try {
-    resp = await fetch(url, {
-      ...opts, headers: { ...opts.headers, 'x-request-id': requestId },
-    });
+    resp = await Promise.race([fetch(url, {
+      ...opts,
+      signal: controller.signal,
+      headers: { ...opts.headers, 'x-request-id': requestId },
+    }), timeout]);
   } catch (e) {
+    clearTimeout(timer);
     audit('request_failed', {
-      ...request, reason: 'network_error', error: e.message, durationMs: Date.now() - start,
+      ...request,
+      reason: controller.signal.aborted ? 'deadline_exceeded' : 'network_error',
+      error: e.message,
+      remoteOutcomeUnknown: true,
+      durationMs: Date.now() - start,
     });
+    e.remoteOutcomeUnknown = true;
     throw e;
   }
   const duration = Date.now() - start;
@@ -175,18 +204,34 @@ async function hlx6Fetch(url, opts, audit, metadata) {
   let bodyText = '';
   let bodyReadError;
   try {
-    bodyText = await resp.text();
+    bodyText = await Promise.race([resp.text(), timeout]);
   } catch (e) {
     bodyReadError = e.message;
     console.error('[hlx6] Unable to read response body', e);
+  } finally {
+    clearTimeout(timer);
   }
 
   const detailsList = [`requestId: ${requestId}`];
   const location = resp.headers?.get('location');
   if (location) detailsList.push(`location: ${location}`);
   const xError = resp.headers?.get('x-error');
+  const alreadyAbsent = opts.method === 'DELETE' && resp.status === 404
+    && !bodyReadError && ['[admin] Not found', '[AWS] Not Found'].includes(xError);
+  const uploadTooLarge = resp.status === 413 && size !== undefined;
+  if (uploadTooLarge) {
+    audit('propagation_unsupported', {
+      ...request,
+      reason: 'target_payload_too_large',
+      status: resp.status,
+      xError,
+      recovery: 'Use a target-supported upload mechanism or reduce the payload; unchanged retries cannot resolve HTTP 413.',
+    });
+  }
   if (xError) detailsList.push(`x-error: ${xError}`);
-  if (bodyText) {
+  if (opts.method === 'GET') {
+    detailsList.push('body: (content omitted)');
+  } else if (bodyText) {
     detailsList.push(`body: ${bodyText}`);
   } else {
     detailsList.push('body: (empty)');
@@ -202,37 +247,103 @@ async function hlx6Fetch(url, opts, audit, metadata) {
     responseRequestId: resp.headers?.get('x-request-id'),
     responseRayId: resp.headers?.get('cf-ray'),
     bodyReadError,
-    responseBody: bodyText.slice(0, 8192),
-    responseBodyTruncated: bodyText.length > 8192,
+    responseBody: opts.method === 'GET' ? '' : bodyText.slice(0, 8192),
+    responseBodyTruncated: opts.method !== 'GET' && bodyText.length > 8192,
+    retryAfter: resp.headers?.get('retry-after'),
+    ...(alreadyAbsent ? { outcome: 'already_absent' } : {}),
   });
 
-  if (resp.ok) {
+  if (alreadyAbsent) {
+    log(`<- ${opts.method} ${url}: already absent (404) in ${duration}ms${detailsSuffix}`);
+  } else if (resp.ok) {
     log(`<- ${opts.method} ${url}: ${resp.status} in ${duration}ms${detailsSuffix}`);
   } else {
     // eslint-disable-next-line no-console
     console.error(`[hlx6] <- ${opts.method} ${url} failed: ${resp.status} in ${duration}ms${detailsSuffix}`);
-    throw new Error(`hlx6 ${opts.method} ${url} returned ${resp.status}`);
+    const error = new Error(`hlx6 ${opts.method} ${url} returned ${resp.status}`);
+    error.status = resp.status;
+    error.xError = xError;
+    error.retryAfter = resp.headers?.get('retry-after');
+    error.remoteOutcomeUnknown = resp.status >= 500;
+    throw error;
   }
-  return resp;
+  return {
+    ok: resp.ok, status: resp.status, headers: resp.headers, bodyText, bodyReadError,
+  };
 }
 
-function schedule(daCtx, label, fn, audit) {
+async function hlx6Fetch(url, opts, audit, metadata, deadline) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    if (Date.now() >= deadline) {
+      throw new Error('hlx6 operation exceeded its 20-second budget');
+    }
+    try {
+      // Reusing a mutation after an unknown remote outcome can duplicate versions
+      // or overwrite a later edit. Only an explicit rate-limit rejection is retried.
+      // eslint-disable-next-line no-await-in-loop
+      return await hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt);
+    } catch (error) {
+      const delayMs = retryDelay(error.retryAfter, attempt);
+      if (error.status !== 429 || attempt === MAX_ATTEMPTS
+        || Date.now() + delayMs >= deadline) {
+        audit('request_exhausted', {
+          ...metadata,
+          method: opts.method,
+          url: url.toString(),
+          attempts: attempt,
+          status: error.status,
+          reason: error.status === 429 ? 'retry_limit' : 'not_retryable',
+          remoteOutcomeUnknown: error.remoteOutcomeUnknown === true,
+        });
+        throw error;
+      }
+      audit('request_retry_scheduled', {
+        ...metadata,
+        method: opts.method,
+        url: url.toString(),
+        attempt,
+        delayMs,
+        status: error.status,
+      });
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => {
+        setTimeout(resolve, delayMs);
+      });
+    }
+  }
+  throw new Error('hlx6 retry attempts exhausted');
+}
+
+function schedule(daCtx, label, fn, audit, deadline) {
   const background = typeof daCtx.waitUntil === 'function';
   const start = Date.now();
   audit('operation_started', { background });
   log(`${label}: propagating${background ? ' (background)' : ' (no waitUntil, not awaited)'}`);
   const promise = (async () => {
+    let timer;
     try {
-      const result = await fn();
+      const timeout = new Promise((resolve, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error('hlx6 operation exceeded its 20-second budget; inspect logs for its remote outcome');
+          error.remoteOutcomeUnknown = true;
+          reject(error);
+        }, Math.max(0, deadline - Date.now()));
+      });
+      const result = await Promise.race([fn(), timeout]);
       const outcome = result === false ? 'failed' : 'succeeded';
       audit('operation_completed', { outcome, durationMs: Date.now() - start });
       log(`${label}: ${outcome}`);
     } catch (e) {
       audit('operation_completed', {
-        outcome: 'failed', error: e.message, durationMs: Date.now() - start,
+        outcome: 'failed',
+        error: e.message,
+        remoteOutcomeUnknown: e.remoteOutcomeUnknown === true,
+        durationMs: Date.now() - start,
       });
       // eslint-disable-next-line no-console
       console.error(`[hlx6] ${label}: propagation failed`, e);
+    } finally {
+      clearTimeout(timer);
     }
   })();
   if (background) daCtx.waitUntil(promise);
@@ -261,6 +372,7 @@ function checkSync(label, {
     daStatus: resp?.status,
     daEtag: resp?.etag,
     daDocumentId: resp?.metadata?.id,
+    daVersionSnapshot: resp?.versionSnapshot,
     source: details?.source,
     destination: details?.destination,
     continuation: !!details?.continuationToken,
@@ -268,6 +380,7 @@ function checkSync(label, {
     target,
     sourceTarget: src?.target,
     destinationTarget: dest?.target,
+    actors: daCtx.users?.map(({ email }) => email).filter(Boolean),
   };
   const audit = (event, fields = {}) => {
     console.log('[hlx6:event]', JSON.stringify({
@@ -286,13 +399,14 @@ function checkSync(label, {
     skip('missing_authorization');
     return undefined;
   }
+  const deadline = Date.now() + RETRY_BUDGET_MS;
   return {
     audit,
     skip,
     fetch: (url, opts, metadata) => hlx6Fetch(url, {
       ...opts, headers: { ...headers, ...opts.headers },
-    }, audit, metadata),
-    schedule: (fn) => schedule(daCtx, label, fn, audit),
+    }, audit, metadata, deadline),
+    schedule: (fn) => schedule(daCtx, label, fn, audit, deadline),
   };
 }
 
@@ -415,8 +529,22 @@ async function copyOnHlx6(env, daCtx, sync, src, dest) {
     const url = sourceUrl(env, dest.target, dest.path, isFolder);
     url.searchParams.set('source', isFolder ? `${src.path}/` : src.path);
     url.searchParams.set('collision', 'overwrite');
-    const resp = await sync.fetch(url, { method: 'PUT' });
-    return resp.ok;
+    try {
+      const resp = await sync.fetch(url, { method: 'PUT' }, { step: 'copy' });
+      sync.audit('operation_checkpoint', { step: 'copy_completed' });
+      return resp.ok;
+    } catch (error) {
+      if (error.status !== 404 || !['[admin] Not found', '[AWS] Not Found'].includes(error.xError)) {
+        throw error;
+      }
+      sync.audit('operation_checkpoint', {
+        step: 'copy_source_missing',
+        source: `${src.site}${src.path}`,
+        destination: `${dest.site}${dest.path}`,
+        recovery: isFolder ? 'Reconcile the DA destination folder before deleting the target source.' : 'Upload the committed DA destination.',
+      });
+      if (isFolder) return false;
+    }
   }
   if (isFolder) {
     sync.audit('propagation_unsupported', { reason: 'cross_site_folder' });
@@ -434,7 +562,14 @@ async function copyOnHlx6(env, daCtx, sync, src, dest) {
     return false;
   }
   const data = new Blob([await obj.arrayBuffer()], { type: obj.httpMetadata?.contentType });
+  sync.audit('operation_checkpoint', {
+    step: 'destination_read',
+    key,
+    destinationEtag: obj.etag,
+    destinationDocumentId: obj.customMetadata?.id,
+  });
   const resp = await postFile(env, sync, dest.target, dest.path, data, daCtx.ext);
+  sync.audit('operation_checkpoint', { step: 'copy_completed', key });
   return resp.ok;
 }
 
@@ -486,6 +621,11 @@ export function syncMove({
     req, resp, migrated: !!(src.target || dest.target), env, daCtx, details, src, dest,
   });
   if (!sync) return undefined;
+  if (details?.continuationToken || resp?.status === 206) {
+    sync.skip('partial_move');
+    log(`${label}: skipped, partial DA move requires reconciliation`);
+    return undefined;
+  }
   if (!src.path || !dest.path) {
     sync.skip('site_root');
     log(`${label}: skipped, site root`);
@@ -501,7 +641,13 @@ export function syncMove({
       }
     }
     if (src.target) {
-      await sync.fetch(sourceUrl(env, src.target, src.path, !daCtx.isFile), { method: 'DELETE' });
+      sync.audit('operation_checkpoint', { step: 'delete_started' });
+      await sync.fetch(
+        sourceUrl(env, src.target, src.path, !daCtx.isFile),
+        { method: 'DELETE' },
+        { step: 'delete' },
+      );
+      sync.audit('operation_checkpoint', { step: 'delete_completed' });
     }
     return true;
   });
@@ -528,5 +674,53 @@ export function syncVersion({
 
   const url = new URL(`${sourceUrl(env, target, path)}/.versions`);
   if (comment) url.searchParams.set('comment', comment);
-  return sync.schedule(() => sync.fetch(url, { method: 'POST' }));
+  return sync.schedule(async () => {
+    if (!resp.versionSnapshot) {
+      sync.audit('propagation_failed', {
+        reason: 'version_snapshot_missing',
+        recovery: 'Resolve the exact DA snapshot before creating a target version.',
+      });
+      return false;
+    }
+    const snapshot = await env.AEM_CONTENT.get(`${daCtx.org}/${resp.versionSnapshot.key}`);
+    if (!snapshot) {
+      sync.audit('propagation_failed', { reason: 'version_snapshot_unavailable' });
+      return false;
+    }
+    const expected = new TextDecoder().decode(await snapshot.arrayBuffer());
+    const current = await sync.fetch(sourceUrl(env, target, path), { method: 'GET' });
+    if (current.bodyReadError || current.bodyText !== expected) {
+      sync.audit('propagation_failed', {
+        reason: 'version_content_mismatch',
+        recovery: 'Reconcile the target with the DA snapshot; no target version was requested.',
+      });
+      return false;
+    }
+    const version = await sync.fetch(url, { method: 'POST' });
+    const location = version.headers.get('location');
+    const targetVersionUrl = location ? new URL(location, url) : undefined;
+    const prefix = `${sourceUrl(env, target, path)}/.versions/`;
+    if (!targetVersionUrl || !targetVersionUrl.href.startsWith(prefix)
+      || targetVersionUrl.search || targetVersionUrl.hash) {
+      sync.audit('propagation_failed', {
+        reason: 'version_location_unavailable',
+        location,
+        recovery: 'Target accepted the version but its contents could not be verified; do not blindly recreate it.',
+      });
+      return false;
+    }
+    sync.audit('operation_checkpoint', {
+      step: 'version_created', targetVersionUrl: targetVersionUrl.href,
+    });
+    const saved = await sync.fetch(targetVersionUrl, { method: 'GET' });
+    if (saved.bodyReadError || saved.bodyText !== expected) {
+      sync.audit('propagation_failed', {
+        reason: 'version_content_mismatch',
+        targetVersionUrl: targetVersionUrl.href,
+        recovery: 'A concurrent target edit may have been snapshotted. Inspect the created version; do not blindly recreate it.',
+      });
+      return false;
+    }
+    return true;
+  });
 }
