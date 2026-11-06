@@ -35,9 +35,12 @@ export default function daResp({
   const headers = new Headers();
   headers.append('Access-Control-Allow-Origin', '*');
   headers.append('Access-Control-Allow-Methods', 'HEAD, GET, PUT, POST, DELETE');
-  headers.append('Access-Control-Allow-Headers', '*');
+  // The '*' wildcard never covers Authorization (Fetch spec), so it must be listed explicitly
+  headers.append('Access-Control-Allow-Headers', 'Authorization, *');
   headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag, x-error');
   headers.append('Content-Type', normalizeCharset(contentType));
+  // Revalidate on every use: otherwise browsers heuristically cache GET/HEAD and go stale
+  headers.append('Cache-Control', 'private, no-cache');
   if (contentLength) {
     headers.append('Content-Length', contentLength);
   }
