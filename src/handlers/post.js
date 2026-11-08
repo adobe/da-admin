@@ -17,6 +17,7 @@ import logout from '../routes/logout.js';
 import moveRoute from '../routes/move.js';
 import postMedia from '../routes/media.js';
 import { postImsOrg } from '../routes/imsorg.js';
+import { postNotifications } from '../routes/notifications.js';
 
 export default async function postHandler({ req, env, daCtx }) {
   const { path } = daCtx;
@@ -29,6 +30,7 @@ export default async function postHandler({ req, env, daCtx }) {
   if (path.startsWith('/logout')) return logout({ env, daCtx });
   if (path.startsWith('/media')) return postMedia({ req, env, daCtx });
   if (path.startsWith('/imsorg')) return postImsOrg({ req, env, daCtx });
+  if (path.startsWith('/notifications')) return postNotifications({ req, env, daCtx });
 
   return undefined;
 }

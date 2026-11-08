@@ -48,6 +48,9 @@ tags:
   - name: IMS Org
     description: |
       The `imsorg` API connects an IMS org's user directory so `members` can expand IMS org and group entries.
+  - name: Notifications
+    description: |
+      The `notifications` API keeps a per-person inbox of subjects that need attention, such as comment threads.
 
 paths:
   /source/{org}/{repo}/{path}:
@@ -72,3 +75,7 @@ paths:
     $ref: "./imsorg-api.yaml#/list"
   /imsorg/{imsOrg}:
     $ref: "./imsorg-api.yaml#/org"
+  /notifications:
+    $ref: "./notifications-api.yaml#/inbox"
+  /notifications/{org}/{repo}/{path}:
+    $ref: "./notifications-api.yaml#/source"

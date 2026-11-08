@@ -36,6 +36,7 @@ export interface Env {
   DA_AUTH: KVNamespace,
   DA_CONFIG: KVNamespace,
   DA_JOBS: KVNamespace,
+  DA_NOTIFICATIONS?: KVNamespace,
   AEM_CONTENT: R2Bucket;
 
   dacollab: Fetcher;

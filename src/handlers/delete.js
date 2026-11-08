@@ -11,12 +11,14 @@
  */
 import { deleteSource } from '../routes/source.js';
 import { deleteImsOrg } from '../routes/imsorg.js';
+import { deleteNotifications } from '../routes/notifications.js';
 
 export default async function deleteHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
   if (path.startsWith('/source')) return deleteSource({ req, env, daCtx });
   if (path.startsWith('/imsorg')) return deleteImsOrg({ env, daCtx });
+  if (path.startsWith('/notifications')) return deleteNotifications({ req, env, daCtx });
 
   return undefined;
 }
