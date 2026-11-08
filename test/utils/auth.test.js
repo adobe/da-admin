@@ -271,6 +271,14 @@ describe('DA auth', () => {
       assert.deepStrictEqual([...aclCtx.actionSet], ['read']);
     });
 
+    it('lets the notifications root through but not notifications on a path', async () => {
+      const users = [{ email: 'a@example.com' }];
+      const root = await getAclCtx({ DA_CONFIG: { get: () => null } }, undefined, users, '', 'notifications');
+      assert.deepStrictEqual([...root.actionSet], ['read']);
+      const onPath = await getAclCtx(env2, 'test', users, '/test', 'notifications');
+      assert.ok(!onPath.actionSet.has('write'));
+    });
+
     it('test path sorting', async () => {
       const users = [{ groups: [{ orgIdent: '2345B0EA551D747', groupName: 4711 }] }];
       const aclCtx = await getAclCtx(env2, 'test', users, '/mykey');

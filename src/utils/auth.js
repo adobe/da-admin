@@ -57,6 +57,7 @@ export async function setUser(userId, expiration, reqHeaders, env) {
 
   const value = JSON.stringify({
     email: json.email,
+    name: json.displayName,
     ident: json.userId,
     orgs,
   });
@@ -287,8 +288,8 @@ export function configPermissionPath(daCtx) {
 export async function getAclCtx(env, org, users, key, api) {
   const pathLookup = new Map();
 
-  // logout and imsorg act on the caller, not on a DA path
-  if (api === 'logout' || api === 'imsorg') {
+  // These act on the caller, not on a DA path
+  if (api === 'logout' || api === 'imsorg' || (api === 'notifications' && !org)) {
     return {
       pathLookup,
       actionSet: new Set(['read']),
