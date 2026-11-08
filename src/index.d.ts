@@ -28,6 +28,10 @@ export interface Env {
   // sites in migration to hlx6, as "org/site" or "org/site -> org2/site2".
   // Modifications on these sites are propagated to the hlx6 source bus.
   HLX6_MIGRATION_SITES?: string[] | string;
+  // base64 AES-256 key that encrypts stored IMS org directory credentials
+  DIRECTORY_ENCRYPTION_KEY: string;
+  // User Management API base URL, defaults to https://usermanagement.adobe.io
+  UMAPI_ORIGIN?: string;
 
   DA_AUTH: KVNamespace,
   DA_CONFIG: KVNamespace,

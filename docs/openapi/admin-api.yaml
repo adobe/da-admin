@@ -42,6 +42,12 @@ tags:
   - name: Config
     description: |
       The `config` API will allow you to associate sheet-formatted configurations with orgs, sites, directories, documents, and sheets.
+  - name: Members
+    description: |
+      The `members` API lists the people who can read a source.
+  - name: IMS Org
+    description: |
+      The `imsorg` API connects an IMS org's user directory so `members` can expand IMS org and group entries.
 
 paths:
   /source/{org}/{repo}/{path}:
@@ -60,3 +66,9 @@ paths:
     $ref: "./version-api.yaml#/list"
   /config/{org}/{repo}/{path}:
     $ref: "./config-api.yaml#/source"
+  /members/{org}/{repo}/{path}:
+    $ref: "./members-api.yaml#/members"
+  /imsorg:
+    $ref: "./imsorg-api.yaml#/list"
+  /imsorg/{imsOrg}:
+    $ref: "./imsorg-api.yaml#/org"

@@ -258,6 +258,19 @@ describe('DA auth', () => {
       },
     };
 
+    it('lets imsorg through without reading the DA config', async () => {
+      const users = [{ email: 'a@example.com' }];
+      const noConfig = {
+        DA_CONFIG: {
+          get: () => {
+            throw new Error('should not read config');
+          },
+        },
+      };
+      const aclCtx = await getAclCtx(noConfig, '2345b0ea551d747', users, '', 'imsorg');
+      assert.deepStrictEqual([...aclCtx.actionSet], ['read']);
+    });
+
     it('test path sorting', async () => {
       const users = [{ groups: [{ orgIdent: '2345B0EA551D747', groupName: 4711 }] }];
       const aclCtx = await getAclCtx(env2, 'test', users, '/mykey');
