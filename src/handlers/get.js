@@ -12,6 +12,8 @@
 import { getSource } from '../routes/source.js';
 import getList from '../routes/list.js';
 import logout from '../routes/logout.js';
+import getMembers from '../routes/members.js';
+import { getImsOrgs } from '../routes/imsorg.js';
 import { getConfig } from '../routes/config.js';
 import { getVersionSource, getVersionList } from '../routes/version.js';
 
@@ -36,6 +38,8 @@ export default async function getHandler({ env, daCtx }) {
   if (path.startsWith('/versionlist')) return getVersionList({ env, daCtx });
   if (path.startsWith('/versionsource')) return getVersionSource({ env, daCtx });
   if (path.startsWith('/logout')) return logout({ env, daCtx });
+  if (path.startsWith('/members')) return getMembers({ env, daCtx });
+  if (path.startsWith('/imsorg')) return getImsOrgs({ env, daCtx });
 
   return undefined;
 }

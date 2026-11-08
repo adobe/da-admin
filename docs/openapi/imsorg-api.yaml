@@ -1,0 +1,91 @@
+list:
+  get:
+    operationId: listImsOrgs
+    tags:
+      - IMS Org
+    summary: List IMS orgs
+    description: Returns the caller's IMS orgs and whether each has a connected directory.
+    responses:
+      '200':
+        description: The caller's IMS orgs.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orgs:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      orgIdent:
+                        type: string
+                      orgName:
+                        type: string
+                      connected:
+                        type: boolean
+      '401':
+        $ref: "./responses.yaml#/401"
+
+org:
+  post:
+    operationId: connectImsOrg
+    tags:
+      - IMS Org
+    summary: Connect IMS org directory
+    description: |
+      Stores an OAuth Server-to-Server credential with the User Management API for an IMS org,
+      so its users and groups can be expanded by `members`. The credential is verified by
+      listing the org's users before it is stored encrypted. The caller must belong to the org.
+    parameters:
+      - $ref: "#/imsOrgParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - clientId
+              - clientSecret
+            properties:
+              clientId:
+                type: string
+              clientSecret:
+                type: string
+    responses:
+      '200':
+        description: The org is connected.
+      '400':
+        description: |
+          `missing_credentials`, `invalid_credentials` (IMS rejected the credential), or
+          `wrong_org` (the credential cannot list this org).
+      '401':
+        $ref: "./responses.yaml#/401"
+      '403':
+        $ref: "./responses.yaml#/403"
+      '502':
+        description: IMS or the User Management API could not be reached.
+  delete:
+    operationId: disconnectImsOrg
+    tags:
+      - IMS Org
+    summary: Disconnect IMS org directory
+    description: Deletes the stored credential and cached users for an IMS org. The caller must belong to the org.
+    parameters:
+      - $ref: "#/imsOrgParam"
+    responses:
+      '200':
+        description: The org is disconnected.
+      '401':
+        $ref: "./responses.yaml#/401"
+      '403':
+        $ref: "./responses.yaml#/403"
+
+imsOrgParam:
+  name: imsOrg
+  in: path
+  description: The IMS org ID, without the @AdobeOrg suffix.
+  required: true
+  schema:
+    type: string

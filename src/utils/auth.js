@@ -214,28 +214,29 @@ function isConfigKeyword(target) {
   return target === 'CONFIG' || target.endsWith('/CONFIG');
 }
 
+export function pathMatches(path, target) {
+  if (path.endsWith('/+**')) {
+    const prefix = path.slice(0, -3);
+    const dotPrefix = dotFolderVariant(prefix);
+    return target.startsWith(prefix) || target === path.slice(0, -4)
+      || (dotPrefix && target.startsWith(dotPrefix));
+  }
+  if (target.length < path.length) return false;
+  if (path.endsWith('/**')) {
+    const prefix = path.slice(0, -2);
+    const dotPrefix = dotFolderVariant(prefix);
+    return target.startsWith(prefix) || (dotPrefix && target.startsWith(dotPrefix));
+  }
+  if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
+  return target === path;
+}
+
 export function getUserActions(pathLookup, user, target) {
   const idents = getIdents(user);
   const isConfigTarget = isConfigKeyword(target);
 
   const plVals = idents.map((key) => pathLookup.get(key) || []);
-  const actions = plVals.map((entries) => entries
-    .find(({ path }) => {
-      if (path.endsWith('/+**')) {
-        const prefix = path.slice(0, -3);
-        const dotPrefix = dotFolderVariant(prefix);
-        return target.startsWith(prefix) || target === path.slice(0, -4)
-          || (dotPrefix && target.startsWith(dotPrefix));
-      }
-      if (target.length < path.length) return false;
-      if (path.endsWith('/**')) {
-        const prefix = path.slice(0, -2);
-        const dotPrefix = dotFolderVariant(prefix);
-        return target.startsWith(prefix) || (dotPrefix && target.startsWith(dotPrefix));
-      }
-      if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
-      return target === path;
-    }))
+  const actions = plVals.map((entries) => entries.find(({ path }) => pathMatches(path, target)))
     .filter((a) => a);
 
   return {
@@ -286,7 +287,8 @@ export function configPermissionPath(daCtx) {
 export async function getAclCtx(env, org, users, key, api) {
   const pathLookup = new Map();
 
-  if (api === 'logout') {
+  // logout and imsorg act on the caller, not on a DA path
+  if (api === 'logout' || api === 'imsorg') {
     return {
       pathLookup,
       actionSet: new Set(['read']),
