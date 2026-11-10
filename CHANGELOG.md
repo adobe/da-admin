@@ -1,3 +1,10 @@
+## [1.16.3](https://github.com/adobe/da-admin/compare/v1.16.2...v1.16.3) (2026-11-10)
+
+
+### Bug Fixes
+
+* **hlx6:** condition versions on verified ETag ([#339](https://github.com/adobe/da-admin/issues/339)) ([2f875a3](https://github.com/adobe/da-admin/commit/2f875a357542f955273f7a27081052698ded6e57)), closes [#325](https://github.com/adobe/da-admin/issues/325)
+
 ## [1.16.2](https://github.com/adobe/da-admin/compare/v1.16.1...v1.16.2) (2026-11-05)
 
 
