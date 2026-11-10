@@ -106,6 +106,7 @@ describe('hlx6 exported-log report', () => {
         event: 'propagation_failed',
         location: 'https://other.example/version',
         recovery: 'do not blindly recreate it',
+        targetEtag: '"verified-target-revision"',
         responseBody: 'document body',
       }),
       makeEvent({ event: 'operation_completed', outcome: 'failed' }),
@@ -116,6 +117,7 @@ describe('hlx6 exported-log report', () => {
     assert.strictEqual(failure.bodyReadError, 'aborted');
     assert.strictEqual(location.location, 'https://other.example/version');
     assert.strictEqual(location.recovery, 'do not blindly recreate it');
+    assert.strictEqual(location.targetEtag, '"verified-target-revision"');
     assert(!JSON.stringify(result).includes('document body'));
   });
 

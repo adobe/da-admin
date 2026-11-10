@@ -696,7 +696,29 @@ export function syncVersion({
       });
       return false;
     }
-    const version = await sync.fetch(url, { method: 'POST' });
+    const targetEtag = current.headers.get('etag');
+    if (!targetEtag || !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(targetEtag)) {
+      sync.audit('propagation_failed', {
+        reason: 'version_etag_unavailable',
+        recovery: 'Target GET must supply a single strong ETag; no target version was requested.',
+      });
+      return false;
+    }
+    let version;
+    try {
+      version = await sync.fetch(url, {
+        method: 'POST', headers: { 'if-match': targetEtag },
+      }, { targetEtag });
+    } catch (error) {
+      if (error.status !== 412) throw error;
+      sync.audit('propagation_failed', {
+        reason: 'version_precondition_failed',
+        status: 412,
+        targetEtag,
+        recovery: 'Target changed after snapshot verification; no version was created. Reconcile before retrying.',
+      });
+      return false;
+    }
     const location = version.headers.get('location');
     const targetVersionUrl = location ? new URL(location, url) : undefined;
     const prefix = `${sourceUrl(env, target, path)}/.versions/`;

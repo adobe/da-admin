@@ -150,11 +150,16 @@ version, then reads the returned same-target version URL to verify its content.
 Missing snapshots or mismatched content fail explicitly; no attempt is made to
 overwrite newer target content to force a historical version. Target HTML
 transformations can cause a conservative mismatch requiring manual inspection.
-The target version API currently has no caller-supplied revision precondition:
-a concurrent edit between the check and creation can still create an incorrect
-version, which post-verification reports as failure with its target URL. This
-is detection, not an atomic history-ordering guarantee. Never blindly replay
-an accepted version creation whose subsequent verification failed.
+The verified target GET must return a single strong ETag. VERSION sends it as
+`If-Match` so the target atomically snapshots only that revision. Missing, weak
+or malformed ETags fail explicitly without requesting a version. A concurrent
+target edit produces HTTP 412 and `version_precondition_failed`; DA does not
+retry against the newer revision or overwrite it. Reconcile before retrying.
+This requires target API support for conditional VERSION creation
+(adobe/helix-api-service#537). Post-verification remains a defense against
+unexpected target behavior, not a global history-ordering guarantee.
+Never blindly replay an accepted version creation whose verification failed
+or a request with an unknown remote outcome.
 GET response document bodies used for verification are omitted from both
 structured and debug logs.
 

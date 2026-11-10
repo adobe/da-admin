@@ -1042,6 +1042,7 @@ describe('hlx6 propagation', () => {
   describe('syncVersion', () => {
     const snapshotKey = 'mysite/.da-versions/document/version.html';
     const base = `${API}/myorg/sites/mysite/source/a.html`;
+    const targetEtag = '"target-revision"';
     const options = () => ({
       req: makeReq(),
       env: {
@@ -1063,7 +1064,7 @@ describe('hlx6 propagation', () => {
         calls.push({ url: url.toString(), opts });
         return opts.method === 'POST'
           ? new Response(null, { status: 201, headers: { location: `${base}/.versions/id` } })
-          : new Response('snapshot');
+          : new Response('snapshot', { headers: { etag: targetEtag } });
       };
       await syncVersion(options());
       assert.deepStrictEqual(calls.map(({ opts, url }) => [opts.method, url]), [
@@ -1072,7 +1073,78 @@ describe('hlx6 propagation', () => {
         ['GET', `${base}/.versions/id`],
       ]);
       assert.strictEqual(events().at(-1).outcome, 'succeeded');
+      assert.strictEqual(calls[1].opts.headers['if-match'], targetEtag);
+      assert(events().some(({ event, targetEtag: etag }) => event === 'request_started' && etag === targetEtag));
       assert.deepStrictEqual(events()[0].daVersionSnapshot, { key: snapshotKey });
+    });
+
+    [undefined, '', 'W/"weak"', '*', '"one", "two"', 'unquoted'].forEach((etag) => {
+      it(`refuses version creation without a single strong target ETag (${etag})`, async () => {
+        globalThis.fetch = async (url, opts) => {
+          calls.push({ url, opts });
+          return new Response('snapshot', { headers: etag === undefined ? {} : { etag } });
+        };
+        await syncVersion(options());
+        assert.strictEqual(calls.length, 1);
+        assert(events().some(({ reason }) => reason === 'version_etag_unavailable'));
+        assert.strictEqual(events().at(-1).outcome, 'failed');
+      });
+    });
+
+    it('does not retry or create a version of a concurrent target edit after HTTP 412', async () => {
+      let savedVersions = 0;
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        if (opts.method === 'GET') {
+          return new Response('snapshot', { headers: { etag: targetEtag } });
+        }
+        // The target changed after GET; its conditional copy must reject the old ETag.
+        if (opts.headers['if-match'] === targetEtag) return new Response(null, { status: 412 });
+        savedVersions += 1;
+        return new Response(null, { status: 201 });
+      };
+      await syncVersion(options());
+      assert.strictEqual(calls.length, 2);
+      assert.strictEqual(savedVersions, 0);
+      const failure = events().find(({ reason }) => reason === 'version_precondition_failed');
+      assert.strictEqual(failure.targetEtag, targetEtag);
+      assert.strictEqual(failure.status, 412);
+      assert.match(failure.recovery, /Reconcile before retrying/);
+      assert(!events().some(({ event }) => event === 'request_retry_scheduled'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('does not retry VERSION after an unknown network outcome', async () => {
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url, opts });
+        if (opts.method === 'POST') throw new Error('connection reset after acceptance');
+        return new Response('snapshot', { headers: { etag: targetEtag } });
+      };
+      await syncVersion(options());
+      assert.strictEqual(calls.length, 2);
+      assert.strictEqual(calls[1].opts.headers['if-match'], targetEtag);
+      assert.strictEqual(events().at(-1).remoteOutcomeUnknown, true);
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
+    it('keeps the verified ETag on rate-limit retries without fetching a newer revision', async () => {
+      let posts = 0;
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url: url.toString(), opts });
+        if (opts.method === 'POST') {
+          posts += 1;
+          if (posts === 1) {
+            return new Response(null, { status: 429, headers: { 'retry-after': '0' } });
+          }
+          return new Response(null, { status: 201, headers: { location: `${base}/.versions/id` } });
+        }
+        return new Response('snapshot', { headers: { etag: targetEtag } });
+      };
+      await syncVersion(options());
+      assert.deepStrictEqual(calls.map(({ opts }) => opts.method), ['GET', 'POST', 'POST', 'GET']);
+      assert.deepStrictEqual(calls.filter(({ opts }) => opts.method === 'POST')
+        .map(({ opts }) => opts.headers['if-match']), [targetEtag, targetEtag]);
+      assert.strictEqual(events().at(-1).outcome, 'succeeded');
     });
 
     it('does not create a version of content that differs from the DA snapshot', async () => {
@@ -1086,13 +1158,15 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(events().at(-1).outcome, 'failed');
     });
 
-    it('reports concurrent-edit version mismatches instead of claiming success', async () => {
+    it('reports saved version mismatches despite target acceptance of the precondition', async () => {
       globalThis.fetch = async (url, opts) => {
         calls.push({ url: url.toString(), opts });
         if (opts.method === 'POST') {
           return new Response(null, { status: 201, headers: { location: `${base}/.versions/id` } });
         }
-        return new Response(calls.length === 1 ? 'snapshot' : 'concurrent edit');
+        return new Response(calls.length === 1 ? 'snapshot' : 'unexpected content', {
+          headers: { etag: targetEtag },
+        });
       };
       await syncVersion(options());
       assert.strictEqual(calls.length, 3);
@@ -1105,7 +1179,7 @@ describe('hlx6 propagation', () => {
         calls.push({ url, opts });
         return opts.method === 'POST'
           ? new Response(null, { status: 201, headers: { location: 'https://other.example/version' } })
-          : new Response('snapshot');
+          : new Response('snapshot', { headers: { etag: targetEtag } });
       };
       await syncVersion(options());
       assert.strictEqual(calls.length, 2);
