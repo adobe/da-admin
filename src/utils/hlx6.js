@@ -26,13 +26,14 @@ const RETRY_BUDGET_MS = 20000;
 const MAX_ATTEMPTS = 3;
 
 function retryDelay(value, attempt) {
+  const backoff = Math.floor((500 * (2 ** (attempt - 1))) * (0.5 + Math.random() * 0.5));
   if (value) {
     const seconds = Number(value);
-    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.max(backoff, seconds * 1000);
     const date = Date.parse(value);
-    if (Number.isFinite(date)) return Math.max(0, date - Date.now());
+    if (Number.isFinite(date)) return Math.max(backoff, date - Date.now());
   }
-  return Math.floor((500 * (2 ** (attempt - 1))) * (0.5 + Math.random() * 0.5));
+  return backoff;
 }
 
 function log(...args) {

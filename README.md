@@ -95,8 +95,12 @@ response proves API acceptance, not byte-for-byte parity or correct write orderi
 Outbound requests retry explicit HTTP 429 rejections at most three times total
 (including the initial attempt), using the original caller's token. All steps
 of an operation share a 20-second deadline, including response-body reads and
-backoff. `Retry-After` seconds/dates are honored only when they fit the budget;
-otherwise bounded exponential backoff with jitter is used. Network errors and
+backoff. Each retry waits for the greater of the server's `Retry-After`
+seconds/date delay and exponential backoff with jitter (250-499 ms before the
+second attempt, 500-999 ms before the third). Zero or elapsed server delays
+cannot bypass backoff; missing or invalid headers use backoff alone. If the
+delay would reach or exceed the remaining budget, no retry is attempted.
+Network errors and
 5xx responses have uncertain mutation outcomes and are not automatically
 replayed, especially for VERSION. Permanent 4xx responses are not retried.
 `request_retry_scheduled` and `request_exhausted` events record attempts and
