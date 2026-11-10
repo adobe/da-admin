@@ -144,7 +144,7 @@ describe('Version Route', () => {
           status: 201,
           headers: { location: 'https://api.example.com/myorg/sites/mysite/source/a.html/.versions/id' },
         })
-        : new Response('snapshot');
+        : new Response('snapshot', { headers: { etag: '"verified-target-revision"' } });
     };
     try {
       const env = {
@@ -166,6 +166,7 @@ describe('Version Route', () => {
       await Promise.all(waited);
       assert.strictEqual(calls.length, 3);
       assert.strictEqual(calls[1].url, 'https://api.example.com/myorg/sites/mysite/source/a.html/.versions?comment=release');
+      assert.strictEqual(calls[1].opts.headers['if-match'], '"verified-target-revision"');
 
       // non migrated site: no propagation
       await postVersionSource({ req: mkReq(), env, daCtx: { ...daCtx, key: 'other/a.html' } });

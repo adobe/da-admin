@@ -35,7 +35,7 @@ export function parseExport(text) {
 function evidence(event) {
   const keys = [
     'timestamp', 'event', 'requestId', 'attempt', 'attempts', 'status', 'outcome',
-    'reason', 'step', 'key', 'method', 'url', 'targetVersionUrl',
+    'reason', 'step', 'key', 'method', 'url', 'targetVersionUrl', 'targetEtag',
     'payloadSha256', 'bytes', 'contentType', 'responseRequestId', 'responseRayId',
     'remoteOutcomeUnknown', 'delayMs', 'destinationEtag', 'destinationDocumentId',
     'error', 'xError', 'bodyReadError', 'recovery', 'location',
