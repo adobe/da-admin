@@ -1,3 +1,10 @@
+## [1.16.4](https://github.com/adobe/da-admin/compare/v1.16.3...v1.16.4) (2026-11-10)
+
+
+### Bug Fixes
+
+* **hlx6:** enforce positive retry backoff ([#340](https://github.com/adobe/da-admin/issues/340)) ([ea6b7ad](https://github.com/adobe/da-admin/commit/ea6b7adce65fa64fda928a17b0db19709b506009))
+
 ## [1.16.3](https://github.com/adobe/da-admin/compare/v1.16.2...v1.16.3) (2026-11-10)
 
 
