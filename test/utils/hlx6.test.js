@@ -123,6 +123,56 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(calls.length, 3);
     });
 
+    ['0', 'Thu, 01 Jan 1970 00:00:00 GMT', 'Thu, 01 Jan 1970 00:00:10 GMT',
+      '0.1', 'invalid', undefined].forEach((retryAfter) => {
+      it(`applies a positive exponential backoff floor for Retry-After ${retryAfter}`, async () => {
+        const clock = sinon.useFakeTimers({ now: 10000 });
+        sinon.stub(Math, 'random').returns(0);
+        globalThis.fetch = async (url, opts) => {
+          calls.push({ url, opts });
+          return new Response(null, {
+            status: 429,
+            headers: retryAfter === undefined ? {} : { 'retry-after': retryAfter },
+          });
+        };
+        const promise = syncSourceDelete({
+          req: makeReq(), env, daCtx: context, resp: { status: 204 },
+        });
+        await clock.tickAsync(249);
+        assert.strictEqual(calls.length, 1);
+        await clock.tickAsync(1);
+        assert.strictEqual(calls.length, 2);
+        await clock.tickAsync(499);
+        assert.strictEqual(calls.length, 2);
+        await clock.tickAsync(1);
+        await promise;
+        assert.strictEqual(calls.length, 3);
+        assert.deepStrictEqual(events().filter(({ event }) => event === 'request_retry_scheduled')
+          .map(({ delayMs }) => delayMs), [250, 500]);
+        assert.strictEqual(events().at(-1).outcome, 'failed');
+      });
+    });
+
+    it('does not retry when the backoff floor reaches the remaining budget', async () => {
+      const clock = sinon.useFakeTimers();
+      sinon.stub(Math, 'random').returns(0);
+      globalThis.fetch = async (url, opts) => {
+        calls.push({ url, opts });
+        await new Promise((resolve) => {
+          setTimeout(resolve, 19750);
+        });
+        return new Response(null, { status: 429, headers: { 'retry-after': '0' } });
+      };
+      const promise = syncSourceDelete({
+        req: makeReq(), env, daCtx: context, resp: { status: 204 },
+      });
+      await clock.tickAsync(19750);
+      await promise;
+      assert.strictEqual(calls.length, 1);
+      assert(!events().some(({ event }) => event === 'request_retry_scheduled'));
+      assert.strictEqual(events().at(-1).outcome, 'failed');
+    });
+
     it('does not shorten Retry-After when it exceeds the remaining budget', async () => {
       globalThis.fetch = async (url, opts) => {
         calls.push({ url: url.toString(), opts });
