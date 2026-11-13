@@ -21,6 +21,7 @@ describe('fetch', () => {
   it('should return a response object for options', async () => {
     const resp = await handler.fetch({ method: 'OPTIONS' }, {});
     assert.strictEqual(resp.status, 204);
+    assert.strictEqual(resp.headers.get('Access-Control-Allow-Headers'), 'Authorization, *');
   });
 
   it('binds waitUntil to the execution context without awaiting background work', async () => {
