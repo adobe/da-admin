@@ -1,0 +1,203 @@
+inbox:
+  get:
+    operationId: listNotifications
+    tags:
+      - Notifications
+    summary: List my notifications
+    description: |
+      Returns the caller's open notifications across orgs, newest activity first.
+      Each notification is one subject (for example a comment thread) per person.
+    responses:
+      '200':
+        description: The caller's notifications.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notifications:
+                  type: array
+                  items:
+                    $ref: "#/notification"
+                unread:
+                  type: integer
+      '401':
+        $ref: "./responses.yaml#/401"
+      '501':
+        description: Notifications are not configured.
+  post:
+    operationId: updateNotifications
+    tags:
+      - Notifications
+    summary: Mark my notifications read or done
+    description: Marks the caller's notifications read, or done to hide them until the subject has new activity.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              read:
+                type: array
+                items:
+                  type: string
+              done:
+                type: array
+                items:
+                  type: string
+    responses:
+      '200':
+        description: The number of notifications updated.
+      '400':
+        description: '`invalid_update`'
+      '401':
+        $ref: "./responses.yaml#/401"
+
+source:
+  post:
+    operationId: notify
+    tags:
+      - Notifications
+    summary: Notify people about a source
+    description: |
+      Creates or refreshes a notification for each recipient about a subject on a source the caller can read.
+      The subject is identified by `key` within the org and site, so new activity on the same subject updates
+      the existing notification and marks it unread. The caller is recorded as the actor and is never notified.
+    parameters:
+      - $ref: "./parameters.yaml#/orgParam"
+      - $ref: "./parameters.yaml#/repoParam"
+      - $ref: "./parameters.yaml#/pathParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - type
+              - key
+              - recipients
+            properties:
+              type:
+                type: string
+                description: Lowercase producer type, for example `comment-mention`.
+              key:
+                type: string
+                description: The subject, for example `comment:{threadId}` or `publish:/products/shoes`.
+                pattern: '^[A-Za-z0-9:_./-]{1,150}$'
+              recipients:
+                type: array
+                maxItems: 50
+                items:
+                  type: string
+                  format: email
+              title:
+                type: string
+              description:
+                type: string
+              link:
+                type: string
+                description: A path on the same origin starting with `/`, or an https link to `da.live`, `*.aem.page` or `*.aem.live`.
+              action:
+                type: string
+                maxLength: 60
+                description: How the inbox describes the activity, for example `requested publish of`. Defaults to wording for known types.
+              actions:
+                type: array
+                maxItems: 1
+                description: A button shown on the notification, for example a preview link.
+                items:
+                  type: object
+                  required:
+                    - label
+                    - link
+                  properties:
+                    label:
+                      type: string
+                      maxLength: 24
+                    link:
+                      type: string
+                      description: Same rules as `link`.
+    responses:
+      '200':
+        description: The number of people notified.
+      '400':
+        description: The notification is invalid.
+      '401':
+        $ref: "./responses.yaml#/401"
+      '403':
+        $ref: "./responses.yaml#/403"
+  delete:
+    operationId: resolveNotifications
+    tags:
+      - Notifications
+    summary: Resolve a subject
+    description: Removes the notifications for a subject from everyone's inbox, for example when a comment thread is resolved.
+    parameters:
+      - $ref: "./parameters.yaml#/orgParam"
+      - $ref: "./parameters.yaml#/repoParam"
+      - $ref: "./parameters.yaml#/pathParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - key
+            properties:
+              key:
+                type: string
+    responses:
+      '200':
+        description: The number of notifications removed.
+      '401':
+        $ref: "./responses.yaml#/401"
+      '403':
+        $ref: "./responses.yaml#/403"
+
+notification:
+  type: object
+  properties:
+    id:
+      type: string
+      description: '`{org}/{site}/{key}`'
+    type:
+      type: string
+    key:
+      type: string
+    org:
+      type: string
+    site:
+      type: string
+    path:
+      type: string
+    title:
+      type: string
+    description:
+      type: string
+    link:
+      type: string
+    action:
+      type: string
+    actions:
+      type: array
+      items:
+        type: object
+        properties:
+          label:
+            type: string
+          link:
+            type: string
+    actor:
+      type: object
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+    updatedAt:
+      type: integer
+    read:
+      type: boolean
