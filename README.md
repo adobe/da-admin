@@ -43,15 +43,28 @@ Browse to `http://localhost:8787/list` to ensure you see the expected buckets.
 1. You can make your own buckets tied to your own Cloudflare account or you can request a `.dev.vars` file.
 2. Cloudflare KV, which is used for org properties and session login info is locally stored when developing locally. You will need to make your own local KVs to test against.
 
-### Helix 6 migration (dual write)
-Sites listed in the `HLX6_MIGRATION_SITES` env variable are being migrated to Helix 6. Every successful modification on those sites (source create/update/delete, folder creation, copy, move, version creation) is also propagated, in the background, to the Helix 6 source bus at `AEM_API` (`https://api.aem.live`) using the caller's IMS token. Failures are logged but do not affect the DA response.
+### Helix 6 request handling
 
-For production and stage, manage `HLX6_MIGRATION_SITES` in the Cloudflare dashboard.
-It is intentionally omitted from those environments in `wrangler.toml`:
-`keep_vars = true` preserves dashboard values, but an explicit declaration would
-override them on deployment. Local and test environments retain their own defaults.
-If a previous deployment cleared the value, restore it in the dashboard; this
-configuration change cannot recover the previous value.
+Site-scoped requests, including config and version APIs, return `410 Gone` for
+sites listed in `HLX6_MIGRATED_SITES`, an array of `org/site` entries (or a
+JSON-encoded array). These sites must use `https://api.aem.live`; requests for
+these sites do not access their legacy content. The check is a local
+configuration lookup; no network probe is made.
+
+Org-level requests, authentication, logout, and CORS preflight remain available.
+Sites configured for dual write in `HLX6_DUAL_WRITES` retain normal DA behavior
+during migration, even if they also appear in `HLX6_MIGRATED_SITES`.
+
+### Helix 6 migration (dual write)
+Sites listed in the `HLX6_DUAL_WRITES` env variable are being migrated to Helix 6. Every successful modification on those sites (source create/update/delete, folder creation, copy, move, version creation) is also propagated, in the background, to the Helix 6 source bus at `AEM_API` (`https://api.aem.live`) using the caller's IMS token. Failures are logged but do not affect the DA response.
+
+Manage both `HLX6_MIGRATED_SITES` and `HLX6_DUAL_WRITES` in the Cloudflare dashboard.
+Neither is declared in any `wrangler.toml` vars block: `keep_vars = true`
+preserves dashboard values, but an explicit declaration would override them on
+deployment. Local development can set these variables in `.dev.vars` as needed.
+Rename the previous `HLX6_MIGRATION_SITES` dashboard variable to `HLX6_DUAL_WRITES`
+when deploying this change. Moving a site out of dual write requires adding it
+to `HLX6_MIGRATED_SITES` and removing its source entry from `HLX6_DUAL_WRITES`.
 
 Entries are either:
 - `org/site`: the same org/site on Helix 6

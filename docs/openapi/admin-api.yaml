@@ -10,6 +10,12 @@ info:
   description: |
     DA Admin API is used to manage Document Authoring content repositories.
 
+    Site-scoped requests return `410 Gone` for sites in `HLX6_MIGRATED_SITES`,
+    including config and version requests.
+    Use `https://api.aem.live` instead. Sites in `HLX6_DUAL_WRITES` remain available
+    during migration, even if also marked as migrated. Authentication, logout,
+    org-level requests, and CORS preflight are unaffected.
+
 servers:
   - url: 'https://admin.da.live'
 

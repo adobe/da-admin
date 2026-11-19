@@ -149,7 +149,7 @@ describe('Version Route', () => {
     try {
       const env = {
         AEM_API: 'https://api.example.com',
-        HLX6_MIGRATION_SITES: ['myorg/mysite'],
+        HLX6_DUAL_WRITES: ['myorg/mysite'],
         AEM_CONTENT: {
           get: async () => ({ arrayBuffer: async () => new TextEncoder().encode('snapshot').buffer }),
         },

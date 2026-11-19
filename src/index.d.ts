@@ -25,9 +25,11 @@ export interface Env {
   DA_OPS_IMS_BOT_EMAIL: string;
   // hlx6 api service base URL (eg https://api.aem.live)
   AEM_API?: string;
-  // sites in migration to hlx6, as "org/site" or "org/site -> org2/site2".
+  // migrated hlx6 sites, as "org/site". Legacy requests return 410 unless dual-writing.
+  HLX6_MIGRATED_SITES?: string[] | string;
+  // sites dual-writing to hlx6, as "org/site" or "org/site -> org2/site2".
   // Modifications on these sites are propagated to the hlx6 source bus.
-  HLX6_MIGRATION_SITES?: string[] | string;
+  HLX6_DUAL_WRITES?: string[] | string;
 
   DA_AUTH: KVNamespace,
   DA_CONFIG: KVNamespace,
