@@ -12,7 +12,7 @@
 
 /*
  * Propagation of DA modifications to the Helix 6 (hlx6) source bus for sites that are
- * being migrated. Sites are declared in the HLX6_MIGRATION_SITES env variable as a list of
+ * being migrated. Sites are declared in the HLX6_DUAL_WRITES env variable as a list of
  * `org/site` (same org/site on hlx6) or `org/site -> org2/site2` (different hlx6 target).
  *
  * Propagation is best effort: it runs after the DA operation succeeded, in the background
@@ -20,6 +20,10 @@
  */
 
 export const DEFAULT_AEM_API = 'https://api.aem.live';
+export const HLX6_GONE = {
+  status: 410,
+  body: JSON.stringify({ error: 'This site is served by Helix 6. Use https://api.aem.live instead.' }),
+};
 
 const SUCCESS = [200, 201, 204, 206];
 const RETRY_BUDGET_MS = 20000;
@@ -47,7 +51,7 @@ function parseOrgSite(str) {
   return { org: parts[0], site: parts[1] };
 }
 
-function toList(value) {
+function toList(value, name) {
   if (!value) return [];
   if (Array.isArray(value)) return value;
   if (typeof value === 'string') {
@@ -58,7 +62,7 @@ function toList(value) {
         return Array.isArray(parsed) ? parsed : [];
       } catch {
         // eslint-disable-next-line no-console
-        console.error('[hlx6] Invalid JSON in HLX6_MIGRATION_SITES');
+        console.error(`[hlx6] Invalid JSON in ${name}`);
         return [];
       }
     }
@@ -68,13 +72,13 @@ function toList(value) {
 }
 
 /**
- * Parses the HLX6_MIGRATION_SITES env value.
+ * Parses the HLX6_DUAL_WRITES env value.
  * @param {string[]|string} value array (or JSON / comma separated string) of entries
  * @returns {Map<string, {org: string, site: string}>} `org/site` (DA) -> hlx6 target
  */
-export function parseMigrationSites(value) {
+export function parseDualWrites(value) {
   const map = new Map();
-  for (const entry of toList(value)) {
+  for (const entry of toList(value, 'HLX6_DUAL_WRITES')) {
     if (typeof entry !== 'string' || !entry.trim()) {
       // eslint-disable-next-line no-continue
       continue;
@@ -84,7 +88,7 @@ export function parseMigrationSites(value) {
     const target = to === undefined ? source : parseOrgSite(to);
     if (!source || !target || rest.length) {
       // eslint-disable-next-line no-console
-      console.error(`[hlx6] Ignoring invalid HLX6_MIGRATION_SITES entry: ${entry}`);
+      console.error(`[hlx6] Ignoring invalid HLX6_DUAL_WRITES entry: ${entry}`);
     } else {
       map.set(`${source.org}/${source.site}`, target);
     }
@@ -92,21 +96,41 @@ export function parseMigrationSites(value) {
   return map;
 }
 
-let cache = { key: undefined, map: new Map() };
+let dualWriteCache = { key: undefined, map: new Map() };
+let migratedCache = { key: undefined, sites: new Set() };
 
-function getMigrationSites(env) {
-  const value = env?.HLX6_MIGRATION_SITES;
+function getDualWrites(env) {
+  const value = env?.HLX6_DUAL_WRITES;
   const key = JSON.stringify(value) ?? '';
-  if (cache.key !== key) {
-    cache = { key, map: parseMigrationSites(value) };
+  if (dualWriteCache.key !== key) {
+    dualWriteCache = { key, map: parseDualWrites(value) };
     const type = Array.isArray(value) ? 'array' : typeof value;
-    log(`HLX6_MIGRATION_SITES (${type}): ${JSON.stringify(value)}`);
-    const sites = [...cache.map.entries()]
+    log(`HLX6_DUAL_WRITES (${type}): ${JSON.stringify(value)}`);
+    const sites = [...dualWriteCache.map.entries()]
       .map(([from, to]) => `${from} -> ${to.org}/${to.site}`);
     log(`${sites.length} site(s) in migration${sites.length ? `: ${sites.join(', ')}` : ''}`);
     log(`AEM_API: ${env?.AEM_API || `${DEFAULT_AEM_API} (default)`}`);
   }
-  return cache.map;
+  return dualWriteCache.map;
+}
+
+function getMigratedSites(env) {
+  const value = env?.HLX6_MIGRATED_SITES;
+  const key = JSON.stringify(value) ?? '';
+  if (migratedCache.key !== key) {
+    const sites = new Set();
+    for (const entry of toList(value, 'HLX6_MIGRATED_SITES')) {
+      const parsed = typeof entry === 'string' && !entry.includes('->') && parseOrgSite(entry);
+      if (parsed) {
+        sites.add(`${parsed.org}/${parsed.site}`);
+      } else {
+        console.error(`[hlx6] Ignoring invalid HLX6_MIGRATED_SITES entry: ${entry}`);
+      }
+    }
+    migratedCache = { key, sites };
+    log(`HLX6_MIGRATED_SITES: ${JSON.stringify([...sites])}`);
+  }
+  return migratedCache.sites;
 }
 
 /**
@@ -114,7 +138,8 @@ function getMigrationSites(env) {
  * Called on every request so the setup is visible in the logs at worker start.
  */
 export function initHlx6(env) {
-  getMigrationSites(env);
+  getDualWrites(env);
+  getMigratedSites(env);
 }
 
 /**
@@ -123,7 +148,16 @@ export function initHlx6(env) {
  */
 export function getHlx6Target(env, org, site) {
   if (!org || !site) return undefined;
-  return getMigrationSites(env).get(`${org.toLowerCase()}/${site.toLowerCase()}`);
+  return getDualWrites(env).get(`${org.toLowerCase()}/${site.toLowerCase()}`);
+}
+
+/**
+ * Detects sites that must no longer use DA storage, except during dual write.
+ */
+export function isHlx6Site(env, org, site) {
+  if (!org || !site) return false;
+  return getMigratedSites(env).has(`${org.toLowerCase()}/${site.toLowerCase()}`)
+    && !getHlx6Target(env, org, site);
 }
 
 /**

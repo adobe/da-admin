@@ -16,7 +16,7 @@ import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
-import { initHlx6 } from './utils/hlx6.js';
+import { HLX6_GONE, initHlx6, isHlx6Site } from './utils/hlx6.js';
 
 export default {
   /**
@@ -47,7 +47,7 @@ export default {
     if (ctx?.waitUntil) daCtx.waitUntil = ctx.waitUntil.bind(ctx);
 
     const {
-      users, authorized, key, api,
+      users, authorized, key, api, org,
     } = daCtx;
 
     // Anonymous users are not permitted
@@ -73,6 +73,12 @@ export default {
 
     let respObj;
     try {
+      // The key also identifies bare site roots, where daCtx.site is undefined.
+      const [site] = (key || '').split('/');
+      if (api !== 'login' && api !== 'logout' && isHlx6Site(env, org, site)) {
+        return daResp({ ...HLX6_GONE, body: req.method === 'HEAD' ? undefined : HLX6_GONE.body });
+      }
+
       switch (req.method) {
         case 'HEAD':
           respObj = await headHandler({ env, daCtx });

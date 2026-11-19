@@ -1,6 +1,8 @@
 name = "da-admin"
 main = "src/index.js"
 compatibility_date = "2024-11-11"
+# HLX6_MIGRATED_SITES and HLX6_DUAL_WRITES are managed in the Cloudflare dashboard.
+# Keep both out of vars blocks so deployments preserve their dashboard values.
 keep_vars = true
 
 # ----------------------------------------------------------------------
@@ -29,7 +31,6 @@ DA_CONTENT = "https://content.da.live"
 AEM_BUCKET_NAME = "aem-content"
 AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 AEM_API = "https://api.aem.live"
-# HLX6_MIGRATION_SITES is dashboard-managed; keep_vars preserves it on deploy.
 
 # ----------------------------------------------------------------------
 # stage environment
@@ -57,7 +58,6 @@ DA_CONTENT = "https://stage-content.da.live"
 AEM_BUCKET_NAME = "aem-content-stage"
 AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 AEM_API = "https://api.aem.live"
-# HLX6_MIGRATION_SITES is dashboard-managed; keep_vars preserves it on deploy.
 
 # ----------------------------------------------------------------------
 # ci environment (using stage content)
@@ -85,9 +85,6 @@ DA_CONTENT = "https://stage-content.da.live"
 AEM_BUCKET_NAME = "aem-content-stage"
 AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 AEM_API = "https://api.aem.live"
-# Sites being migrated to hlx6: modifications are propagated to the AEM_API source bus.
-# Format: "org/site" (same org/site on hlx6) or "org/site -> org2/site2" (different hlx6 site)
-HLX6_MIGRATION_SITES = []
 
 
 # ----------------------------------------------------------------------
@@ -116,9 +113,6 @@ DA_CONTENT = "https://stage-content.da.live"
 AEM_BUCKET_NAME = "aem-content-stage"
 AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 AEM_API = "https://api.aem.live"
-# Sites being migrated to hlx6: modifications are propagated to the AEM_API source bus.
-# Format: "org/site" (same org/site on hlx6) or "org/site -> org2/site2" (different hlx6 site)
-HLX6_MIGRATION_SITES = ['kptdobe/sample-content-da -> kptdobe/sample-content-hlx6-migrated']
 
 # ----------------------------------------------------------------------
 # integration test environment (local)
@@ -146,6 +140,3 @@ DA_CONTENT = "https://stage-content.da.live"
 AEM_BUCKET_NAME = "aem-content-local"
 AEM_ADMIN_MEDIA_API = "https://admin.hlx.page/media"
 AEM_API = "https://api.aem.live"
-# Sites being migrated to hlx6: modifications are propagated to the AEM_API source bus.
-# Format: "org/site" (same org/site on hlx6) or "org/site -> org2/site2" (different hlx6 site)
-HLX6_MIGRATION_SITES = []

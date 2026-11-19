@@ -12,7 +12,7 @@
 import assert from 'node:assert';
 import sinon from 'sinon';
 import {
-  parseMigrationSites, getHlx6Target, syncSourcePut, syncSourceDelete,
+  parseDualWrites, getHlx6Target, isHlx6Site, syncSourcePut, syncSourceDelete,
   syncCopy, syncMove, syncVersion, initHlx6, logMediaMigration,
 } from '../../src/utils/hlx6.js';
 
@@ -50,7 +50,7 @@ describe('hlx6 propagation', () => {
 
   const env = {
     AEM_API: API,
-    HLX6_MIGRATION_SITES: ['myorg/mysite', 'myorg/other -> org2/site2', 'myorg/third -> org2/site2'],
+    HLX6_DUAL_WRITES: ['myorg/mysite', 'myorg/other -> org2/site2', 'myorg/third -> org2/site2'],
   };
 
   function events() {
@@ -428,9 +428,9 @@ describe('hlx6 propagation', () => {
     });
   });
 
-  describe('parseMigrationSites', () => {
+  describe('parseDualWrites', () => {
     it('parses both formats, normalizes and skips invalid entries', () => {
-      const map = parseMigrationSites([
+      const map = parseDualWrites([
         ' MyOrg/MySite ',
         'a/b -> c/d',
         'a/b/c',
@@ -448,23 +448,51 @@ describe('hlx6 propagation', () => {
 
     it('accepts JSON and comma separated strings', () => {
       assert.deepStrictEqual(
-        [...parseMigrationSites('["a/b", "c/d -> e/f"]').keys()],
+        [...parseDualWrites('["a/b", "c/d -> e/f"]').keys()],
         ['a/b', 'c/d'],
       );
       assert.deepStrictEqual(
-        [...parseMigrationSites('a/b, c/d -> e/f').keys()],
+        [...parseDualWrites('a/b, c/d -> e/f').keys()],
         ['a/b', 'c/d'],
       );
-      assert.strictEqual(parseMigrationSites('[invalid').size, 0);
-      assert.strictEqual(parseMigrationSites('{"a": 1}').size, 0);
-      assert.strictEqual(parseMigrationSites(undefined).size, 0);
-      assert.strictEqual(parseMigrationSites({}).size, 0);
+      assert.strictEqual(parseDualWrites('[invalid').size, 0);
+      assert.strictEqual(parseDualWrites('{"a": 1}').size, 0);
+      assert.strictEqual(parseDualWrites(undefined).size, 0);
+      assert.strictEqual(parseDualWrites({}).size, 0);
+      assert(errors.getCalls().some(({ args }) => args[0].includes('HLX6_DUAL_WRITES')));
+    });
+  });
+
+  describe('isHlx6Site', () => {
+    [[' MyOrg/MySite '], '[" MyOrg/MySite "]'].forEach((value) => {
+      it(`checks migrated ${typeof value === 'string' ? 'JSON' : 'array'} entries without fetching`, () => {
+        const config = { HLX6_MIGRATED_SITES: value };
+        assert.strictEqual(isHlx6Site(config, 'MYORG', 'MySite'), true);
+        assert.strictEqual(isHlx6Site(config, 'myorg', 'other'), false);
+        assert.strictEqual(isHlx6Site(config, 'other', 'mysite'), false);
+        assert.strictEqual(isHlx6Site(config, 'myorg'), false);
+        assert.strictEqual(calls.length, 0);
+      });
+    });
+
+    it('logs and ignores malformed migrated entries instead of treating them as mappings', () => {
+      const config = {
+        HLX6_MIGRATED_SITES: ['invalid', 'myorg/mysite -> other/target', 'myorg/mysite/path', 42],
+      };
+      assert.strictEqual(isHlx6Site(config, 'myorg', 'mysite'), false);
+      assert.strictEqual(errors.callCount, 4);
+      assert(errors.getCalls().every(({ args }) => args[0].includes('HLX6_MIGRATED_SITES')));
+
+      config.HLX6_MIGRATED_SITES = '[invalid';
+      assert.strictEqual(isHlx6Site(config, 'myorg', 'mysite'), false);
+      assert.strictEqual(errors.lastCall.args[0], '[hlx6] Invalid JSON in HLX6_MIGRATED_SITES');
+      assert.strictEqual(calls.length, 0);
     });
   });
 
   describe('getHlx6Target', () => {
     it('logs setup once per configuration and refreshes changed mappings', () => {
-      const config = { HLX6_MIGRATION_SITES: ['setup/site -> target/one'] };
+      const config = { HLX6_DUAL_WRITES: ['setup/site -> target/one'] };
       initHlx6(config);
       assert.deepStrictEqual(getHlx6Target(config, 'setup', 'site'), { org: 'target', site: 'one' });
       const count = logs.callCount;
@@ -472,7 +500,7 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(logs.callCount, count);
       assert(logs.getCalls().some(({ args }) => args.join(' ').includes('setup/site -> target/one')));
 
-      config.HLX6_MIGRATION_SITES = ['setup/site -> target/two'];
+      config.HLX6_DUAL_WRITES = ['setup/site -> target/two'];
       initHlx6(config);
       assert.deepStrictEqual(getHlx6Target(config, 'setup', 'site'), { org: 'target', site: 'two' });
       assert(logs.callCount > count);
@@ -527,7 +555,7 @@ describe('hlx6 propagation', () => {
       const bytes = new Uint8Array([0, 255, 128, 42]);
       await syncSourcePut({
         req: makeReq(),
-        env: { HLX6_MIGRATION_SITES: ['myorg/mysite'] },
+        env: { HLX6_DUAL_WRITES: ['myorg/mysite'] },
         daCtx: { org: 'myorg', key: 'mysite/image.png', ext: 'png' },
         obj: { data: new Blob([bytes]) },
         resp: { status: 201 },

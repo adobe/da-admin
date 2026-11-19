@@ -16,7 +16,7 @@ import sinon from 'sinon';
 describe('Migration route wiring', () => {
   const env = {
     AEM_API: 'https://api.example.com',
-    HLX6_MIGRATION_SITES: ['org/site -> target/site2'],
+    HLX6_DUAL_WRITES: ['org/site -> target/site2'],
   };
   const base = 'https://api.example.com/target/sites/site2/source';
   let fetchStub;

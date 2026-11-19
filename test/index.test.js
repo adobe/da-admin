@@ -11,6 +11,7 @@
  */
 import assert from 'node:assert';
 import esmock from 'esmock';
+import sinon from 'sinon';
 import handler from '../src/index.js';
 
 describe('fetch', () => {
@@ -233,6 +234,152 @@ describe('fetch', () => {
     const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/list/org/repo/path' }, {});
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(resp.headers.get('da-continuation-token'), 'next-token');
+  });
+});
+
+describe('Helix 6 request guard', () => {
+  let hnd;
+  let fetchStub;
+  let dispatch;
+  let users;
+  let env;
+
+  before(async () => {
+    const route = { default: (...args) => dispatch(...args) };
+    hnd = await esmock('../src/index.js', {
+      '../src/handlers/get.js': route,
+      '../src/handlers/head.js': route,
+      '../src/handlers/post.js': route,
+      '../src/handlers/delete.js': route,
+    }, {
+      '../src/utils/auth.js': { getUsers: async () => users },
+    });
+  });
+
+  beforeEach(() => {
+    users = [{ email: 'test@example.com' }];
+    env = { HLX6_MIGRATED_SITES: ['org/site'] };
+    dispatch = sinon.stub().resolves({ status: 200, body: 'legacy content' });
+    fetchStub = sinon.stub(globalThis, 'fetch').rejects(new Error('Unexpected outbound request'));
+    sinon.stub(console, 'log');
+    sinon.stub(console, 'error');
+  });
+
+  afterEach(() => {
+    sinon.restore();
+    assert(fetchStub.notCalled, 'site checks must not make network requests');
+  });
+
+  const request = (path, method = 'GET') => new Request(`https://admin.da.live${path}`, { method });
+
+  ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'].forEach((method) => {
+    it(`rejects ${method} before reaching legacy storage`, async () => {
+      const resp = await hnd.fetch(request('/source/org/site/file.html', method), env);
+      assert.strictEqual(resp.status, 410);
+      assert(dispatch.notCalled);
+      if (method === 'HEAD') {
+        assert.strictEqual(await resp.text(), '');
+      } else {
+        assert.match((await resp.json()).error, /Helix 6/);
+      }
+    });
+  });
+
+  [
+    ['/list/org/site', 'GET'],
+    ['/list/org/site/', 'HEAD'],
+    ['/config/org/site', 'GET'],
+    ['/config/org/site', 'POST'],
+    ['/versionlist/org/site/file.html', 'GET'],
+    ['/versionsource/org/site/id/version.html', 'GET'],
+    ['/versionsource/org/site/file.html', 'POST'],
+    ['/copy/org/site/file.html', 'POST'],
+    ['/move/org/site/file.html', 'POST'],
+    ['/media/org/site/image.jpg', 'POST'],
+    ['/api/source/ORG/SITE/file.html', 'GET'],
+  ].forEach(([path, method]) => {
+    it(`rejects site-scoped ${method} ${path}`, async () => {
+      const resp = await hnd.fetch(request(path, method), env);
+      assert.strictEqual(resp.status, 410);
+      assert(dispatch.notCalled);
+    });
+  });
+
+  it('refreshes migrated sites when dashboard configuration changes', async () => {
+    env.HLX6_MIGRATED_SITES = [];
+    const req = request('/source/org/site/file.html');
+    const legacy = await hnd.fetch(req, env);
+    assert.strictEqual(legacy.status, 200);
+    assert.strictEqual(await legacy.text(), 'legacy content');
+
+    env.HLX6_MIGRATED_SITES.push('org/site');
+    const upgraded = await hnd.fetch(req, env);
+    assert.strictEqual(upgraded.status, 410);
+    assert(dispatch.calledOnce);
+
+    env.HLX6_MIGRATED_SITES = [];
+    assert.strictEqual((await hnd.fetch(req, env)).status, 200);
+    assert(dispatch.calledTwice);
+  });
+
+  ['org/site', 'org/site -> target/other'].forEach((entry) => {
+    it(`preserves reads and writes for dual-write entry ${entry}`, async () => {
+      env.HLX6_DUAL_WRITES = [entry];
+      const read = await hnd.fetch(request('/source/org/site/file.html'), env);
+      const write = await hnd.fetch(request('/source/org/site/file.html', 'PUT'), env);
+      assert.strictEqual(read.status, 200);
+      assert.strictEqual(write.status, 200);
+      assert(dispatch.calledTwice);
+      assert(fetchStub.notCalled);
+    });
+  });
+
+  it('rejects a migrated site when it leaves dual write', async () => {
+    env.HLX6_DUAL_WRITES = ['org/site'];
+    const req = request('/source/org/site/file.html');
+    assert.strictEqual((await hnd.fetch(req, env)).status, 200);
+
+    env.HLX6_DUAL_WRITES = [];
+    assert.strictEqual((await hnd.fetch(req, env)).status, 410);
+    assert(dispatch.calledOnce);
+  });
+
+  it('does not exempt the target of a mapped dual-write entry', async () => {
+    const resp = await hnd.fetch(request('/source/target/other/file.html'), {
+      HLX6_MIGRATED_SITES: ['target/other'],
+      HLX6_DUAL_WRITES: ['org/site -> target/other'],
+    });
+    assert.strictEqual(resp.status, 410);
+    assert(dispatch.notCalled);
+  });
+
+  [
+    ['/source/org/site/file.html', 'OPTIONS'],
+    ['/list/org', 'GET'],
+    ['/config/org', 'GET'],
+    ['/logout/org/site', 'GET'],
+  ].forEach(([path, method]) => {
+    it(`preserves ${method} ${path}`, async () => {
+      const resp = await hnd.fetch(request(path, method), env);
+      assert.strictEqual(resp.status, method === 'OPTIONS' ? 204 : 200);
+      assert(fetchStub.notCalled);
+    });
+  });
+
+  it('preserves authentication before checking sites', async () => {
+    users = [{ email: 'anonymous' }];
+    const resp = await hnd.fetch(request('/source/org/site/file.html'), env);
+    assert.strictEqual(resp.status, 401);
+    assert(fetchStub.notCalled);
+    assert(dispatch.notCalled);
+  });
+
+  it('serves sites not listed as migrated, including when the variable is unset', async () => {
+    const req = request('/source/org/site/file.html');
+    env.HLX6_MIGRATED_SITES = ['other/site', 'org/site-other'];
+    assert.strictEqual((await hnd.fetch(req, env)).status, 200);
+    assert.strictEqual((await hnd.fetch(req, {})).status, 200);
+    assert(dispatch.calledTwice);
   });
 });
 
