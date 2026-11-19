@@ -1,3 +1,10 @@
+## [1.16.5](https://github.com/adobe/da-admin/compare/v1.16.4...v1.16.5) (2026-11-19)
+
+
+### Bug Fixes
+
+* **hlx6:** block legacy access to migrated sites ([#343](https://github.com/adobe/da-admin/issues/343)) ([114009a](https://github.com/adobe/da-admin/commit/114009a969fe7a147a73fba49aad26610afd2833))
+
 ## [1.16.4](https://github.com/adobe/da-admin/compare/v1.16.3...v1.16.4) (2026-11-10)
 
 
