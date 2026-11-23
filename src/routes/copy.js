@@ -12,13 +12,14 @@
 import copyObject from '../storage/object/copy.js';
 import copyHelper from '../helpers/copy.js';
 import { hasPermission } from '../utils/auth.js';
-import { syncCopy } from '../utils/hlx6.js';
+import { HLX6_GONE, isHlx6Site, syncCopy } from '../utils/hlx6.js';
 
 export default async function copyHandler({ req, env, daCtx }) {
   const details = await copyHelper(req, daCtx);
   if (details.error) return details.error;
   if (!hasPermission(daCtx, details.source, 'read')
     || !hasPermission(daCtx, details.destination, 'write')) return { status: 403 };
+  if (isHlx6Site(env, daCtx.org, details.destination.split('/')[0])) return HLX6_GONE;
   const resp = await copyObject(env, daCtx, details, false);
   syncCopy({
     req, env, daCtx, details, resp,

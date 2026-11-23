@@ -18,7 +18,7 @@ import { configPermissionPath, hasPermission } from '../utils/auth.js';
 // (the per-site `/{site}/CONFIG`, or `CONFIG` for org config) OR on the org-level
 // `CONFIG` keyword. The latter lets org admins manage any site's config; site rules
 // (including `/{site}/**` wildcards) can grant additional access but never restrict it.
-function hasConfigPermission(daCtx, action) {
+export function hasConfigPermission(daCtx, action) {
   return hasPermission(daCtx, configPermissionPath(daCtx), action, true)
     || hasPermission(daCtx, 'CONFIG', action, true);
 }

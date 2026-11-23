@@ -16,7 +16,8 @@ import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
-import { HLX6_GONE, initHlx6, isHlx6Site } from './utils/hlx6.js';
+import { hasHlx6Sites, initHlx6, isHlx6Site } from './utils/hlx6.js';
+import hlx6Handler, { listHlx6Org } from './routes/hlx6.js';
 
 export default {
   /**
@@ -76,7 +77,10 @@ export default {
       // The key also identifies bare site roots, where daCtx.site is undefined.
       const [site] = (key || '').split('/');
       if (api !== 'login' && api !== 'logout' && isHlx6Site(env, org, site)) {
-        return daResp({ ...HLX6_GONE, body: req.method === 'HEAD' ? undefined : HLX6_GONE.body });
+        return await hlx6Handler({ req, env, daCtx });
+      }
+      if (api === 'list' && org && !key && req.method === 'GET' && hasHlx6Sites(env, org)) {
+        return await listHlx6Org({ req, env, daCtx });
       }
 
       switch (req.method) {

@@ -237,10 +237,11 @@ describe('fetch', () => {
   });
 });
 
-describe('Helix 6 request guard', () => {
+describe('Helix 6 request routing', () => {
   let hnd;
   let fetchStub;
   let dispatch;
+  let bridge;
   let users;
   let env;
 
@@ -251,6 +252,10 @@ describe('Helix 6 request guard', () => {
       '../src/handlers/head.js': route,
       '../src/handlers/post.js': route,
       '../src/handlers/delete.js': route,
+      '../src/routes/hlx6.js': {
+        default: (...args) => bridge(...args),
+        listHlx6Org: (...args) => bridge(...args),
+      },
     }, {
       '../src/utils/auth.js': { getUsers: async () => users },
     });
@@ -260,6 +265,7 @@ describe('Helix 6 request guard', () => {
     users = [{ email: 'test@example.com' }];
     env = { HLX6_MIGRATED_SITES: ['org/site'] };
     dispatch = sinon.stub().resolves({ status: 200, body: 'legacy content' });
+    bridge = sinon.stub().callsFake(({ req }) => new Response(req.method === 'HEAD' ? null : '{"source":"Helix 6"}'));
     fetchStub = sinon.stub(globalThis, 'fetch').rejects(new Error('Unexpected outbound request'));
     sinon.stub(console, 'log');
     sinon.stub(console, 'error');
@@ -273,14 +279,15 @@ describe('Helix 6 request guard', () => {
   const request = (path, method = 'GET') => new Request(`https://admin.da.live${path}`, { method });
 
   ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'].forEach((method) => {
-    it(`rejects ${method} before reaching legacy storage`, async () => {
+    it(`routes migrated ${method} before reaching legacy storage`, async () => {
       const resp = await hnd.fetch(request('/source/org/site/file.html', method), env);
-      assert.strictEqual(resp.status, 410);
+      assert.strictEqual(resp.status, 200);
       assert(dispatch.notCalled);
+      assert(bridge.calledOnce);
       if (method === 'HEAD') {
         assert.strictEqual(await resp.text(), '');
       } else {
-        assert.match((await resp.json()).error, /Helix 6/);
+        assert.strictEqual((await resp.json()).source, 'Helix 6');
       }
     });
   });
@@ -298,10 +305,11 @@ describe('Helix 6 request guard', () => {
     ['/media/org/site/image.jpg', 'POST'],
     ['/api/source/ORG/SITE/file.html', 'GET'],
   ].forEach(([path, method]) => {
-    it(`rejects site-scoped ${method} ${path}`, async () => {
+    it(`bridges site-scoped ${method} ${path}`, async () => {
       const resp = await hnd.fetch(request(path, method), env);
-      assert.strictEqual(resp.status, 410);
+      assert.strictEqual(resp.status, 200);
       assert(dispatch.notCalled);
+      assert(bridge.calledOnce);
     });
   });
 
@@ -314,7 +322,8 @@ describe('Helix 6 request guard', () => {
 
     env.HLX6_MIGRATED_SITES.push('org/site');
     const upgraded = await hnd.fetch(req, env);
-    assert.strictEqual(upgraded.status, 410);
+    assert.strictEqual(upgraded.status, 200);
+    assert(bridge.calledOnce);
     assert(dispatch.calledOnce);
 
     env.HLX6_MIGRATED_SITES = [];
@@ -334,13 +343,14 @@ describe('Helix 6 request guard', () => {
     });
   });
 
-  it('rejects a migrated site when it leaves dual write', async () => {
+  it('bridges a migrated site when it leaves dual write', async () => {
     env.HLX6_DUAL_WRITES = ['org/site'];
     const req = request('/source/org/site/file.html');
     assert.strictEqual((await hnd.fetch(req, env)).status, 200);
 
     env.HLX6_DUAL_WRITES = [];
-    assert.strictEqual((await hnd.fetch(req, env)).status, 410);
+    assert.strictEqual((await hnd.fetch(req, env)).status, 200);
+    assert(bridge.calledOnce);
     assert(dispatch.calledOnce);
   });
 
@@ -349,13 +359,13 @@ describe('Helix 6 request guard', () => {
       HLX6_MIGRATED_SITES: ['target/other'],
       HLX6_DUAL_WRITES: ['org/site -> target/other'],
     });
-    assert.strictEqual(resp.status, 410);
+    assert.strictEqual(resp.status, 200);
+    assert(bridge.calledOnce);
     assert(dispatch.notCalled);
   });
 
   [
     ['/source/org/site/file.html', 'OPTIONS'],
-    ['/list/org', 'GET'],
     ['/config/org', 'GET'],
     ['/logout/org/site', 'GET'],
   ].forEach(([path, method]) => {
@@ -364,6 +374,13 @@ describe('Helix 6 request guard', () => {
       assert.strictEqual(resp.status, method === 'OPTIONS' ? 204 : 200);
       assert(fetchStub.notCalled);
     });
+  });
+
+  it('bridges mixed org listings', async () => {
+    const resp = await hnd.fetch(request('/list/org'), env);
+    assert.strictEqual(resp.status, 200);
+    assert(bridge.calledOnce);
+    assert(dispatch.notCalled);
   });
 
   it('preserves authentication before checking sites', async () => {

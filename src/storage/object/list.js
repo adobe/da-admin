@@ -35,7 +35,7 @@ function buildInput({
 // in because some descendant is permitted (see src/routes/list.js). Every
 // child then needs its own check: folders may lead to a permitted descendant
 // even if not directly readable, but files have no descendants to fall back on.
-function filterUnauthorized(daCtx, items) {
+export function filterUnauthorized(daCtx, items) {
   // item.path is bucket-relative (starts with /{org}/...) since one bucket is
   // shared across orgs, but permissions are org-scoped and keyed off
   // org-relative paths (like daCtx.key) - so the org segment must be stripped

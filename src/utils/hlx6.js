@@ -160,6 +160,13 @@ export function isHlx6Site(env, org, site) {
     && !getHlx6Target(env, org, site);
 }
 
+export function hasHlx6Sites(env, org) {
+  return [...getMigratedSites(env)].some((entry) => {
+    const [owner, site] = entry.split('/');
+    return owner === org?.toLowerCase() && isHlx6Site(env, owner, site);
+  });
+}
+
 /**
  * Splits an org-relative DA key (`site/path/to/file.html`) into site and path.
  */
