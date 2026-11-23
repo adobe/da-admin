@@ -163,6 +163,53 @@ describe('Helix 6 compatibility bridge', () => {
     assert(fetchStub.notCalled);
   });
 
+  it('saves multi-sheet config and rejects duplicate sheet names', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    const form = new FormData();
+    form.set('config', JSON.stringify({
+      ':type': 'multi-sheet',
+      ':names': ['data', 'library'],
+      data: { data: [{ key: 'theme' }] },
+      library: { data: [{ title: 'Blocks' }] },
+    }));
+    const resp = await call('/config/org/site', { method: 'PUT', body: form });
+    assert.strictEqual(resp.status, 201);
+    assert.deepStrictEqual(JSON.parse(fetchStub.firstCall.args[1].body), {
+      data: [{ key: 'theme' }], library: [{ title: 'Blocks' }],
+    });
+    const duplicate = new FormData();
+    duplicate.set('config', JSON.stringify({ ':type': 'multi-sheet', ':names': ['data', 'data'] }));
+    const rejected = await call('/config/org/site', { method: 'PUT', body: duplicate });
+    assert.strictEqual(rejected.status, 400);
+    assert.match((await rejected.json()).error, /Invalid sheet names/);
+    assert(fetchStub.calledOnce);
+  });
+
+  it('fails explicitly on a malformed upstream editor config', async () => {
+    fetchStub.resolves(new Response('{"data":"not rows"}'));
+    const resp = await call('/config/org/site');
+    assert.strictEqual(resp.status, 502);
+    assert.match(resp.headers.get('x-error'), /editor configuration/);
+  });
+
+  it('rejects collaborative writes before reading the body', async () => {
+    const resp = await call('/source/org/site/a.html', {
+      method: 'PUT', body: '<main></main>', headers: { 'content-type': 'text/html', 'x-da-initiator': 'collab' },
+    });
+    assert.strictEqual(resp.status, 410);
+    assert.match((await resp.json()).error, /Collaborative writes/);
+    assert(fetchStub.notCalled);
+  });
+
+  it('rejects unparseable multipart uploads', async () => {
+    const resp = await call('/source/org/site/a.html', {
+      method: 'PUT', body: 'not multipart', headers: { 'content-type': 'multipart/form-data; boundary=x' },
+    });
+    assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /Invalid source upload/);
+    assert(fetchStub.notCalled);
+  });
+
   it('unwraps a source multipart save and returns DA source/preview/live URLs', async () => {
     const form = new FormData();
     form.set('data', new Blob(['{"data":[]}'], { type: 'application/json' }), 'tags.json');
@@ -427,6 +474,21 @@ describe('Helix 6 compatibility bridge', () => {
     fetchStub.resolves(new Response(JSON.stringify([{ name: 'site/' }, { name: 'hlx6only/' }])));
     const resp = await call('/list/org', {}, module.listHlx6Org);
     assert.deepStrictEqual(await resp.json(), [{ path: '/org/site', name: 'site' }]);
+  });
+
+  it('denies folder listings without read or descendant permission', async () => {
+    env.DA_CONFIG = {
+      get: async () => ({
+        permissions: {
+          data: [
+            { path: '/other/**', actions: 'read', groups: 'author@example.com' },
+          ],
+        },
+      }),
+    };
+    const resp = await call('/list/org/site/library');
+    assert.strictEqual(resp.status, 403);
+    assert(fetchStub.notCalled);
   });
 
   it('propagates legacy org-list failures', async () => {
