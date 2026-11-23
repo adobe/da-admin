@@ -299,6 +299,32 @@ describe('Helix 6 compatibility bridge', () => {
     assert(fetchStub.calledTwice);
   });
 
+  it('returns the save envelope with 200 when the upstream answers 204', async () => {
+    fetchStub.resolves(new Response(null, { status: 204 }));
+    const resp = await call('/source/org/site/a.html', {
+      method: 'POST', body: '<main></main>', headers: { 'content-type': 'text/html' },
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual((await resp.json()).source.editUrl, 'https://da.live/edit#/org/site/a');
+  });
+
+  it('reports a saved source with an unparseable Location URL without throwing', async () => {
+    fetchStub.resolves(new Response(null, { status: 201, headers: { location: 'http://[bad' } }));
+    const resp = await call('/source/org/site/a.html', {
+      method: 'POST', body: '<main></main>', headers: { 'content-type': 'text/html' },
+    });
+    assert.strictEqual(resp.status, 502);
+    assert.match((await resp.json()).error, /do not blindly retry/);
+  });
+
+  it('falls back to the extension type for untyped file uploads', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    const form = new FormData();
+    form.set('data', new Blob(['{}']), 'a.json');
+    await call('/source/org/site/a.json', { method: 'POST', body: form });
+    assert.strictEqual(fetchStub.firstCall.args[1].headers.get('content-type'), 'application/json');
+  });
+
   it('does not redirect a saved source envelope to another host', async () => {
     fetchStub.resolves(new Response(null, {
       status: 201, headers: { location: 'https://other.example/file.html' },
@@ -402,19 +428,24 @@ describe('Helix 6 compatibility bridge', () => {
     assert(fetchStub.notCalled);
   });
 
-  it('merges DA and HLX6 org source sites on the first org page only', async () => {
+  it('merges bridged HLX6 org sites on the first page, deduplicating by path', async () => {
+    env.HLX6_MIGRATED_SITES = ['org/site', 'org/both'];
     const legacy = sinon.stub().resolves({
       status: 200,
       body: JSON.stringify([
         { path: '/org/site', name: 'site' },
         { path: '/org/legacy', name: 'legacy' },
         { path: '/org/both', name: 'both' },
+        { path: '/org/both.json', name: 'both', ext: 'json' },
+        { path: '/org/notes', name: 'notes' },
+        { path: '/org/notes.json', name: 'notes', ext: 'json' },
       ]),
       continuationToken: 'next-page',
     });
     const module = await esmock('../../src/routes/hlx6.js', {
       '../../src/routes/list.js': { default: legacy },
     });
+    const timeout = sinon.spy(AbortSignal, 'timeout');
     fetchStub.callsFake(async () => new Response(JSON.stringify([
       { name: 'hlx6only/', 'content-type': 'application/folder' },
       { name: 'both/', 'content-type': 'application/folder' },
@@ -425,18 +456,21 @@ describe('Helix 6 compatibility bridge', () => {
     assert.strictEqual(fetchStub.firstCall.args[0], 'https://api.example.com/org/source/');
     assert.strictEqual(fetchStub.firstCall.args[1].method, 'GET');
     assert.strictEqual(fetchStub.firstCall.args[1].headers.get('authorization'), 'Bearer caller');
+    assert(timeout.calledWith(3000));
     assert.deepStrictEqual(await first.json(), [
+      { path: '/org/both.json', name: 'both', ext: 'json' },
       { path: '/org/both', name: 'both' },
-      { path: '/org/hlx6only', name: 'hlx6only' },
       { path: '/org/legacy', name: 'legacy' },
+      { path: '/org/notes', name: 'notes' },
+      { path: '/org/notes.json', name: 'notes', ext: 'json' },
       { path: '/org/site', name: 'site' },
     ]);
     assert.strictEqual(first.headers.get('da-continuation-token'), 'next-page');
     const second = await call('/list/org', {
       headers: { 'da-continuation-token': 'next-page' },
     }, module.listHlx6Org);
-    assert.deepStrictEqual(await second.json(), [
-      { path: '/org/legacy', name: 'legacy' }, { path: '/org/site', name: 'site' },
+    assert.deepStrictEqual((await second.json()).map((item) => item.path), [
+      '/org/both.json', '/org/legacy', '/org/notes', '/org/notes.json', '/org/site',
     ]);
   });
 

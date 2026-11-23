@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import daResp from '../utils/daResp.js';
-import { DEFAULT_AEM_API, HLX6_GONE } from '../utils/hlx6.js';
+import { DEFAULT_AEM_API, HLX6_GONE, isHlx6Site } from '../utils/hlx6.js';
 import { hasDescendantPermission, hasPermission } from '../utils/auth.js';
 import { FORM_TYPES } from '../utils/constants.js';
 import { sourceRespObject } from '../helpers/source.js';
@@ -23,6 +23,7 @@ import getList from './list.js';
 /** @typedef {Awaited<ReturnType<typeof import('../utils/daCtx.js').default>>} DaCtx */
 
 const TEXT_UPLOAD_TYPES = { html: 'text/html', json: 'application/json', svg: 'image/svg+xml' };
+const ORG_LIST_TIMEOUT = 3000;
 
 /**
  * Builds a non-cacheable DA error response, omitting the body for HEAD.
@@ -80,10 +81,11 @@ function adaptedResponse(upstream, {
  * @param {BodyInit} [options.body] Raw source bytes or editor-config JSON.
  * @param {string} [options.type] MIME type of the upstream payload.
  * @param {boolean} [options.conditional=false] Whether to forward If-Match/If-None-Match.
+ * @param {number} [options.timeout=20000] Upstream timeout in milliseconds.
  * @returns {Promise<Response>} Upstream response or explicit bridge error.
  */
 async function requestHlx6(req, env, path, {
-  method = req.method, body, type, conditional = false,
+  method = req.method, body, type, conditional = false, timeout = 20000,
 } = {}) {
   const auth = req.headers.get('authorization') || '';
   if (auth.includes(',')) {
@@ -101,7 +103,7 @@ async function requestHlx6(req, env, path, {
   }
   try {
     const resp = await fetch(url, {
-      method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(20000),
+      method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(timeout),
     });
     if (resp.status >= 300 && resp.status < 400 && resp.status !== 304) {
       await resp.body?.cancel();
@@ -224,15 +226,18 @@ async function listSource({ req, env, daCtx }) {
 }
 
 /**
- * Lists the org's HLX6 source-bus sites (`GET /{org}/source/`) with the caller's token.
- * Best effort: failures are logged and yield no sites so DA org browsing keeps working.
+ * Lists the org's bridged HLX6 sites: entries of `GET /{org}/source/` (caller token) that
+ * are also in HLX6_MIGRATED_SITES, so every listed site opens through the bridge.
+ * Best effort with a short timeout: failures yield no sites so DA org browsing keeps working.
  * @param {Request} req Legacy request carrying the caller credentials.
  * @param {Env} env Worker bindings and API base URL.
  * @param {string} org DA organization name.
- * @returns {Promise<string[]>} Lowercase HLX6 site names.
+ * @returns {Promise<string[]>} Lowercase bridged site names.
  */
 async function fetchHlx6OrgSites(req, env, org) {
-  const upstream = await requestHlx6(req, env, `${encodeURIComponent(org)}/source/`, { method: 'GET' });
+  const upstream = await requestHlx6(req, env, `${encodeURIComponent(org)}/source/`, {
+    method: 'GET', timeout: ORG_LIST_TIMEOUT,
+  });
   if (!upstream.ok) {
     await upstream.body?.cancel();
     console.error('[hlx6] Org source listing unavailable; using DA sites only', upstream.status);
@@ -244,7 +249,8 @@ async function fetchHlx6OrgSites(req, env, org) {
     return items
       .map((item) => item?.name)
       .filter((name) => typeof name === 'string' && /^[^/.]+\/$/.test(name))
-      .map((name) => name.slice(0, -1).toLowerCase());
+      .map((name) => name.slice(0, -1).toLowerCase())
+      .filter((site) => isHlx6Site(env, org, site));
   } catch (e) {
     console.error('[hlx6] Invalid org source listing; using DA sites only', e.message);
     return [];
@@ -252,9 +258,9 @@ async function fetchHlx6OrgSites(req, env, org) {
 }
 
 /**
- * Merges DA org sites with the org's HLX6 org source listing on the first page,
- * preserving legacy pagination. HLX6 failures degrade to the DA listing rather than
- * failing it. Later pages omit entries already listed from HLX6 on the first page.
+ * Merges DA org sites with the org's bridged HLX6 sites on the first page, preserving
+ * legacy pagination. HLX6 failures degrade to the DA listing rather than failing it.
+ * Later pages omit site folders already listed from HLX6 on the first page.
  * @param {{req: Request, env: Env, daCtx: DaCtx}} options Legacy org-list request and context.
  * @returns {Promise<Response>} Deduplicated site listing or backend error.
  */
@@ -262,13 +268,13 @@ export async function listHlx6Org({ req, env, daCtx }) {
   const legacy = await getList({ env, daCtx });
   if (legacy.status !== 200) return daResp(legacy, daCtx);
   const hlx6Sites = new Set(await fetchHlx6OrgSites(req, env, daCtx.org));
-  let items = JSON.parse(legacy.body).filter((item) => !hlx6Sites.has(item.name));
+  let items = JSON.parse(legacy.body).filter((item) => item.ext || !hlx6Sites.has(item.name));
   if (!daCtx.continuationToken) {
     const sites = [...hlx6Sites].map((site) => ({ path: `/${daCtx.org}/${site}`, name: site }));
     items = [...items, ...(hasPermission(daCtx, daCtx.key, 'read')
       ? sites : filterUnauthorized(daCtx, sites))];
   }
-  const unique = [...new Map(items.map((item) => [item.name, item])).values()];
+  const unique = [...new Map(items.map((item) => [item.path, item])).values()];
   unique.sort((a, b) => a.name.localeCompare(b.name));
   const resp = daResp({ ...legacy, body: JSON.stringify(unique) }, daCtx);
   resp.headers.set('cache-control', 'private, no-store');
@@ -305,7 +311,9 @@ async function configSource({ req, env, daCtx }) {
   if (!upstream.ok) return adaptedResponse(upstream);
   try {
     const body = JSON.stringify(toSheets(write ? config : await upstream.json()));
-    return adaptedResponse(upstream, { body, contentType: 'application/json' });
+    return adaptedResponse(upstream, {
+      body, contentType: 'application/json', status: upstream.status === 204 ? 200 : upstream.status,
+    });
   } catch (e) {
     console.error('[hlx6] Invalid editor config response', e.message);
     return errorResponse(502, 'Invalid editor configuration response from https://api.aem.live.');
@@ -372,7 +380,8 @@ async function saveSource({ req, env, daCtx }) {
         type = TEXT_UPLOAD_TYPES[daCtx.ext];
         if (!type && daCtx.isFile) return errorResponse(415, `Text uploads are not supported for .${daCtx.ext} files.`);
       } else {
-        ({ type } = data);
+        type = (data.type && data.type !== 'application/octet-stream' && data.type)
+          || TEXT_UPLOAD_TYPES[daCtx.ext] || data.type;
       }
     } else {
       body = await req.arrayBuffer();
@@ -393,16 +402,14 @@ async function saveSource({ req, env, daCtx }) {
   let legacyLocation;
   if (location) {
     const base = env.AEM_API || DEFAULT_AEM_API;
-    const url = new URL(location, `${base}/${siteSourcePath(daCtx, empty)}`);
     const prefix = `/${daCtx.org}/sites/${site}/source/`;
     const siteRelative = location.startsWith('/') && !location.startsWith('//');
-    if (url.origin !== new URL(base).origin
-      || (!siteRelative && !url.pathname.startsWith(prefix))) {
-      return errorResponse(502, 'https://api.aem.live saved content but returned an unexpected location; do not blindly retry.');
-    }
-    // Source POST returns a site-relative Location; version URLs use a full API path.
     let path;
     try {
+      const url = new URL(location, `${base}/${siteSourcePath(daCtx, empty)}`);
+      if (url.origin !== new URL(base).origin
+        || (!siteRelative && !url.pathname.startsWith(prefix))) throw new Error('Unexpected location');
+      // Source POST returns a site-relative Location; version URLs use a full API path.
       path = decodeURIComponent(url.pathname.startsWith(prefix)
         ? url.pathname.slice(prefix.length - 1) : url.pathname);
     } catch {
@@ -413,7 +420,11 @@ async function saveSource({ req, env, daCtx }) {
     legacyLocation = `${new URL(req.url).origin}/source/${daCtx.org}/${site}${path}`;
   }
   const result = sourceRespObject(env, context);
-  const resp = adaptedResponse(upstream, { body: JSON.stringify(result), contentType: 'application/json' });
+  const resp = adaptedResponse(upstream, {
+    body: JSON.stringify(result),
+    contentType: 'application/json',
+    status: upstream.status === 204 ? 200 : upstream.status,
+  });
   if (legacyLocation) resp.headers.set('location', legacyLocation);
   return resp;
 }
