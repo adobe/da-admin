@@ -355,8 +355,7 @@ describe('Helix 6 compatibility bridge', () => {
     assert(fetchStub.notCalled);
   });
 
-  it('merges DA, HLX6 source and migrated sites on the first org page only', async () => {
-    env.HLX6_MIGRATED_SITES = ['org/site', 'org/other', 'elsewhere/site'];
+  it('merges DA and HLX6 org source sites on the first org page only', async () => {
     const legacy = sinon.stub().resolves({
       status: 200,
       body: JSON.stringify([
@@ -383,14 +382,15 @@ describe('Helix 6 compatibility bridge', () => {
       { path: '/org/both', name: 'both' },
       { path: '/org/hlx6only', name: 'hlx6only' },
       { path: '/org/legacy', name: 'legacy' },
-      { path: '/org/other', name: 'other' },
       { path: '/org/site', name: 'site' },
     ]);
     assert.strictEqual(first.headers.get('da-continuation-token'), 'next-page');
     const second = await call('/list/org', {
       headers: { 'da-continuation-token': 'next-page' },
     }, module.listHlx6Org);
-    assert.deepStrictEqual(await second.json(), [{ path: '/org/legacy', name: 'legacy' }]);
+    assert.deepStrictEqual(await second.json(), [
+      { path: '/org/legacy', name: 'legacy' }, { path: '/org/site', name: 'site' },
+    ]);
   });
 
   [
@@ -398,7 +398,7 @@ describe('Helix 6 compatibility bridge', () => {
     () => new Response('{"not":"a listing"}'),
     () => { throw new Error('Connection reset'); },
   ].forEach((upstream, i) => {
-    it(`keeps DA and configured sites when the HLX6 org listing fails (${i})`, async () => {
+    it(`keeps the DA listing when the HLX6 org listing fails (${i})`, async () => {
       const module = await esmock('../../src/routes/hlx6.js', {
         '../../src/routes/list.js': {
           default: async () => ({ status: 200, body: JSON.stringify([{ path: '/org/legacy', name: 'legacy' }]) }),
@@ -407,14 +407,11 @@ describe('Helix 6 compatibility bridge', () => {
       fetchStub.callsFake(async () => upstream());
       const resp = await call('/list/org', {}, module.listHlx6Org);
       assert.strictEqual(resp.status, 200);
-      assert.deepStrictEqual(await resp.json(), [
-        { path: '/org/legacy', name: 'legacy' }, { path: '/org/site', name: 'site' },
-      ]);
+      assert.deepStrictEqual(await resp.json(), [{ path: '/org/legacy', name: 'legacy' }]);
     });
   });
 
   it('filters HLX6 org sites by DA ACLs for descendant-only org readers', async () => {
-    env.HLX6_MIGRATED_SITES = ['org/site', 'org/other'];
     env.DA_CONFIG = {
       get: async () => ({
         permissions: {
@@ -427,7 +424,7 @@ describe('Helix 6 compatibility bridge', () => {
     const module = await esmock('../../src/routes/hlx6.js', {
       '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
     });
-    fetchStub.resolves(new Response(JSON.stringify([{ name: 'hlx6only/' }])));
+    fetchStub.resolves(new Response(JSON.stringify([{ name: 'site/' }, { name: 'hlx6only/' }])));
     const resp = await call('/list/org', {}, module.listHlx6Org);
     assert.deepStrictEqual(await resp.json(), [{ path: '/org/site', name: 'site' }]);
   });

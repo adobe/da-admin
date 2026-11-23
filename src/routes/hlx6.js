@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import daResp from '../utils/daResp.js';
-import { DEFAULT_AEM_API, HLX6_GONE, getHlx6Sites } from '../utils/hlx6.js';
+import { DEFAULT_AEM_API, HLX6_GONE } from '../utils/hlx6.js';
 import { hasDescendantPermission, hasPermission } from '../utils/auth.js';
 import { FORM_TYPES } from '../utils/constants.js';
 import { sourceRespObject } from '../helpers/source.js';
@@ -235,7 +235,7 @@ async function fetchHlx6OrgSites(req, env, org) {
   const upstream = await requestHlx6(req, env, `${encodeURIComponent(org)}/source/`, { method: 'GET' });
   if (!upstream.ok) {
     await upstream.body?.cancel();
-    console.error('[hlx6] Org source listing unavailable; using DA and configured sites', upstream.status);
+    console.error('[hlx6] Org source listing unavailable; using DA sites only', upstream.status);
     return [];
   }
   try {
@@ -246,26 +246,22 @@ async function fetchHlx6OrgSites(req, env, org) {
       .filter((name) => typeof name === 'string' && /^[^/.]+\/$/.test(name))
       .map((name) => name.slice(0, -1).toLowerCase());
   } catch (e) {
-    console.error('[hlx6] Invalid org source listing; using DA and configured sites', e.message);
+    console.error('[hlx6] Invalid org source listing; using DA sites only', e.message);
     return [];
   }
 }
 
 /**
- * Merges DA org sites with the org's HLX6 sites (from the HLX6 org source listing and
- * HLX6_MIGRATED_SITES) on the first page, preserving legacy pagination.
- * HLX6 failures degrade to DA plus configured sites rather than failing the listing.
- * Later pages omit entries already listed from HLX6 on the first page.
+ * Merges DA org sites with the org's HLX6 org source listing on the first page,
+ * preserving legacy pagination. HLX6 failures degrade to the DA listing rather than
+ * failing it. Later pages omit entries already listed from HLX6 on the first page.
  * @param {{req: Request, env: Env, daCtx: DaCtx}} options Legacy org-list request and context.
  * @returns {Promise<Response>} Deduplicated site listing or backend error.
  */
 export async function listHlx6Org({ req, env, daCtx }) {
   const legacy = await getList({ env, daCtx });
   if (legacy.status !== 200) return daResp(legacy, daCtx);
-  const hlx6Sites = new Set([
-    ...getHlx6Sites(env, daCtx.org),
-    ...await fetchHlx6OrgSites(req, env, daCtx.org),
-  ]);
+  const hlx6Sites = new Set(await fetchHlx6OrgSites(req, env, daCtx.org));
   let items = JSON.parse(legacy.body).filter((item) => !hlx6Sites.has(item.name));
   if (!daCtx.continuationToken) {
     const sites = [...hlx6Sites].map((site) => ({ path: `/${daCtx.org}/${site}`, name: site }));

@@ -58,9 +58,8 @@ The bridge supports:
   filtering. HLX6 listings are unpaginated; a legacy continuation token on a
   migrated site's listing is rejected.
 - Org GET listings, merging legacy DA sites with the org's HLX6 sites
-  (`GET /{org}/source/` with the caller's token) and its configured
-  `HLX6_MIGRATED_SITES` entries, filtered by DA ACLs. If the HLX6 listing
-  fails (outage, missing HLX6 role), DA and configured sites are still
+  (`GET /{org}/source/` with the caller's token), filtered by DA ACLs. If the
+  HLX6 listing fails (outage, missing HLX6 role), the DA listing is still
   returned. Only the first legacy page adds HLX6 sites; subsequent pages
   preserve the DA continuation token without repeating them.
 - Site editor-config GET and multipart PUT/POST (`config` field), converting
