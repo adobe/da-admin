@@ -22,7 +22,7 @@
 export const DEFAULT_AEM_API = 'https://api.aem.live';
 export const HLX6_GONE = {
   status: 410,
-  body: JSON.stringify({ error: 'This site is served by Helix 6. Use https://api.aem.live instead.' }),
+  body: JSON.stringify({ error: 'Use https://api.aem.live instead.' }),
 };
 
 const SUCCESS = [200, 201, 204, 206];

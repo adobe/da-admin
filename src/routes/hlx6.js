@@ -87,7 +87,7 @@ async function requestHlx6(req, env, path, {
 } = {}) {
   const auth = req.headers.get('authorization') || '';
   if (auth.includes(',')) {
-    return errorResponse(410, 'Multiple author tokens are not supported by the Helix 6 bridge.', method === 'HEAD');
+    return errorResponse(410, 'Multiple author tokens are not supported. Use https://api.aem.live instead.', method === 'HEAD');
   }
   if (!/^Bearer \S+$/i.test(auth)) return errorResponse(401, 'A caller Bearer token is required.', method === 'HEAD');
 
@@ -106,13 +106,13 @@ async function requestHlx6(req, env, path, {
     if (resp.status >= 300 && resp.status < 400 && resp.status !== 304) {
       await resp.body?.cancel();
       console.error('[hlx6] Unexpected bridge upstream redirect', method, path, resp.status);
-      return errorResponse(502, 'Unexpected Helix 6 redirect.', method === 'HEAD');
+      return errorResponse(502, 'Unexpected redirect from https://api.aem.live.', method === 'HEAD');
     }
     if (resp.status >= 400) console.error('[hlx6] Bridge upstream error', method, path, resp.status);
     return resp;
   } catch (e) {
     console.error('[hlx6] Bridge request failed', method, path, e.name);
-    return errorResponse(502, 'Helix 6 request failed; mutations are not automatically retried.', method === 'HEAD');
+    return errorResponse(502, 'Request to https://api.aem.live failed; mutations are not automatically retried.', method === 'HEAD');
   }
 }
 
@@ -211,7 +211,7 @@ async function listSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'read') && !hasDescendantPermission(daCtx, daCtx.key, 'read')) {
     return errorResponse(403, 'No listing permission.');
   }
-  if (daCtx.continuationToken) return errorResponse(400, 'Helix 6 source listings are not paginated.');
+  if (daCtx.continuationToken) return errorResponse(400, 'Source listings are not paginated. Use https://api.aem.live instead.');
   const upstream = await requestHlx6(req, env, siteSourcePath(daCtx, true));
   if (!upstream.ok) return adaptedResponse(upstream);
   try {
@@ -219,7 +219,7 @@ async function listSource({ req, env, daCtx }) {
     return adaptedResponse(upstream, { body, contentType: 'application/json' });
   } catch (e) {
     console.error('[hlx6] Invalid listing response', e.message);
-    return errorResponse(502, 'Invalid Helix 6 listing response.');
+    return errorResponse(502, 'Invalid listing response from https://api.aem.live.');
   }
 }
 
@@ -289,7 +289,7 @@ async function configSource({ req, env, daCtx }) {
   const write = req.method !== 'GET';
   if (!hasConfigPermission(daCtx, write ? 'write' : 'read')) return errorResponse(403, 'No config permission.');
   const [site, ...parts] = daCtx.key.split('/');
-  if (parts.length) return errorResponse(410, 'Only site editor configuration is supported by the Helix 6 bridge.');
+  if (parts.length) return errorResponse(410, 'Only site editor configuration is supported. Use https://api.aem.live instead.');
   const path = `${daCtx.org}/sites/${site}/config/editor/da.json`;
   let config;
   if (write) {
@@ -312,7 +312,7 @@ async function configSource({ req, env, daCtx }) {
     return adaptedResponse(upstream, { body, contentType: 'application/json' });
   } catch (e) {
     console.error('[hlx6] Invalid editor config response', e.message);
-    return errorResponse(502, 'Invalid Helix 6 editor configuration response.');
+    return errorResponse(502, 'Invalid editor configuration response from https://api.aem.live.');
   }
 }
 
@@ -361,14 +361,14 @@ async function readSource({ req, env, daCtx }) {
 async function saveSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return errorResponse(403, 'No source write permission.');
   if (req.headers.get('x-da-initiator') === 'collab') {
-    return errorResponse(410, 'Collaborative writes are not supported by the Helix 6 bridge.');
+    return errorResponse(410, 'Collaborative writes are not supported. Use https://api.aem.live instead.');
   }
   let type = req.headers.get('content-type')?.split(';')[0].trim();
   let body;
   try {
     if (FORM_TYPES.includes(type)) {
       const form = await req.formData();
-      if (form.get('guid')) return errorResponse(410, 'DA document GUIDs are not supported by the Helix 6 bridge.');
+      if (form.get('guid')) return errorResponse(410, 'DA document GUIDs are not supported. Use https://api.aem.live instead.');
       const data = form.get('data');
       if (data === null) return errorResponse(400, 'Missing data form field.');
       body = typeof data === 'string' ? data : await data.arrayBuffer();
@@ -386,7 +386,7 @@ async function saveSource({ req, env, daCtx }) {
   }
   const empty = body.byteLength === 0 || body === '';
   if (empty && daCtx.isFile) return errorResponse(400, 'Missing source content.');
-  if (!empty && !daCtx.isFile) return errorResponse(410, 'Extensionless file writes are not supported by the Helix 6 bridge.');
+  if (!empty && !daCtx.isFile) return errorResponse(410, 'Extensionless file writes are not supported. Use https://api.aem.live instead.');
   const upstream = await requestHlx6(req, env, siteSourcePath(daCtx, empty), {
     method: 'POST', body: empty ? undefined : body, type: empty ? undefined : type, conditional: true,
   });
@@ -402,7 +402,7 @@ async function saveSource({ req, env, daCtx }) {
     const siteRelative = location.startsWith('/') && !location.startsWith('//');
     if (url.origin !== new URL(base).origin
       || (!siteRelative && !url.pathname.startsWith(prefix))) {
-      return errorResponse(502, 'Helix 6 saved content but returned an unexpected location; do not blindly retry.');
+      return errorResponse(502, 'https://api.aem.live saved content but returned an unexpected location; do not blindly retry.');
     }
     // Source POST returns a site-relative Location; version URLs use a full API path.
     let path;
@@ -410,7 +410,7 @@ async function saveSource({ req, env, daCtx }) {
       path = decodeURIComponent(url.pathname.startsWith(prefix)
         ? url.pathname.slice(prefix.length - 1) : url.pathname);
     } catch {
-      return errorResponse(502, 'Helix 6 saved content but returned an unexpected location; do not blindly retry.');
+      return errorResponse(502, 'https://api.aem.live saved content but returned an unexpected location; do not blindly retry.');
     }
     const editPath = path.replace(/\.html$/, '').replace(/\/$/, '');
     context = { ...context, pathname: `/${site}${editPath}`, aemPathname: editPath || '/' };
@@ -439,5 +439,5 @@ export default async function hlx6Handler({ req, env, daCtx }) {
   }
   if (api === 'list' && req.method === 'GET') return listSource({ req, env, daCtx });
   if (api === 'config' && ['GET', 'PUT', 'POST'].includes(req.method)) return configSource({ req, env, daCtx });
-  return errorResponse(HLX6_GONE.status, 'This operation is not supported by the Helix 6 bridge. Use https://api.aem.live instead.', req.method === 'HEAD');
+  return errorResponse(HLX6_GONE.status, 'This operation is not supported. Use https://api.aem.live instead.', req.method === 'HEAD');
 }
