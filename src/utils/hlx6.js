@@ -160,6 +160,12 @@ export function isHlx6Site(env, org, site) {
     && !getHlx6Target(env, org, site);
 }
 
+/**
+ * Determines whether an org listing needs migrated source-bus entries, excluding dual writes.
+ * @param {import('../index.js').Env} env Worker migration configuration.
+ * @param {string} org DA organization name.
+ * @returns {boolean} Whether any site in the org uses the compatibility bridge.
+ */
 export function hasHlx6Sites(env, org) {
   return [...getMigratedSites(env)].some((entry) => {
     const [owner, site] = entry.split('/');

@@ -38,6 +38,13 @@ describe('Helix 6 compatibility bridge', () => {
 
   afterEach(() => sinon.restore());
 
+  /**
+   * Exercises a bridge route with a legacy request and the normal DA context builder.
+   * @param {string} path Legacy API path.
+   * @param {RequestInit} [options={}] Request overrides with object-shaped headers.
+   * @param {typeof handler} [run=handler] Bridge route under test.
+   * @returns {Promise<Response>} Route response.
+   */
   async function call(path, options = {}, run = handler) {
     const req = new Request(`https://admin.da.live${path}`, {
       ...options, headers: { authorization: 'Bearer caller', ...options.headers },

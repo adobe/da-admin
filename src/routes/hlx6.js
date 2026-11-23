@@ -19,12 +19,32 @@ import { filterUnauthorized } from '../storage/object/list.js';
 import { hasConfigPermission } from './config.js';
 import getList from './list.js';
 
+/** @typedef {import('../index.js').Env} Env */
+/** @typedef {Awaited<ReturnType<typeof import('../utils/daCtx.js').default>>} DaCtx */
+
+/**
+ * Builds a non-cacheable DA error response, omitting the body for HEAD.
+ * @param {number} status HTTP status.
+ * @param {string} error Client-visible error message.
+ * @param {boolean} [head=false] Whether to omit the response body.
+ * @returns {Response} Legacy-host error response.
+ */
 function errorResponse(status, error, head = false) {
   const resp = daResp({ status, error, body: head ? undefined : JSON.stringify({ error }) });
   resp.headers.set('cache-control', 'private, no-store');
   return resp;
 }
 
+/**
+ * Wraps an upstream body with DA CORS and metadata without inventing UUIDs or ACL hints.
+ * @param {Response} upstream HLX6 response.
+ * @param {Object} [options={}] Response overrides for converted bodies or conditional reads.
+ * @param {BodyInit|null} [options.body] Body to stream or serialize.
+ * @param {number} [options.status] HTTP status override.
+ * @param {boolean} [options.head=false] Whether to omit the body and retain its length.
+ * @param {string} [options.contentType] MIME type of the adapted representation.
+ * @returns {Response} Non-cacheable response on the legacy host.
+ */
 function adaptedResponse(upstream, {
   body = upstream.body, status = upstream.status, head = false,
   contentType = upstream.headers.get('content-type') || 'application/json',
@@ -47,6 +67,18 @@ function adaptedResponse(upstream, {
   return resp;
 }
 
+/**
+ * Calls HLX6 with one caller Bearer token and conditional headers, without mutation retries.
+ * Authentication and transport failures become explicit responses; redirects are not followed.
+ * @param {Request} req Legacy request carrying the caller credentials.
+ * @param {Env} env Worker bindings and API base URL.
+ * @param {string} path Encoded API path relative to the configured base URL.
+ * @param {Object} [options={}] Upstream request overrides.
+ * @param {string} [options.method] HTTP method, defaulting to the legacy request method.
+ * @param {BodyInit} [options.body] Raw source bytes or editor-config JSON.
+ * @param {string} [options.type] MIME type of the upstream payload.
+ * @returns {Promise<Response>} Upstream response or explicit bridge error.
+ */
 async function requestHlx6(req, env, path, { method = req.method, body, type } = {}) {
   const auth = req.headers.get('authorization') || '';
   if (auth.includes(',')) {
@@ -72,16 +104,33 @@ async function requestHlx6(req, env, path, { method = req.method, body, type } =
   }
 }
 
+/**
+ * Maps an org-relative DA key to the site source API, encoding each storage-path segment.
+ * @param {DaCtx} daCtx DA context whose key includes the site segment.
+ * @param {boolean} [folder=false] Whether to append the listing/folder-creation slash.
+ * @returns {string} Encoded, API-relative source path.
+ */
 function siteSourcePath(daCtx, folder = false) {
   const [site, ...parts] = daCtx.key.split('/');
   const path = parts.map(encodeURIComponent).join('/');
   return `${daCtx.org}/sites/${site}/source${path ? `/${path}` : ''}${folder ? '/' : ''}`;
 }
 
+/**
+ * Converts editor row arrays to DA single- or multi-sheet JSON with complete sheet bounds.
+ * @param {Record<string, unknown[]>} obj Editor rows keyed by sheet name.
+ * @returns {Object} Legacy sheet representation.
+ * @throws {Error} If the input is not an object of row arrays.
+ */
 function toSheets(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)
     || !Object.values(obj).every(Array.isArray)) throw new Error('Expected editor sheet arrays');
   const names = Object.keys(obj);
+  /**
+   * Adds bounds for an entire, unpaginated editor sheet.
+   * @param {unknown[]} data Sheet rows.
+   * @returns {{total: number, limit: number, offset: number, data: unknown[]}} Sheet payload.
+   */
   const sheet = (data) => ({
     total: data.length, limit: data.length, offset: 0, data,
   });
@@ -94,6 +143,12 @@ function toSheets(obj) {
   ]);
 }
 
+/**
+ * Unwraps DA sheet data; already-flat input is returned for subsequent row-array validation.
+ * @param {Object} json Parsed legacy editor configuration.
+ * @returns {unknown} Flattened editor configuration or unchanged non-sheet input.
+ * @throws {Error} If sheet names are missing, invalid or duplicated.
+ */
 function fromSheets(json) {
   if (json?.[':type'] === 'sheet') {
     if (typeof json[':sheetname'] !== 'string' || !json[':sheetname']) throw new Error('Missing sheet name');
@@ -108,6 +163,13 @@ function fromSheets(json) {
   return json;
 }
 
+/**
+ * Converts source-bus entries using DA naming/hidden-item rules and descendant ACL filtering.
+ * @param {DaCtx} daCtx Listing context, including its org-relative parent key and ACLs.
+ * @param {Object[]} items HLX6 listing entries with names and file modification dates.
+ * @returns {Object[]} Legacy DA listing items.
+ * @throws {Error} If the upstream listing, names or file dates are malformed.
+ */
 function legacyList(daCtx, items) {
   if (!Array.isArray(items)) throw new Error('Expected a source listing array');
   const CommonPrefixes = [];
@@ -128,6 +190,11 @@ function legacyList(daCtx, items) {
   return hasPermission(daCtx, daCtx.key, 'read') ? result : filterUnauthorized(daCtx, result);
 }
 
+/**
+ * Serves a migrated folder listing, allowing readable descendants but rejecting legacy tokens.
+ * @param {{req: Request, env: Env, daCtx: DaCtx}} options Legacy request and listing context.
+ * @returns {Promise<Response>} Converted listing or explicit permission/upstream error.
+ */
 async function listSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'read') && !hasDescendantPermission(daCtx, daCtx.key, 'read')) {
     return errorResponse(403, 'No listing permission.');
@@ -145,6 +212,12 @@ async function listSource({ req, env, daCtx }) {
   }
 }
 
+/**
+ * Merges configured migrated sites into the first DA org page, preserving legacy pagination.
+ * Later pages omit migrated R2 entries; upstream failures never produce legacy-only success.
+ * @param {{req: Request, env: Env, daCtx: DaCtx}} options Legacy org-list request and context.
+ * @returns {Promise<Response>} Deduplicated site listing or backend error.
+ */
 export async function listHlx6Org({ req, env, daCtx }) {
   const legacy = await getList({ env, daCtx });
   if (legacy.status !== 200) return daResp(legacy, daCtx);
@@ -168,6 +241,12 @@ export async function listHlx6Org({ req, env, daCtx }) {
   return resp;
 }
 
+/**
+ * Reads or saves only editor.da, translating DA sheet wrappers and the multipart config field.
+ * Existing DA config permissions and upstream authorization both apply.
+ * @param {{req: Request, env: Env, daCtx: DaCtx}} options Legacy site-config request and context.
+ * @returns {Promise<Response>} Legacy config JSON or explicit validation/authorization error.
+ */
 async function configSource({ req, env, daCtx }) {
   const write = req.method !== 'GET';
   if (!hasConfigPermission(daCtx, write ? 'write' : 'read')) return errorResponse(403, 'No config permission.');
@@ -199,6 +278,12 @@ async function configSource({ req, env, daCtx }) {
   }
 }
 
+/**
+ * Streams migrated source GET/HEAD and restores DA conditional-read behavior.
+ * If-None-Match takes precedence; rejected representations are cancelled before responding.
+ * @param {{req: Request, env: Env, daCtx: DaCtx}} options Legacy source request and context.
+ * @returns {Promise<Response>} Source content, metadata or a conditional/authorization error.
+ */
 async function readSource({ req, env, daCtx }) {
   const head = req.method === 'HEAD';
   if (!hasPermission(daCtx, daCtx.key, 'read')) return errorResponse(403, 'No source permission.', head);
@@ -207,6 +292,12 @@ async function readSource({ req, env, daCtx }) {
   if (upstream.ok) {
     const etag = upstream.headers.get('etag');
     const { ifMatch, ifNoneMatch } = daCtx.conditionalHeaders;
+    /**
+     * Matches a conditional ETag list against the current representation.
+     * @param {string} value Comma-separated validators or the existence wildcard.
+     * @param {boolean} weak Whether weak comparison is permitted.
+     * @returns {boolean} Whether the condition matches the current upstream response.
+     */
     const matches = (value, weak) => value.split(',').some((tag) => {
       if (tag.trim() === '*') return true;
       if (!etag) return false;
@@ -222,6 +313,13 @@ async function readSource({ req, env, daCtx }) {
   });
 }
 
+/**
+ * Unwraps legacy uploads into synchronous HLX6 POSTs or bodyless folder creation.
+ * Successful writes return DA URLs based on upstream Location; GUID/collab writes are rejected.
+ * No legacy storage write or automatic mutation retry is performed.
+ * @param {{req: Request, env: Env, daCtx: DaCtx}} options Legacy source-save request and context.
+ * @returns {Promise<Response>} Legacy save envelope or explicit unsupported/upstream error.
+ */
 async function saveSource({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return errorResponse(403, 'No source write permission.');
   if (req.headers.get('x-da-initiator') === 'collab') {
@@ -280,6 +378,12 @@ async function saveSource({ req, env, daCtx }) {
   return resp;
 }
 
+/**
+ * Dispatches supported migrated-site reads/saves after the entry-point DA auth and ACL gates.
+ * Reserved history paths are hidden; unsupported operations return 410 without legacy fallback.
+ * @param {{req: Request, env: Env, daCtx: DaCtx}} options Legacy request and authenticated context.
+ * @returns {Promise<Response>} Adapted HLX6 result or explicit bridge error.
+ */
 export default async function hlx6Handler({ req, env, daCtx }) {
   const { api, key } = daCtx;
   if (key.split('/').some((part) => ['.versions', '.history'].includes(part))) {

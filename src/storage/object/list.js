@@ -31,10 +31,13 @@ function buildInput({
   return input;
 }
 
-// Only used when the caller couldn't read the listed folder directly, but got
-// in because some descendant is permitted (see src/routes/list.js). Every
-// child then needs its own check: folders may lead to a permitted descendant
-// even if not directly readable, but files have no descendants to fall back on.
+/**
+ * Filters a listing admitted through descendant permission rather than direct folder access.
+ * Folders may lead to readable descendants; files require their own read permission.
+ * @param {Object} daCtx DA context with the organization, users and org-scoped ACLs.
+ * @param {Object[]} items Legacy DA items with bucket-relative paths.
+ * @returns {Object[]} Items the caller can read or traverse.
+ */
 export function filterUnauthorized(daCtx, items) {
   // item.path is bucket-relative (starts with /{org}/...) since one bucket is
   // shared across orgs, but permissions are org-scoped and keyed off
