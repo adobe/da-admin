@@ -231,34 +231,105 @@ describe('Version Put', () => {
     assert.strictEqual(resp.error, 'testing 123');
   });
 
+  async function putWithConditionals(current, conditionals) {
+    const sendCalls = [];
+    const ifMatchValues = [];
+    const mockClient = {
+      async send(cmd) {
+        sendCalls.push(cmd);
+        return { $metadata: { httpStatusCode: 200 }, ETag: '"new-etag"' };
+      },
+    };
+    const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+      '../../../src/storage/object/get.js': { default: async () => current },
+      '../../../src/storage/utils/version.js': {
+        ifMatch: (config, value) => {
+          ifMatchValues.push(value);
+          return mockClient;
+        },
+        ifNoneMatch: () => mockClient,
+      },
+      '../../../src/storage/version/audit.js': { writeAuditEntry: async () => {} },
+    });
+    const resp = await putObjectWithVersion(
+      {},
+      { users: [{ email: 'a@b.com' }] },
+      { org: 'org', key: 'site/doc.html', type: 'text/html' },
+      null,
+      null,
+      conditionals,
+    );
+    return { resp, sendCalls, ifMatchValues };
+  }
+
+  describe('Client conditionals on an existing source', () => {
+    const existing = {
+      status: 200, metadata: { id: 'doc-id' }, etag: '"current"', contentType: 'text/html',
+    };
+
+    it('If-Match: * sends the current ETag to storage', async () => {
+      const { resp, ifMatchValues } = await putWithConditionals(existing, { ifMatch: '*' });
+
+      assert.strictEqual(resp.status, 200);
+      assert.deepStrictEqual(ifMatchValues, ['"current"']);
+    });
+
+    it('If-Match with a specific ETag sends that ETag to storage', async () => {
+      const { resp, ifMatchValues } = await putWithConditionals(existing, { ifMatch: '"client"' });
+
+      assert.strictEqual(resp.status, 200);
+      assert.deepStrictEqual(ifMatchValues, ['"client"']);
+    });
+
+    it('If-None-Match with the current ETag returns 412 without writing', async () => {
+      const { resp, sendCalls } = await putWithConditionals(existing, { ifNoneMatch: '"current"' });
+
+      assert.strictEqual(resp.status, 412);
+      assert.strictEqual(sendCalls.length, 0);
+    });
+
+    it('If-None-Match with a weak form of the current ETag returns 412', async () => {
+      const { resp, sendCalls } = await putWithConditionals(existing, { ifNoneMatch: 'W/"current"' });
+
+      assert.strictEqual(resp.status, 412);
+      assert.strictEqual(sendCalls.length, 0);
+    });
+
+    it('If-None-Match with a list that contains the current ETag returns 412', async () => {
+      const { resp, sendCalls } = await putWithConditionals(existing, { ifNoneMatch: '"other", "current"' });
+
+      assert.strictEqual(resp.status, 412);
+      assert.strictEqual(sendCalls.length, 0);
+    });
+
+    it('If-None-Match with a different ETag updates the source', async () => {
+      const { resp, sendCalls, ifMatchValues } = await putWithConditionals(existing, { ifNoneMatch: '"other"' });
+
+      assert.strictEqual(resp.status, 200);
+      assert.strictEqual(sendCalls.length, 1);
+      assert.deepStrictEqual(ifMatchValues, ['"current"']);
+    });
+  });
+
   describe('If-Match on a missing source', () => {
-    async function putMissing(conditionals) {
-      const sendCalls = [];
-      const mockClient = {
-        async send(cmd) {
-          sendCalls.push(cmd);
-          return { $metadata: { httpStatusCode: 200 }, ETag: '"new-etag"' };
-        },
-      };
-      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
-        '../../../src/storage/object/get.js': {
-          default: async () => ({ status: 404, metadata: {} }),
-        },
-        '../../../src/storage/utils/version.js': {
-          ifMatch: () => mockClient,
-          ifNoneMatch: () => mockClient,
-        },
-      });
-      const resp = await putObjectWithVersion(
-        {},
-        { users: [{ email: 'a@b.com' }] },
-        { org: 'org', key: 'site/doc.html', type: 'text/html' },
-        null,
-        null,
-        conditionals,
-      );
-      return { resp, sendCalls };
-    }
+    const putMissing = (conditionals) => putWithConditionals(
+      { status: 404, metadata: {} },
+      conditionals,
+    );
+
+    it('returns 412 without writing when both If-Match and If-None-Match are sent', async () => {
+      const { resp, sendCalls } = await putMissing({ ifMatch: '"stale-etag"', ifNoneMatch: '*' });
+
+      assert.strictEqual(resp.status, 412);
+      assert.strictEqual(sendCalls.length, 0);
+    });
+
+    it('creates the source for If-None-Match with a specific ETag', async () => {
+      const { resp, sendCalls } = await putMissing({ ifNoneMatch: '"some-etag"' });
+
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(sendCalls.length, 1);
+    });
 
     it('returns 412 without writing for a specific ETag', async () => {
       const { resp, sendCalls } = await putMissing({ ifMatch: '"stale-etag"' });

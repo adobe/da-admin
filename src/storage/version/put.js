@@ -99,6 +99,13 @@ function buildInput({
   };
 }
 
+function noneMatchHits(header, etag) {
+  if (header.trim() === '*') return true;
+  if (!etag) return false;
+  const weak = (tag) => tag.trim().replace(/^W\//, '');
+  return header.split(',').some((tag) => weak(tag) === weak(etag));
+}
+
 const MAX_PUT_ATTEMPTS = 5;
 
 export async function putObjectWithVersion(
@@ -164,13 +171,10 @@ export async function putObjectWithVersion(
     return { status: 412, metadata: { id: ID } };
   }
 
-  // Handle client-provided If-None-Match: * (requires resource NOT to exist)
-  if (effectiveConditionals?.ifNoneMatch === '*') {
-    if (current.status !== 404) {
-      return { status: 412, metadata: { id: ID } };
-    }
-    // Resource doesn't exist, proceed with create
-    // Fall through to create logic below
+  // Handle client-provided If-None-Match (requires resource NOT to exist, or not to match)
+  if (effectiveConditionals?.ifNoneMatch && current.status !== 404
+    && noneMatchHits(effectiveConditionals.ifNoneMatch, current.etag)) {
+    return { status: 412, metadata: { id: ID } };
   }
 
   if (current.status === 404) {
