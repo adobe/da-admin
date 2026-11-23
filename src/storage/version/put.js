@@ -159,13 +159,9 @@ export async function putObjectWithVersion(
     effectiveConditionals = { ifMatch: clientConditionals.ifMatch };
   }
 
-  // Handle client-provided If-Match: * (requires resource to exist)
-  if (effectiveConditionals?.ifMatch === '*') {
-    if (current.status === 404) {
-      return { status: 412, metadata: { id: ID } };
-    }
-    // Resource exists, proceed with update using actual ETag
-    // Fall through to update logic below with current.etag
+  // Handle client-provided If-Match (requires resource to exist)
+  if (effectiveConditionals?.ifMatch && current.status === 404) {
+    return { status: 412, metadata: { id: ID } };
   }
 
   // Handle client-provided If-None-Match: * (requires resource NOT to exist)

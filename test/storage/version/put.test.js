@@ -231,6 +231,64 @@ describe('Version Put', () => {
     assert.strictEqual(resp.error, 'testing 123');
   });
 
+  describe('If-Match on a missing source', () => {
+    async function putMissing(conditionals) {
+      const sendCalls = [];
+      const mockClient = {
+        async send(cmd) {
+          sendCalls.push(cmd);
+          return { $metadata: { httpStatusCode: 200 }, ETag: '"new-etag"' };
+        },
+      };
+      const { putObjectWithVersion } = await esmock('../../../src/storage/version/put.js', {
+        '../../../src/storage/object/get.js': {
+          default: async () => ({ status: 404, metadata: {} }),
+        },
+        '../../../src/storage/utils/version.js': {
+          ifMatch: () => mockClient,
+          ifNoneMatch: () => mockClient,
+        },
+      });
+      const resp = await putObjectWithVersion(
+        {},
+        { users: [{ email: 'a@b.com' }] },
+        { org: 'org', key: 'site/doc.html', type: 'text/html' },
+        null,
+        null,
+        conditionals,
+      );
+      return { resp, sendCalls };
+    }
+
+    it('returns 412 without writing for a specific ETag', async () => {
+      const { resp, sendCalls } = await putMissing({ ifMatch: '"stale-etag"' });
+
+      assert.strictEqual(resp.status, 412);
+      assert.strictEqual(sendCalls.length, 0);
+    });
+
+    it('returns 412 without writing for If-Match: *', async () => {
+      const { resp, sendCalls } = await putMissing({ ifMatch: '*' });
+
+      assert.strictEqual(resp.status, 412);
+      assert.strictEqual(sendCalls.length, 0);
+    });
+
+    it('creates the source when no conditional is sent', async () => {
+      const { resp, sendCalls } = await putMissing(null);
+
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(sendCalls.length, 1);
+    });
+
+    it('creates the source for If-None-Match: *', async () => {
+      const { resp, sendCalls } = await putMissing({ ifNoneMatch: '*' });
+
+      assert.strictEqual(resp.status, 201);
+      assert.strictEqual(sendCalls.length, 1);
+    });
+  });
+
   it('putObjectWithVersion retries on ETag mismatch when If-Match: * is sent (existing document, concurrent write)', async () => {
     let getObjectCallCount = 0;
     const mockGetObject = async () => {
