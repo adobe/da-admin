@@ -57,11 +57,12 @@ The bridge supports:
 - Site/folder GET listings, converted to DA item fields and hidden-file
   filtering. HLX6 listings are unpaginated; a legacy continuation token on a
   migrated site's listing is rejected.
-- Org GET listings, merging the org's configured `HLX6_MIGRATED_SITES` entries
-  (filtered by DA ACLs) into legacy DA results without calling HLX6, so org
-  browsing does not depend on HLX6 availability or org-level HLX6 roles.
-  Only the first legacy page adds migrated sites; subsequent pages preserve
-  the DA continuation token without repeating them.
+- Org GET listings, merging legacy DA sites with the org's HLX6 sites
+  (`GET /{org}/source/` with the caller's token) and its configured
+  `HLX6_MIGRATED_SITES` entries, filtered by DA ACLs. If the HLX6 listing
+  fails (outage, missing HLX6 role), DA and configured sites are still
+  returned. Only the first legacy page adds HLX6 sites; subsequent pages
+  preserve the DA continuation token without repeating them.
 - Site editor-config GET and multipart PUT/POST (`config` field), converting
   between DA sheet wrappers and `config/editor/da.json` row arrays. The whole
   AEM site configuration is never replaced.

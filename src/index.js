@@ -80,7 +80,7 @@ export default {
         return await hlx6Handler({ req, env, daCtx });
       }
       if (api === 'list' && org && !key && req.method === 'GET' && hasHlx6Sites(env, org)) {
-        return await listHlx6Org({ env, daCtx });
+        return await listHlx6Org({ req, env, daCtx });
       }
 
       switch (req.method) {

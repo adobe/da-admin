@@ -355,20 +355,33 @@ describe('Helix 6 compatibility bridge', () => {
     assert(fetchStub.notCalled);
   });
 
-  it('merges configured migrated sites on the first org page only, without an HLX6 call', async () => {
+  it('merges DA, HLX6 source and migrated sites on the first org page only', async () => {
     env.HLX6_MIGRATED_SITES = ['org/site', 'org/other', 'elsewhere/site'];
     const legacy = sinon.stub().resolves({
       status: 200,
       body: JSON.stringify([
-        { path: '/org/site', name: 'site' }, { path: '/org/legacy', name: 'legacy' },
+        { path: '/org/site', name: 'site' },
+        { path: '/org/legacy', name: 'legacy' },
+        { path: '/org/both', name: 'both' },
       ]),
       continuationToken: 'next-page',
     });
     const module = await esmock('../../src/routes/hlx6.js', {
       '../../src/routes/list.js': { default: legacy },
     });
+    fetchStub.callsFake(async () => new Response(JSON.stringify([
+      { name: 'hlx6only/', 'content-type': 'application/folder' },
+      { name: 'both/', 'content-type': 'application/folder' },
+      { name: 'file.json' },
+      { name: '../' },
+    ])));
     const first = await call('/list/org', {}, module.listHlx6Org);
+    assert.strictEqual(fetchStub.firstCall.args[0], 'https://api.example.com/org/source/');
+    assert.strictEqual(fetchStub.firstCall.args[1].method, 'GET');
+    assert.strictEqual(fetchStub.firstCall.args[1].headers.get('authorization'), 'Bearer caller');
     assert.deepStrictEqual(await first.json(), [
+      { path: '/org/both', name: 'both' },
+      { path: '/org/hlx6only', name: 'hlx6only' },
       { path: '/org/legacy', name: 'legacy' },
       { path: '/org/other', name: 'other' },
       { path: '/org/site', name: 'site' },
@@ -378,10 +391,29 @@ describe('Helix 6 compatibility bridge', () => {
       headers: { 'da-continuation-token': 'next-page' },
     }, module.listHlx6Org);
     assert.deepStrictEqual(await second.json(), [{ path: '/org/legacy', name: 'legacy' }]);
-    assert(fetchStub.notCalled);
   });
 
-  it('filters configured migrated sites by DA ACLs for descendant-only org readers', async () => {
+  [
+    () => new Response('denied', { status: 403 }),
+    () => new Response('{"not":"a listing"}'),
+    () => { throw new Error('Connection reset'); },
+  ].forEach((upstream, i) => {
+    it(`keeps DA and configured sites when the HLX6 org listing fails (${i})`, async () => {
+      const module = await esmock('../../src/routes/hlx6.js', {
+        '../../src/routes/list.js': {
+          default: async () => ({ status: 200, body: JSON.stringify([{ path: '/org/legacy', name: 'legacy' }]) }),
+        },
+      });
+      fetchStub.callsFake(async () => upstream());
+      const resp = await call('/list/org', {}, module.listHlx6Org);
+      assert.strictEqual(resp.status, 200);
+      assert.deepStrictEqual(await resp.json(), [
+        { path: '/org/legacy', name: 'legacy' }, { path: '/org/site', name: 'site' },
+      ]);
+    });
+  });
+
+  it('filters HLX6 org sites by DA ACLs for descendant-only org readers', async () => {
     env.HLX6_MIGRATED_SITES = ['org/site', 'org/other'];
     env.DA_CONFIG = {
       get: async () => ({
@@ -395,9 +427,9 @@ describe('Helix 6 compatibility bridge', () => {
     const module = await esmock('../../src/routes/hlx6.js', {
       '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
     });
+    fetchStub.resolves(new Response(JSON.stringify([{ name: 'hlx6only/' }])));
     const resp = await call('/list/org', {}, module.listHlx6Org);
     assert.deepStrictEqual(await resp.json(), [{ path: '/org/site', name: 'site' }]);
-    assert(fetchStub.notCalled);
   });
 
   it('propagates legacy org-list failures', async () => {
