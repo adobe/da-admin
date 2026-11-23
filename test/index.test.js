@@ -242,6 +242,7 @@ describe('Helix 6 request routing', () => {
   let fetchStub;
   let dispatch;
   let bridge;
+  let orgList;
   let users;
   let env;
 
@@ -254,7 +255,7 @@ describe('Helix 6 request routing', () => {
       '../src/handlers/delete.js': route,
       '../src/routes/hlx6.js': {
         default: (...args) => bridge(...args),
-        listHlx6Org: (...args) => bridge(...args),
+        listHlx6Org: (...args) => orgList(...args),
       },
     }, {
       '../src/utils/auth.js': { getUsers: async () => users },
@@ -266,6 +267,7 @@ describe('Helix 6 request routing', () => {
     env = { HLX6_MIGRATED_SITES: ['org/site'] };
     dispatch = sinon.stub().resolves({ status: 200, body: 'legacy content' });
     bridge = sinon.stub().callsFake(({ req }) => new Response(req.method === 'HEAD' ? null : '{"source":"Helix 6"}'));
+    orgList = sinon.stub().resolves(new Response('[]'));
     fetchStub = sinon.stub(globalThis, 'fetch').rejects(new Error('Unexpected outbound request'));
     sinon.stub(console, 'log');
     sinon.stub(console, 'error');
@@ -379,7 +381,8 @@ describe('Helix 6 request routing', () => {
   it('bridges mixed org listings', async () => {
     const resp = await hnd.fetch(request('/list/org'), env);
     assert.strictEqual(resp.status, 200);
-    assert(bridge.calledOnce);
+    assert(orgList.calledOnce);
+    assert(bridge.notCalled);
     assert(dispatch.notCalled);
   });
 

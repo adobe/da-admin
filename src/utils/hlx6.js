@@ -161,16 +161,26 @@ export function isHlx6Site(env, org, site) {
 }
 
 /**
- * Determines whether an org listing needs migrated source-bus entries, excluding dual writes.
+ * Lists the configured bridged sites of an org, excluding dual writes.
+ * @param {import('../index.js').Env} env Worker migration configuration.
+ * @param {string} org DA organization name.
+ * @returns {string[]} Lowercase site names served by the compatibility bridge.
+ */
+export function getHlx6Sites(env, org) {
+  return [...getMigratedSites(env)]
+    .map((entry) => entry.split('/'))
+    .filter(([owner, site]) => owner === org?.toLowerCase() && isHlx6Site(env, owner, site))
+    .map(([, site]) => site);
+}
+
+/**
+ * Determines whether an org listing needs migrated site entries, excluding dual writes.
  * @param {import('../index.js').Env} env Worker migration configuration.
  * @param {string} org DA organization name.
  * @returns {boolean} Whether any site in the org uses the compatibility bridge.
  */
 export function hasHlx6Sites(env, org) {
-  return [...getMigratedSites(env)].some((entry) => {
-    const [owner, site] = entry.split('/');
-    return owner === org?.toLowerCase() && isHlx6Site(env, owner, site);
-  });
+  return getHlx6Sites(env, org).length > 0;
 }
 
 /**

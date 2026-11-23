@@ -57,17 +57,20 @@ The bridge supports:
 - Site/folder GET listings, converted to DA item fields and hidden-file
   filtering. HLX6 listings are unpaginated; a legacy continuation token on a
   migrated site's listing is rejected.
-- Org GET listings, merging migrated HLX6 sites into legacy DA results.
-  Only the first legacy page fetches HLX6 sites; subsequent pages preserve
-  the DA continuation token without repeating migrated sites. Upstream errors
-  fail the request rather than returning an incomplete legacy-only listing.
+- Org GET listings, merging the org's configured `HLX6_MIGRATED_SITES` entries
+  (filtered by DA ACLs) into legacy DA results without calling HLX6, so org
+  browsing does not depend on HLX6 availability or org-level HLX6 roles.
+  Only the first legacy page adds migrated sites; subsequent pages preserve
+  the DA continuation token without repeating them.
 - Site editor-config GET and multipart PUT/POST (`config` field), converting
   between DA sheet wrappers and `config/editor/da.json` row arrays. The whole
   AEM site configuration is never replaced.
 - Source multipart PUT/POST (`data` field) and raw uploads, converted to HLX6
-  POST, including its image-import behavior and validation. Successful saves
-  return DA's source/edit/preview/live URL envelope and the upstream ETag.
-  Bodyless folder writes become trailing-slash POSTs.
+  POST, including its image-import behavior and validation. String `data`
+  fields are accepted for `.html`, `.json` and `.svg` only (415 otherwise).
+  Successful saves return DA's source/edit/preview/live URL envelope and the
+  upstream ETag. Bodyless folder writes become trailing-slash POSTs.
+  Upstream redirects are rejected with 502.
 
 All requests retain existing DA ACL checks and require the caller's Bearer
 token and the corresponding HLX6 permissions. There is no service-token

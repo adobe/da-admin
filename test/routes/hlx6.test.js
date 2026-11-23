@@ -210,6 +210,48 @@ describe('Helix 6 compatibility bridge', () => {
     });
   });
 
+  it('reports a saved source with a malformed Location without throwing', async () => {
+    fetchStub.resolves(new Response(null, { status: 201, headers: { location: '/bad%E0%A4%A.html' } }));
+    const resp = await call('/source/org/site/a.html', {
+      method: 'POST', body: '<main></main>', headers: { 'content-type': 'text/html' },
+    });
+    assert.strictEqual(resp.status, 502);
+    assert.match((await resp.json()).error, /saved content.*do not blindly retry/);
+  });
+
+  it('rejects upstream redirects instead of passing them through', async () => {
+    fetchStub.resolves(new Response('moved', { status: 302, headers: { location: 'https://elsewhere.example/' } }));
+    const resp = await call('/source/org/site/a.json');
+    assert.strictEqual(resp.status, 502);
+    assert.strictEqual(resp.headers.get('location'), null);
+  });
+
+  it('labels string SVG uploads and rejects unknown text extensions', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    const svg = new FormData();
+    svg.set('data', '<svg></svg>');
+    await call('/source/org/site/icon.svg', { method: 'POST', body: svg });
+    assert.strictEqual(fetchStub.firstCall.args[1].headers.get('content-type'), 'image/svg+xml');
+    const txt = new FormData();
+    txt.set('data', 'plain');
+    const resp = await call('/source/org/site/notes.txt', { method: 'POST', body: txt });
+    assert.strictEqual(resp.status, 415);
+    assert(fetchStub.calledOnce);
+  });
+
+  it('does not forward preconditions to listing or config requests', async () => {
+    fetchStub.callsFake(async () => new Response('[]'));
+    const headers = { 'if-none-match': '"x"', 'if-match': '"y"' };
+    await call('/list/org/site', { headers });
+    fetchStub.callsFake(async () => new Response('{"data":[]}'));
+    await call('/config/org/site', { headers });
+    fetchStub.getCalls().forEach(({ args }) => {
+      assert.strictEqual(args[1].headers.get('if-none-match'), null);
+      assert.strictEqual(args[1].headers.get('if-match'), null);
+    });
+    assert(fetchStub.calledTwice);
+  });
+
   it('does not redirect a saved source envelope to another host', async () => {
     fetchStub.resolves(new Response(null, {
       status: 201, headers: { location: 'https://other.example/file.html' },
@@ -313,7 +355,8 @@ describe('Helix 6 compatibility bridge', () => {
     assert(fetchStub.notCalled);
   });
 
-  it('merges migrated sites on the first org page only, retaining DA pagination', async () => {
+  it('merges configured migrated sites on the first org page only, without an HLX6 call', async () => {
+    env.HLX6_MIGRATED_SITES = ['org/site', 'org/other', 'elsewhere/site'];
     const legacy = sinon.stub().resolves({
       status: 200,
       body: JSON.stringify([
@@ -324,30 +367,45 @@ describe('Helix 6 compatibility bridge', () => {
     const module = await esmock('../../src/routes/hlx6.js', {
       '../../src/routes/list.js': { default: legacy },
     });
-    fetchStub.resolves(new Response(JSON.stringify([
-      { name: 'site/', 'content-type': 'application/folder' },
-      { name: 'not-routed/', 'content-type': 'application/folder' },
-    ])));
     const first = await call('/list/org', {}, module.listHlx6Org);
     assert.deepStrictEqual(await first.json(), [
-      { path: '/org/legacy', name: 'legacy' }, { path: '/org/site', name: 'site' },
+      { path: '/org/legacy', name: 'legacy' },
+      { path: '/org/other', name: 'other' },
+      { path: '/org/site', name: 'site' },
     ]);
     assert.strictEqual(first.headers.get('da-continuation-token'), 'next-page');
     const second = await call('/list/org', {
       headers: { 'da-continuation-token': 'next-page' },
     }, module.listHlx6Org);
     assert.deepStrictEqual(await second.json(), [{ path: '/org/legacy', name: 'legacy' }]);
-    assert(fetchStub.calledOnce);
+    assert(fetchStub.notCalled);
   });
 
-  it('does not hide an upstream org-list error behind legacy-only success', async () => {
+  it('filters configured migrated sites by DA ACLs for descendant-only org readers', async () => {
+    env.HLX6_MIGRATED_SITES = ['org/site', 'org/other'];
+    env.DA_CONFIG = {
+      get: async () => ({
+        permissions: {
+          data: [
+            { path: '/site/docs/**', actions: 'read', groups: 'author@example.com' },
+          ],
+        },
+      }),
+    };
     const module = await esmock('../../src/routes/hlx6.js', {
       '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
     });
-    fetchStub.resolves(new Response('denied', { status: 403 }));
     const resp = await call('/list/org', {}, module.listHlx6Org);
-    assert.strictEqual(resp.status, 403);
-    assert.strictEqual(await resp.text(), 'denied');
+    assert.deepStrictEqual(await resp.json(), [{ path: '/org/site', name: 'site' }]);
+    assert(fetchStub.notCalled);
+  });
+
+  it('propagates legacy org-list failures', async () => {
+    const module = await esmock('../../src/routes/hlx6.js', {
+      '../../src/routes/list.js': { default: async () => ({ status: 404, body: '' }) },
+    });
+    const resp = await call('/list/org', {}, module.listHlx6Org);
+    assert.strictEqual(resp.status, 404);
   });
 });
 
