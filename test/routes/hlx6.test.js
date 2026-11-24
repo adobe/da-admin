@@ -30,9 +30,13 @@ describe('Helix 6 compatibility bridge', () => {
       AEM_API: 'https://api.example.com',
       DA_CONTENT: 'https://content.da.live',
       DA_SITE_BACKENDS: {
-        get: sinon.stub().callsFake(async (key) => (Array.isArray(key)
-          ? new Map(key.map((name) => [name, name === 'org/site' ? 'hlx6' : 'da']))
-          : 'da')),
+        get: sinon.stub().callsFake(async (key) => {
+          if (Array.isArray(key)) {
+            return new Map(key.map((name) => [name, name === 'org/site' ? 'hlx6' : 'da']));
+          }
+          return key.startsWith('org:') ? null : 'da';
+        }),
+        put: sinon.stub().resolves(),
         list: sinon.stub().resolves({ keys: [{ name: 'org/site' }], list_complete: true }),
       },
     };
@@ -435,6 +439,7 @@ describe('Helix 6 compatibility bridge', () => {
   });
 
   it('merges bridged HLX6 org sites on the first page, deduplicating by path', async () => {
+    env.DA_SITE_BACKENDS.get.withArgs('org:org').resolves('hlx6');
     env.DA_SITE_BACKENDS.get.withArgs('org/both').resolves('hlx6');
     const legacy = sinon.stub().resolves({
       status: 200,
@@ -478,6 +483,8 @@ describe('Helix 6 compatibility bridge', () => {
     assert.deepStrictEqual((await second.json()).map((item) => item.path), [
       '/org/both.json', '/org/legacy', '/org/notes', '/org/notes.json', '/org/site',
     ]);
+    assert(env.DA_SITE_BACKENDS.list.notCalled);
+    assert(env.DA_SITE_BACKENDS.put.notCalled);
   });
 
   [
@@ -522,14 +529,17 @@ describe('Helix 6 compatibility bridge', () => {
     assert.strictEqual(values.get('org/newsite'), 'hlx6');
   });
 
-  it('does not call HLX6 for an org with no cached HLX6 sites', async () => {
-    env.DA_SITE_BACKENDS.get.withArgs(['org/site']).resolves(new Map([['org/site', 'da']]));
+  it('does not scan KV or call HLX6 for a cached DA-only org', async () => {
+    env.DA_SITE_BACKENDS.get.withArgs('org:org').resolves('da');
     const module = await esmock('../../src/routes/hlx6.js', {
       '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
     });
     const resp = await call('/list/org', {}, module.listHlx6Org);
     assert.deepStrictEqual(await resp.json(), []);
     assert(fetchStub.notCalled);
+    assert(env.DA_SITE_BACKENDS.get.calledOnceWithExactly('org:org'));
+    assert(env.DA_SITE_BACKENDS.list.notCalled);
+    assert(env.DA_SITE_BACKENDS.put.notCalled);
   });
 
   it('keeps the DA listing when the registry gate is unavailable', async () => {

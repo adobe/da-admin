@@ -54,6 +54,8 @@ supported calls for HLX6-backed projects or return `410 Gone` when unsupported.
 Both da-admin and da-content resolve sites through the shared `DA_SITE_BACKENDS`
 KV binding. Keys are lowercase `org/site`; values are the strings `da` or `hlx6`
 (case and surrounding whitespace are normalized when reading).
+Reserved `org:<org>` keys hold da-admin's derived org-discovery gate
+(`da` or `hlx6`, expiring after 300 seconds), not authoritative site routing.
 An `hlx6` site uses a synchronous compatibility bridge to `AEM_API`
 (`https://api.aem.live` by default).
 
@@ -87,8 +89,11 @@ The bridge supports:
   migrated site's listing is rejected.
 - Org GET listings, merging legacy DA sites with the org's bridged HLX6 sites:
   discovery runs only if the registry already contains a non-dual-writing HLX6
-  site for that org. The gate uses paginated KV listing and bulk reads of at most
-  100 keys, without pinging. Entries of `GET /{org}/source/` (caller token,
+  site for that org. Both positive and negative gate results are cached for
+  300 seconds at `org:<org>`; a hit needs one KV read and no scan. Only a cache
+  miss uses paginated KV listing and bulk reads of at most 100 keys, without
+  pinging. New sites or dual-write changes can take five minutes plus KV
+  propagation to appear in org discovery. Entries of `GET /{org}/source/` (caller token,
   3s timeout) are filtered by DA ACLs before resolving their backends. Unknown
   sites can then be discovered. An entirely uncached HLX6-only org requires a
   direct site request or a seeded registry entry before discovery is enabled.
@@ -142,6 +147,10 @@ deployment. Local development can set this variable in `.dev.vars` as needed.
 Rename the previous `HLX6_MIGRATION_SITES` dashboard variable to `HLX6_DUAL_WRITES`
 when deploying this change.
 
+`HLX6_DUAL_WRITES` entries are either:
+- `org/site`: the same org/site on Helix 6
+- `org/site -> org2/site2`: a different Helix 6 org/site (e.g. for testing)
+
 #### Site registry and cutover
 
 Production uses the `DA_SITE_BACKENDS` namespace
@@ -162,6 +171,23 @@ Before starting dual write, explicitly set the site's registry entry to `da`.
 This keeps da-content on legacy routing even if a cold ping would identify the
 site as HLX6. Manage `HLX6_DUAL_WRITES` only on da-admin.
 
+#### Provisioning new DA sites
+
+Preloading is not just a rollout step. For **every new DA-served site**, explicitly
+create a non-expiring `da` entry before its first DA request, including the request
+that creates its first source document:
+
+```sh
+npx wrangler kv key put --binding DA_SITE_BACKENDS --env production --remote "owner/new-site" da
+```
+
+Wait for KV propagation before creating or accessing the site. Site creation does
+not register this entry automatically. Without it, an AEM API source or overlay
+can make the first ping permanently classify the site as `hlx6` even though its
+content belongs in DA. Do not rely on a temporary 404-derived `da` entry: it expires.
+
+#### Cutting over a site
+
 To cut over a site, pause traffic for that site and drain in-flight requests
 (including cold probes), then update its registry entry:
 
@@ -178,9 +204,16 @@ Probes already in flight can overwrite a manual update, hence the drain step.
 Setting a value to `da` explicitly selects legacy storage. Deleting a key
 allows the next request to probe again.
 
-Entries are either:
-- `org/site`: the same org/site on Helix 6
-- `org/site -> org2/site2`: a different Helix 6 org/site (e.g. for testing)
+Org discovery can additionally lag by its 300-second gate TTL; this cache does
+not affect direct site routing. After the site changes have propagated, optionally
+delete the derived org entry to refresh discovery sooner:
+
+```sh
+npx wrangler kv key delete --binding DA_SITE_BACKENDS --env production --remote "org:owner"
+```
+
+The next org listing recomputes the gate. Do not confuse this derived key with
+the authoritative `owner/site` entry.
 
 #### Migration analysis after deployment
 

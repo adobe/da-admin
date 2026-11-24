@@ -174,14 +174,18 @@ export async function isHlx6Site(env, org, site) {
 }
 
 /**
- * Checks cached entries only; org browsing must not probe unknown sites to open its gate.
+ * Caches the registry-only discovery gate for five minutes; never probes unknown sites.
  * @returns {Promise<boolean>} Whether this org has a cached, non-dual-writing HLX6 site.
  */
 export async function hasHlx6Sites(env, org) {
   if (!org) return false;
   const namespace = env.DA_SITE_BACKENDS;
   if (!namespace) throw new Error('Missing DA_SITE_BACKENDS binding');
+  const cacheKey = `org:${org.toLowerCase()}`;
+  const cached = parseBackend(await namespace.get(cacheKey), cacheKey);
+  if (cached !== undefined) return cached === 'hlx6';
   const prefix = `${org.toLowerCase()}/`;
+  let hasSites = false;
   let cursor;
   do {
     // KV bulk reads accept at most 100 keys.
@@ -192,11 +196,19 @@ export async function hasHlx6Sites(env, org) {
       // eslint-disable-next-line no-await-in-loop
       const values = await namespace.get(keys);
       if ([...values].some(([key, value]) => parseBackend(value, key) === 'hlx6'
-        && !getHlx6Target(env, org, key.slice(prefix.length)))) return true;
+        && !getHlx6Target(env, org, key.slice(prefix.length)))) {
+        hasSites = true;
+        break;
+      }
     }
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
-  return false;
+  try {
+    await namespace.put(cacheKey, hasSites ? 'hlx6' : 'da', { expirationTtl: 300 });
+  } catch (e) {
+    console.error('[hlx6] Failed to cache org discovery', cacheKey, e.message);
+  }
+  return hasSites;
 }
 
 /**

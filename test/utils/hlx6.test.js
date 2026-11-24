@@ -600,6 +600,55 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(await hasHlx6Sites(config, 'MYORG'), false);
       assert.strictEqual(await hasHlx6Sites(config, 'empty'), false);
       assert.strictEqual(calls.length, 0);
+      assert.deepStrictEqual(registry.put.args, [
+        ['org:myorg', 'da', { expirationTtl: 300 }],
+        ['org:empty', 'da', { expirationTtl: 300 }],
+      ]);
+    });
+
+    ['da', 'hlx6'].forEach((backend) => {
+      it(`caches the ${backend} org gate for 300 seconds without rescanning on hits`, async () => {
+        values.set('myorg/mysite', backend);
+        assert.strictEqual(await hasHlx6Sites(config, 'MYORG'), backend === 'hlx6');
+        assert.deepStrictEqual(registry.put.firstCall.args, [
+          'org:myorg', backend, { expirationTtl: 300 },
+        ]);
+        registry.list.resetHistory();
+        registry.get.resetHistory();
+        assert.strictEqual(await hasHlx6Sites(config, 'myorg'), backend === 'hlx6');
+        assert(registry.get.calledOnceWithExactly('org:myorg'));
+        assert(registry.list.notCalled);
+        assert(registry.put.calledOnce);
+        assert.strictEqual(calls.length, 0);
+      });
+
+      it(`keeps the known ${backend} org result when caching it fails`, async () => {
+        values.set('myorg/mysite', backend);
+        registry.put.rejects(new Error('KV write limit'));
+        assert.strictEqual(await hasHlx6Sites(config, 'myorg'), backend === 'hlx6');
+        assert(errors.calledWith(
+          '[hlx6] Failed to cache org discovery',
+          'org:myorg',
+          'KV write limit',
+        ));
+      });
+    });
+
+    it('refreshes discovery after the derived org cache entry is removed', async () => {
+      values.set('org:myorg', 'da');
+      values.set('myorg/migrated', 'hlx6');
+      assert.strictEqual(await hasHlx6Sites(config, 'myorg'), false);
+      assert(registry.list.notCalled);
+      values.delete('org:myorg');
+      assert.strictEqual(await hasHlx6Sites(config, 'myorg'), true);
+      assert(registry.list.calledOnce);
+      assert.strictEqual(values.get('org:myorg'), 'hlx6');
+    });
+
+    it('rejects invalid cached org gates instead of silently rescanning', async () => {
+      values.set('org:myorg', 'invalid');
+      await assert.rejects(hasHlx6Sites(config, 'myorg'), /Invalid site backend for org:myorg/);
+      assert(registry.list.notCalled);
       assert(registry.put.notCalled);
     });
 
