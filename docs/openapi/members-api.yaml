@@ -1,0 +1,45 @@
+members:
+  get:
+    operationId: getMembers
+    tags:
+      - Members
+    summary: List members
+    description: |
+      Returns the people who can read a source, based on the org's permissions sheet.
+      Email entries are returned as-is. IMS org and group entries are expanded through the
+      org's connected directory (see `imsorg`), and only for orgs the caller belongs to.
+    parameters:
+      - $ref: "./parameters.yaml#/orgParam"
+      - $ref: "./parameters.yaml#/repoParam"
+      - $ref: "./parameters.yaml#/pathParam"
+    responses:
+      '200':
+        description: The members who can read the source.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                members:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                      name:
+                        type: string
+                partial:
+                  type: boolean
+                  description: True when a connected directory could not be read.
+            examples:
+              members:
+                value:
+                  members:
+                    - email: alice@example.com
+                      name: Alice Smith
+                  partial: false
+      '401':
+        $ref: "./responses.yaml#/401"
+      '403':
+        $ref: "./responses.yaml#/403"
