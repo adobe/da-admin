@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/adobe/da-admin/compare/v1.16.5...v1.17.0) (2026-11-24)
+
+
+### Features
+
+* bridge legacy reads and saves for migrated sites ([#344](https://github.com/adobe/da-admin/issues/344)) ([c96cb13](https://github.com/adobe/da-admin/commit/c96cb1324ffd1532f5a65747b0a31bba0e771f8f))
+
 ## [1.16.5](https://github.com/adobe/da-admin/compare/v1.16.4...v1.16.5) (2026-11-19)
 
 
