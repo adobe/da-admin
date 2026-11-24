@@ -119,6 +119,10 @@ describe('fetch', () => {
           api: 'list',
           org: 'kptdobe',
           key: '',
+          aclCtx: {
+            actionSet: new Set(),
+            pathLookup: new Map([['acapt@adobe.com', [{ path: '/site/docs/**', actions: ['read'] }]]]),
+          },
         }),
       },
       '../src/handlers/get.js': {
@@ -397,6 +401,31 @@ describe('Helix 6 request routing', () => {
     assert.strictEqual(resp.status, 401);
     assert(fetchStub.notCalled);
     assert(dispatch.notCalled);
+  });
+
+  it('rejects listings without read or descendant permission before checking the registry', async () => {
+    env.DA_CONFIG = {
+      get: async () => ({
+        permissions: { data: [{ path: '/allowed/**', actions: 'read', groups: 'test@example.com' }] },
+      }),
+    };
+    const resp = await hnd.fetch(request('/list/org/site'), env);
+    assert.strictEqual(resp.status, 403);
+    assert(env.DA_SITE_BACKENDS.get.notCalled);
+    assert(bridge.notCalled);
+    assert(dispatch.notCalled);
+  });
+
+  it('allows readable descendants before resolving a migrated listing', async () => {
+    env.DA_CONFIG = {
+      get: async () => ({
+        permissions: { data: [{ path: '/site/docs/**', actions: 'read', groups: 'test@example.com' }] },
+      }),
+    };
+    const resp = await hnd.fetch(request('/list/org/site'), env);
+    assert.strictEqual(resp.status, 200);
+    assert(bridge.calledOnce);
+    assert(env.DA_SITE_BACKENDS.get.calledWith('org/site'));
   });
 
   it('serves sites cached as DA', async () => {

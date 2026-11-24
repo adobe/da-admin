@@ -140,6 +140,7 @@ r2_buckets = [
 [env.it.vars]
 ENVIRONMENT = "it"
 VERSION="0.0.0-it"
+HLX_ADMIN = "http://127.0.0.1:9999"
 DA_COLLAB = "http://localhost:4711"
 DA_CONTENT = "https://stage-content.da.live"
 AEM_BUCKET_NAME = "aem-content-local"

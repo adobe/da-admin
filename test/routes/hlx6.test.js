@@ -29,7 +29,12 @@ describe('Helix 6 compatibility bridge', () => {
     env = {
       AEM_API: 'https://api.example.com',
       DA_CONTENT: 'https://content.da.live',
-      DA_SITE_BACKENDS: { get: sinon.stub().resolves('da') },
+      DA_SITE_BACKENDS: {
+        get: sinon.stub().callsFake(async (key) => (Array.isArray(key)
+          ? new Map(key.map((name) => [name, name === 'org/site' ? 'hlx6' : 'da']))
+          : 'da')),
+        list: sinon.stub().resolves({ keys: [{ name: 'org/site' }], list_complete: true }),
+      },
     };
     env.DA_SITE_BACKENDS.get.withArgs('org/site').resolves('hlx6');
     fetchStub = sinon.stub(globalThis, 'fetch');
@@ -494,11 +499,14 @@ describe('Helix 6 compatibility bridge', () => {
     });
   });
 
-  it('discovers and caches a cold HLX6 site while listing an org', async () => {
-    const values = new Map();
+  it('discovers uncached sites once the org has a cached HLX6 site', async () => {
+    const values = new Map([['org/known', 'hlx6']]);
     env.DA_SITE_BACKENDS = {
-      get: async (key) => values.get(key) ?? null,
+      get: async (key) => (Array.isArray(key)
+        ? new Map(key.map((name) => [name, values.get(name) ?? null]))
+        : values.get(key) ?? null),
       put: async (key, value) => { values.set(key, value); },
+      list: async () => ({ keys: [{ name: 'org/known' }], list_complete: true }),
     };
     const module = await esmock('../../src/routes/hlx6.js', {
       '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
@@ -512,6 +520,38 @@ describe('Helix 6 compatibility bridge', () => {
     const resp = await call('/list/org', {}, module.listHlx6Org);
     assert.deepStrictEqual(await resp.json(), [{ path: '/org/newsite', name: 'newsite' }]);
     assert.strictEqual(values.get('org/newsite'), 'hlx6');
+  });
+
+  it('does not call HLX6 for an org with no cached HLX6 sites', async () => {
+    env.DA_SITE_BACKENDS.get.withArgs(['org/site']).resolves(new Map([['org/site', 'da']]));
+    const module = await esmock('../../src/routes/hlx6.js', {
+      '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
+    });
+    const resp = await call('/list/org', {}, module.listHlx6Org);
+    assert.deepStrictEqual(await resp.json(), []);
+    assert(fetchStub.notCalled);
+  });
+
+  it('keeps the DA listing when the registry gate is unavailable', async () => {
+    env.DA_SITE_BACKENDS.list.rejects(new Error('KV unavailable'));
+    const module = await esmock('../../src/routes/hlx6.js', {
+      '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
+    });
+    const resp = await call('/list/org', {}, module.listHlx6Org);
+    assert.deepStrictEqual(await resp.json(), []);
+    assert(fetchStub.notCalled);
+    assert(console.error.called);
+  });
+
+  it('keeps healthy HLX6 sites when another site lookup fails', async () => {
+    env.DA_SITE_BACKENDS.get.withArgs('org/broken').rejects(new Error('Site lookup unavailable'));
+    const module = await esmock('../../src/routes/hlx6.js', {
+      '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
+    });
+    fetchStub.resolves(new Response(JSON.stringify([{ name: 'site/' }, { name: 'broken/' }])));
+    const resp = await call('/list/org', {}, module.listHlx6Org);
+    assert.deepStrictEqual(await resp.json(), [{ path: '/org/site', name: 'site' }]);
+    assert(console.error.called);
   });
 
   it('filters HLX6 org sites by DA ACLs for descendant-only org readers', async () => {
@@ -530,6 +570,7 @@ describe('Helix 6 compatibility bridge', () => {
     fetchStub.resolves(new Response(JSON.stringify([{ name: 'site/' }, { name: 'hlx6only/' }])));
     const resp = await call('/list/org', {}, module.listHlx6Org);
     assert.deepStrictEqual(await resp.json(), [{ path: '/org/site', name: 'site' }]);
+    assert(!env.DA_SITE_BACKENDS.get.calledWith('org/hlx6only'));
   });
 
   it('denies folder listings without read or descendant permission', async () => {

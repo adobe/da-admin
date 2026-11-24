@@ -97,7 +97,6 @@ export function parseDualWrites(value) {
 }
 
 let dualWriteCache = { key: undefined, map: new Map() };
-const siteLookups = new WeakMap();
 
 function getDualWrites(env) {
   const value = env?.HLX6_DUAL_WRITES;
@@ -114,22 +113,32 @@ function getDualWrites(env) {
   return dualWriteCache.map;
 }
 
-async function detectHlx6Site(namespace, key) {
-  const cached = await namespace.get(key);
-  if (cached === 'hlx6' || cached === 'da') return cached === 'hlx6';
-  if (cached !== null) throw new Error(`Invalid site backend for ${key}`);
+function parseBackend(value, key) {
+  if (value === null) return undefined;
+  const backend = value.trim().toLowerCase();
+  if (backend === 'hlx6' || backend === 'da') return backend;
+  throw new Error(`Invalid site backend for ${key}`);
+}
 
+async function detectHlx6Site(namespace, key, hlxAdmin) {
+  const cached = parseBackend(await namespace.get(key), key);
+  if (cached !== undefined) return cached === 'hlx6';
+  const base = (hlxAdmin || 'https://admin.hlx.page').replace(/\/+$/, '');
   const path = key.split('/').map(encodeURIComponent).join('/');
-  const resp = await fetch(`https://admin.hlx.page/ping/${path}`, {
+  const resp = await fetch(`${base}/ping/${path}`, {
     method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(3000),
   });
   await resp.body?.cancel();
-  // Unregistered DA sites return 404; transport/auth/server errors are not DA results.
+  // Unregistered sites may be created later, so their DA result is short-lived.
   if (!resp.ok && resp.status !== 404) {
     throw new Error(`Site backend probe failed for ${key}: ${resp.status}`);
   }
   const migrated = resp.headers.has('x-api-upgrade-available');
-  await namespace.put(key, migrated ? 'hlx6' : 'da');
+  try {
+    await namespace.put(key, migrated ? 'hlx6' : 'da', resp.status === 404 ? { expirationTtl: 300 } : undefined);
+  } catch (e) {
+    console.error('[hlx6] Failed to cache site backend', key, e.message);
+  }
   return migrated;
 }
 
@@ -152,7 +161,7 @@ export function getHlx6Target(env, org, site) {
 
 /**
  * Resolves the shared site registry, probing only missing entries and excluding dual writes.
- * Only in-flight lookups are memoized so manual KV updates are not hidden by isolate caches.
+ * Request-scoped I/O is never shared between Worker requests.
  * @returns {Promise<boolean>} Whether this site must use HLX6 instead of DA storage.
  */
 export async function isHlx6Site(env, org, site) {
@@ -161,17 +170,33 @@ export async function isHlx6Site(env, org, site) {
   const namespace = env.DA_SITE_BACKENDS;
   if (!namespace) throw new Error('Missing DA_SITE_BACKENDS binding');
   const key = `${org}/${site}`.toLowerCase();
-  let pending = siteLookups.get(namespace);
-  if (!pending) {
-    pending = new Map();
-    siteLookups.set(namespace, pending);
-  }
-  if (!pending.has(key)) pending.set(key, detectHlx6Site(namespace, key));
-  try {
-    return await pending.get(key);
-  } finally {
-    pending.delete(key);
-  }
+  return detectHlx6Site(namespace, key, env.HLX_ADMIN);
+}
+
+/**
+ * Checks cached entries only; org browsing must not probe unknown sites to open its gate.
+ * @returns {Promise<boolean>} Whether this org has a cached, non-dual-writing HLX6 site.
+ */
+export async function hasHlx6Sites(env, org) {
+  if (!org) return false;
+  const namespace = env.DA_SITE_BACKENDS;
+  if (!namespace) throw new Error('Missing DA_SITE_BACKENDS binding');
+  const prefix = `${org.toLowerCase()}/`;
+  let cursor;
+  do {
+    // KV bulk reads accept at most 100 keys.
+    // eslint-disable-next-line no-await-in-loop
+    const page = await namespace.list({ prefix, limit: 100, cursor });
+    const keys = page.keys.map(({ name }) => name);
+    if (keys.length) {
+      // eslint-disable-next-line no-await-in-loop
+      const values = await namespace.get(keys);
+      if ([...values].some(([key, value]) => parseBackend(value, key) === 'hlx6'
+        && !getHlx6Target(env, org, key.slice(prefix.length)))) return true;
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return false;
 }
 
 /**

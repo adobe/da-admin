@@ -52,19 +52,31 @@ supported calls for HLX6-backed projects or return `410 Gone` when unsupported.
 ### Helix 6 request handling
 
 Both da-admin and da-content resolve sites through the shared `DA_SITE_BACKENDS`
-KV binding. Keys are lowercase `org/site`; values are the strings `da` or `hlx6`.
+KV binding. Keys are lowercase `org/site`; values are the strings `da` or `hlx6`
+(case and surrounding whitespace are normalized when reading).
 An `hlx6` site uses a synchronous compatibility bridge to `AEM_API`
 (`https://api.aem.live` by default).
 
 On a cache miss, the worker makes an unauthenticated GET to
-`https://admin.hlx.page/ping/{org}/{site}` with a 3s timeout. Presence of
-`x-api-upgrade-available` identifies HLX6. Successful responses without that
-header, and 404s for unregistered sites, identify DA. Both results are persisted
-without expiration; cache hits do not ping. Concurrent lookups within one worker
-are coalesced, but KV does not guarantee a single probe globally.
+`https://admin.hlx.page/ping/{org}/{site}` with a 3s timeout. Set `HLX_ADMIN`
+to override the probe base URL per environment (for example in `.dev.vars` or
+the Cloudflare dashboard); local integration tests use the mock server.
+Presence of `x-api-upgrade-available` selects HLX6. This is a source-bus
+configuration heuristic, including overlays, **not proof of completed cutover**.
+Explicit registry entries override it. Successful responses without that header
+select DA. Successful probe results persist without expiration; 404 results
+expire after **300 seconds** so not-yet-created sites can be detected later.
+Cache hits do not ping. Concurrent cold requests own their I/O independently;
+KV does not guarantee a single probe globally.
 Redirects, auth/rate-limit/server errors, timeouts, invalid registry values, and
-KV failures fail the request rather than assuming DA or writing legacy storage.
-Only in-flight lookups are held in memory; subsequent requests read KV again.
+KV read failures fail the request rather than assuming DA or writing legacy
+storage. Failed KV writes are logged without discarding the known probe result.
+Subsequent requests read KV again.
+
+Site listings require read or readable-descendant permission before backend
+detection. The 404 expiry limits retention, not traffic: signed-in users of open
+orgs, and public da-content requests, can still generate cold probes. This is
+not a rate limiter or an org-existence check.
 
 The bridge supports:
 
@@ -74,10 +86,14 @@ The bridge supports:
   filtering. HLX6 listings are unpaginated; a legacy continuation token on a
   migrated site's listing is rejected.
 - Org GET listings, merging legacy DA sites with the org's bridged HLX6 sites:
-  entries of `GET /{org}/source/` (caller token, 3s timeout) resolved as HLX6
-  through the registry, filtered by DA ACLs. Org listings also discover sites
-  not yet cached. If the HLX6 listing or site resolution fails
-  (outage, timeout, missing HLX6 role), the DA listing is still returned.
+  discovery runs only if the registry already contains a non-dual-writing HLX6
+  site for that org. The gate uses paginated KV listing and bulk reads of at most
+  100 keys, without pinging. Entries of `GET /{org}/source/` (caller token,
+  3s timeout) are filtered by DA ACLs before resolving their backends. Unknown
+  sites can then be discovered. An entirely uncached HLX6-only org requires a
+  direct site request or a seeded registry entry before discovery is enabled.
+  Failed individual lookups are logged and omitted while healthy sites remain;
+  if discovery is unavailable, the DA listing is still returned.
   Only the first legacy page adds HLX6 sites; subsequent pages preserve the
   DA continuation token without repeating them.
 - Site editor-config GET and multipart PUT/POST (`config` field), converting
@@ -134,9 +150,13 @@ Production uses the `DA_SITE_BACKENDS` namespace
 Both workers bind the appropriate namespace as `DA_SITE_BACKENDS`. Local dev
 and integration tests use emulated KV, not remote registry writes.
 
-Before deploying, seed any existing `HLX6_MIGRATED_SITES` entries as `hlx6`
-in the corresponding namespace, then deploy da-admin before da-content.
-The old environment variable is no longer read.
+Before deploying, preload **all sites still served by DA** as `da`, including
+dual-write sites, and existing `HLX6_MIGRATED_SITES` entries as `hlx6` in the
+corresponding namespace. Do not blindly overwrite existing authoritative entries;
+resolve conflicting inventory first. Preloading DA sites avoids making rollout
+depend on successful cold pings and prevents an overlay header from triggering
+premature cutover. Then deploy da-admin before da-content. The old environment
+variable is no longer read. Manual entries have no expiration.
 
 Before starting dual write, explicitly set the site's registry entry to `da`.
 This keeps da-content on legacy routing even if a cold ping would identify the
