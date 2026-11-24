@@ -45,15 +45,58 @@ Browse to `http://localhost:8787/list` to ensure you see the expected buckets.
 
 ### Helix 6 request handling
 
-Site-scoped requests, including config and version APIs, return `410 Gone` for
-sites listed in `HLX6_MIGRATED_SITES`, an array of `org/site` entries (or a
-JSON-encoded array). These sites must use `https://api.aem.live`; requests for
-these sites do not access their legacy content. The check is a local
-configuration lookup; no network probe is made.
+Sites listed in `HLX6_MIGRATED_SITES`, an array of `org/site` entries (or a
+JSON-encoded array or comma/newline-separated string), use a synchronous
+compatibility bridge to `AEM_API` (`https://api.aem.live` by default). The site
+check is local; no network probe is made.
 
-Org-level requests, authentication, logout, and CORS preflight remain available.
+The bridge supports:
+
+- Source GET/HEAD, streaming bodies and returning ETag/Last-Modified. Matching
+  `If-None-Match` returns 304; `If-Match` read failures return 412.
+- Site/folder GET listings, converted to DA item fields and hidden-file
+  filtering. HLX6 listings are unpaginated; a legacy continuation token on a
+  migrated site's listing is rejected.
+- Org GET listings, merging legacy DA sites with the org's bridged HLX6 sites:
+  entries of `GET /{org}/source/` (caller token, 3s timeout) that are also in
+  `HLX6_MIGRATED_SITES`, filtered by DA ACLs. If the HLX6 listing fails
+  (outage, timeout, missing HLX6 role), the DA listing is still returned.
+  Only the first legacy page adds HLX6 sites; subsequent pages preserve the
+  DA continuation token without repeating them.
+- Site editor-config GET and multipart PUT/POST (`config` field), converting
+  between DA sheet wrappers and `config/editor/da.json` row arrays. The whole
+  AEM site configuration is never replaced.
+- Source multipart PUT/POST (`data` field) and raw uploads, converted to HLX6
+  POST, including its image-import behavior and validation. String `data`
+  fields are accepted for `.html`, `.json` and `.svg` only (415 otherwise).
+  Successful saves return DA's source/edit/preview/live URL envelope and the
+  upstream ETag. Bodyless folder writes become trailing-slash POSTs.
+  Upstream redirects are rejected with 502.
+
+All requests retain existing DA ACL checks and require the caller's Bearer
+token and the corresponding HLX6 permissions. There is no service-token
+elevation, mutation retry, or fallback to writable legacy storage. Responses
+are private/no-store. Legacy UUID and permission-hint headers are not invented:
+`x-da-id`, `x-da-actions`, and `x-da-child-actions` are unavailable on bridged
+site responses. DA ACLs and HLX6 roles must be configured separately.
+
+Version/history APIs, copy/move/delete, dedicated media uploads, GUID-specified
+uploads, collaborative writes, and extensionless file uploads remain
+unsupported and return 410. Raw `/.versions` and `/.history` access through
+source/list is blocked. Multiple-author token headers are rejected rather
+than silently selecting an author. HTML transformations, validation, request
+limits, and empty-document restore points are not identical to DA.
+
+Org config, authentication, logout, and CORS preflight remain available locally.
+The bridge does not change the HLX6 editor's org-config inheritance behavior.
 Sites configured for dual write in `HLX6_DUAL_WRITES` retain normal DA behavior
 during migration, even if they also appear in `HLX6_MIGRATED_SITES`.
+
+The companion da-content change routes migrated sites through its `daadmin`
+binding before direct-R2 allowlists and asset opt-outs. Configure the same
+migration variables on both workers, and deploy the da-admin bridge first.
+Content path/cookie handling remains on the legacy host; no browser redirect
+or Library URL rewrite is required for supported source reads.
 
 ### Helix 6 migration (dual write)
 Sites listed in the `HLX6_DUAL_WRITES` env variable are being migrated to Helix 6. Every successful modification on those sites (source create/update/delete, folder creation, copy, move, version creation) is also propagated, in the background, to the Helix 6 source bus at `AEM_API` (`https://api.aem.live`) using the caller's IMS token. Failures are logged but do not affect the DA response.

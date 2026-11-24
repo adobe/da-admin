@@ -14,11 +14,14 @@ import putKv from '../storage/kv/put.js';
 import getKv from '../storage/kv/get.js';
 import { configPermissionPath, hasPermission } from '../utils/auth.js';
 
-// Config access is granted if the user has the action on the resource's own keyword
-// (the per-site `/{site}/CONFIG`, or `CONFIG` for org config) OR on the org-level
-// `CONFIG` keyword. The latter lets org admins manage any site's config; site rules
-// (including `/{site}/**` wildcards) can grant additional access but never restrict it.
-function hasConfigPermission(daCtx, action) {
+/**
+ * Grants config access through either the resource CONFIG keyword or the org CONFIG keyword.
+ * Site rules can grant additional access but cannot restrict an org config administrator.
+ * @param {Object} daCtx DA context with the resource key, users and org-scoped ACLs.
+ * @param {string} action Required config action.
+ * @returns {boolean} Whether either config permission grants the action.
+ */
+export function hasConfigPermission(daCtx, action) {
   return hasPermission(daCtx, configPermissionPath(daCtx), action, true)
     || hasPermission(daCtx, 'CONFIG', action, true);
 }

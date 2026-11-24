@@ -22,7 +22,7 @@
 export const DEFAULT_AEM_API = 'https://api.aem.live';
 export const HLX6_GONE = {
   status: 410,
-  body: JSON.stringify({ error: 'This site is served by Helix 6. Use https://api.aem.live instead.' }),
+  body: JSON.stringify({ error: 'Use https://api.aem.live instead.' }),
 };
 
 const SUCCESS = [200, 201, 204, 206];
@@ -158,6 +158,19 @@ export function isHlx6Site(env, org, site) {
   if (!org || !site) return false;
   return getMigratedSites(env).has(`${org.toLowerCase()}/${site.toLowerCase()}`)
     && !getHlx6Target(env, org, site);
+}
+
+/**
+ * Determines whether an org listing needs HLX6 site entries, excluding dual writes.
+ * @param {import('../index.js').Env} env Worker migration configuration.
+ * @param {string} org DA organization name.
+ * @returns {boolean} Whether any site in the org uses the compatibility bridge.
+ */
+export function hasHlx6Sites(env, org) {
+  return [...getMigratedSites(env)].some((entry) => {
+    const [owner, site] = entry.split('/');
+    return owner === org?.toLowerCase() && isHlx6Site(env, owner, site);
+  });
 }
 
 /**

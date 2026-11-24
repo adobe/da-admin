@@ -12,6 +12,527 @@
 import assert from 'node:assert';
 import esmock from 'esmock';
 import sinon from 'sinon';
+import handler from '../../src/routes/hlx6.js';
+
+describe('Helix 6 compatibility bridge', () => {
+  let getContext;
+  let fetchStub;
+  let env;
+
+  before(async () => {
+    getContext = await esmock('../../src/utils/daCtx.js', {
+      '../../src/utils/auth.js': { getUsers: async () => [{ email: 'author@example.com' }] },
+    });
+  });
+
+  beforeEach(() => {
+    env = {
+      AEM_API: 'https://api.example.com',
+      DA_CONTENT: 'https://content.da.live',
+      HLX6_MIGRATED_SITES: ['org/site'],
+    };
+    fetchStub = sinon.stub(globalThis, 'fetch');
+    sinon.stub(console, 'log');
+    sinon.stub(console, 'error');
+  });
+
+  afterEach(() => sinon.restore());
+
+  /**
+   * Exercises a bridge route with a legacy request and the normal DA context builder.
+   * @param {string} path Legacy API path.
+   * @param {RequestInit} [options={}] Request overrides with object-shaped headers.
+   * @param {typeof handler} [run=handler] Bridge route under test.
+   * @returns {Promise<Response>} Route response.
+   */
+  async function call(path, options = {}, run = handler) {
+    const req = new Request(`https://admin.da.live${path}`, {
+      ...options, headers: { authorization: 'Bearer caller', ...options.headers },
+    });
+    const daCtx = await getContext(req, env);
+    return run({ req, env, daCtx });
+  }
+
+  it('streams an authenticated read without false DA IDs or permissions', async () => {
+    const upstream = new Response('source bytes', {
+      headers: { 'content-type': 'text/html', etag: '"revision"', 'last-modified': 'Mon, 23 Nov 2026 08:00:00 GMT' },
+    });
+    sinon.stub(upstream, 'text').throws(new Error('Do not buffer source reads'));
+    fetchStub.resolves(upstream);
+    const resp = await call('/source/org/site/library/blocks/columns.html?token=do-not-forward');
+    assert.strictEqual(fetchStub.firstCall.args[0], 'https://api.example.com/org/sites/site/source/library/blocks/columns.html');
+    assert.strictEqual(fetchStub.firstCall.args[1].headers.get('authorization'), 'Bearer caller');
+    assert.strictEqual(fetchStub.firstCall.args[1].redirect, 'manual');
+    assert.strictEqual(await resp.text(), 'source bytes');
+    assert.strictEqual(resp.headers.get('etag'), '"revision"');
+    assert.strictEqual(resp.headers.get('last-modified'), 'Mon, 23 Nov 2026 08:00:00 GMT');
+    assert.strictEqual(resp.headers.get('cache-control'), 'private, no-store');
+    assert.strictEqual(resp.headers.get('x-da-id'), null);
+    assert.strictEqual(resp.headers.get('x-da-actions'), null);
+  });
+
+  it('restores weak If-None-Match and precedence over If-Match', async () => {
+    fetchStub.resolves(new Response('unchanged', { headers: { etag: '"revision"' } }));
+    const resp = await call('/source/org/site/a.json', {
+      headers: { 'if-none-match': '"old", W/"revision"', 'if-match': '"other"' },
+    });
+    assert.strictEqual(resp.status, 304);
+    assert.strictEqual(await resp.text(), '');
+    assert.strictEqual(resp.headers.get('etag'), '"revision"');
+  });
+
+  it('returns 412 rather than stale bytes for a failed read If-Match', async () => {
+    fetchStub.resolves(new Response('new bytes', { headers: { etag: '"new"' } }));
+    const resp = await call('/source/org/site/a.json', { headers: { 'if-match': '"old"' } });
+    assert.strictEqual(resp.status, 412);
+    assert.strictEqual(await resp.text(), '');
+  });
+
+  it('forwards HEAD without a body and preserves metadata', async () => {
+    fetchStub.resolves(new Response(null, { headers: { etag: '"revision"', 'content-length': '42' } }));
+    const resp = await call('/source/org/site/a.json', { method: 'HEAD' });
+    assert.strictEqual(fetchStub.firstCall.args[1].method, 'HEAD');
+    assert.strictEqual(await resp.text(), '');
+    assert.strictEqual(resp.headers.get('content-length'), '42');
+  });
+
+  it('normalizes listing paths, dates and existing DA hidden-file rules', async () => {
+    fetchStub.resolves(new Response(JSON.stringify([
+      { name: 'folder/', 'content-type': 'application/folder' },
+      { name: '.private/', 'content-type': 'application/folder' },
+      { name: 'a.json', 'last-modified': '2026-11-23T08:00:00Z' },
+      { name: 'a.json.props', 'last-modified': '2026-11-23T08:00:00Z' },
+      { name: '.hidden.json', 'last-modified': '2026-11-23T08:00:00Z' },
+    ])));
+    const resp = await call('/list/org/site/library');
+    assert.strictEqual(fetchStub.firstCall.args[0], 'https://api.example.com/org/sites/site/source/library/');
+    assert.deepStrictEqual(await resp.json(), [
+      {
+        path: '/org/site/library/a.json', name: 'a', ext: 'json', lastModified: Date.parse('2026-11-23T08:00:00Z'),
+      },
+      { path: '/org/site/library/folder', name: 'folder' },
+    ]);
+  });
+
+  it('rejects legacy site-list pagination rather than repeating the first page', async () => {
+    const resp = await call('/list/org/site', { headers: { 'da-continuation-token': 'old-page' } });
+    assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /not paginated/);
+    assert(fetchStub.notCalled);
+  });
+
+  it('fails explicitly on malformed upstream listing JSON', async () => {
+    fetchStub.resolves(new Response('{}'));
+    const resp = await call('/list/org/site');
+    assert.strictEqual(resp.status, 502);
+    assert.match(resp.headers.get('x-error'), /listing/);
+  });
+
+  it('converts editor arrays to DA multi-sheet wrappers', async () => {
+    fetchStub.resolves(new Response(JSON.stringify({ data: [{ key: 'theme', value: 'dark' }], library: [{ title: 'Blocks' }] })));
+    const resp = await call('/config/org/site');
+    assert.strictEqual(fetchStub.firstCall.args[0], 'https://api.example.com/org/sites/site/config/editor/da.json');
+    const config = await resp.json();
+    assert.deepStrictEqual(config[':names'], ['data', 'library']);
+    assert.deepStrictEqual(config.library, {
+      total: 1, limit: 1, offset: 0, data: [{ title: 'Blocks' }],
+    });
+  });
+
+  it('saves multipart config to editor.da only and returns the legacy shape', async () => {
+    const form = new FormData();
+    form.set('config', JSON.stringify({
+      ':type': 'sheet', ':sheetname': 'library', data: [{ title: 'Blocks' }],
+    }));
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    const resp = await call('/config/org/site', { method: 'PUT', body: form });
+    assert.strictEqual(fetchStub.firstCall.args[0], 'https://api.example.com/org/sites/site/config/editor/da.json');
+    const options = fetchStub.firstCall.args[1];
+    assert.strictEqual(options.method, 'POST');
+    assert.deepStrictEqual(JSON.parse(options.body), { library: [{ title: 'Blocks' }] });
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual((await resp.json())[':sheetname'], 'library');
+  });
+
+  it('rejects malformed config before saving anything', async () => {
+    const form = new FormData();
+    form.set('config', '{"library":"not rows"}');
+    const resp = await call('/config/org/site', { method: 'POST', body: form });
+    assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /configuration/);
+    assert(fetchStub.notCalled);
+  });
+
+  it('saves multi-sheet config and rejects duplicate sheet names', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    const form = new FormData();
+    form.set('config', JSON.stringify({
+      ':type': 'multi-sheet',
+      ':names': ['data', 'library'],
+      data: { data: [{ key: 'theme' }] },
+      library: { data: [{ title: 'Blocks' }] },
+    }));
+    const resp = await call('/config/org/site', { method: 'PUT', body: form });
+    assert.strictEqual(resp.status, 201);
+    assert.deepStrictEqual(JSON.parse(fetchStub.firstCall.args[1].body), {
+      data: [{ key: 'theme' }], library: [{ title: 'Blocks' }],
+    });
+    const duplicate = new FormData();
+    duplicate.set('config', JSON.stringify({ ':type': 'multi-sheet', ':names': ['data', 'data'] }));
+    const rejected = await call('/config/org/site', { method: 'PUT', body: duplicate });
+    assert.strictEqual(rejected.status, 400);
+    assert.match((await rejected.json()).error, /Invalid sheet names/);
+    assert(fetchStub.calledOnce);
+  });
+
+  it('fails explicitly on a malformed upstream editor config', async () => {
+    fetchStub.resolves(new Response('{"data":"not rows"}'));
+    const resp = await call('/config/org/site');
+    assert.strictEqual(resp.status, 502);
+    assert.match(resp.headers.get('x-error'), /editor configuration/);
+  });
+
+  it('rejects collaborative writes before reading the body', async () => {
+    const resp = await call('/source/org/site/a.html', {
+      method: 'PUT', body: '<main></main>', headers: { 'content-type': 'text/html', 'x-da-initiator': 'collab' },
+    });
+    assert.strictEqual(resp.status, 410);
+    assert.match((await resp.json()).error, /Collaborative writes/);
+    assert(fetchStub.notCalled);
+  });
+
+  it('rejects unparseable multipart uploads', async () => {
+    const resp = await call('/source/org/site/a.html', {
+      method: 'PUT', body: 'not multipart', headers: { 'content-type': 'multipart/form-data; boundary=x' },
+    });
+    assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /Invalid source upload/);
+    assert(fetchStub.notCalled);
+  });
+
+  it('unwraps a source multipart save and returns DA source/preview/live URLs', async () => {
+    const form = new FormData();
+    form.set('data', new Blob(['{"data":[]}'], { type: 'application/json' }), 'tags.json');
+    fetchStub.resolves(new Response(null, { status: 201, headers: { etag: '"saved"' } }));
+    const resp = await call('/source/org/site/.tags/taxonomy.json', { method: 'PUT', body: form });
+    const options = fetchStub.firstCall.args[1];
+    assert.strictEqual(options.method, 'POST');
+    assert.strictEqual(options.headers.get('content-type'), 'application/json');
+    assert.strictEqual(new TextDecoder().decode(options.body), '{"data":[]}');
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual(resp.headers.get('etag'), '"saved"');
+    assert.deepStrictEqual(await resp.json(), {
+      source: {
+        editUrl: 'https://da.live/edit#/org/site/.tags/taxonomy.json',
+        contentUrl: 'https://content.da.live/org/site/.tags/taxonomy.json',
+      },
+      aem: {
+        previewUrl: 'https://main--site--org.aem.page/.tags/taxonomy.json',
+        liveUrl: 'https://main--site--org.aem.live/.tags/taxonomy.json',
+      },
+    });
+  });
+
+  it('uses POST for legacy HTML PUT and forwards write preconditions', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    await call('/source/org/site/a.html', {
+      method: 'PUT',
+      body: '<main><div>content</div></main>',
+      headers: { 'content-type': 'text/html', 'if-match': '"old"' },
+    });
+    const options = fetchStub.firstCall.args[1];
+    assert.strictEqual(options.method, 'POST');
+    assert.strictEqual(options.headers.get('if-match'), '"old"');
+    assert.strictEqual(new TextDecoder().decode(options.body), '<main><div>content</div></main>');
+  });
+
+  ['/canonical.html', '/org/sites/site/source/canonical.html'].forEach((location) => {
+    it(`uses the canonical upstream Location ${location} for saved legacy URLs`, async () => {
+      fetchStub.resolves(new Response(null, { status: 201, headers: { location } }));
+      const resp = await call('/source/org/site/original.html', {
+        method: 'POST', body: '<main></main>', headers: { 'content-type': 'text/html' },
+      });
+      assert.strictEqual((await resp.json()).source.editUrl, 'https://da.live/edit#/org/site/canonical');
+      assert.strictEqual(resp.headers.get('location'), 'https://admin.da.live/source/org/site/canonical.html');
+    });
+  });
+
+  it('reports a saved source with a malformed Location without throwing', async () => {
+    fetchStub.resolves(new Response(null, { status: 201, headers: { location: '/bad%E0%A4%A.html' } }));
+    const resp = await call('/source/org/site/a.html', {
+      method: 'POST', body: '<main></main>', headers: { 'content-type': 'text/html' },
+    });
+    assert.strictEqual(resp.status, 502);
+    assert.match((await resp.json()).error, /saved content.*do not blindly retry/);
+  });
+
+  it('rejects upstream redirects instead of passing them through', async () => {
+    fetchStub.resolves(new Response('moved', { status: 302, headers: { location: 'https://elsewhere.example/' } }));
+    const resp = await call('/source/org/site/a.json');
+    assert.strictEqual(resp.status, 502);
+    assert.strictEqual(resp.headers.get('location'), null);
+  });
+
+  it('labels string SVG uploads and rejects unknown text extensions', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    const svg = new FormData();
+    svg.set('data', '<svg></svg>');
+    await call('/source/org/site/icon.svg', { method: 'POST', body: svg });
+    assert.strictEqual(fetchStub.firstCall.args[1].headers.get('content-type'), 'image/svg+xml');
+    const txt = new FormData();
+    txt.set('data', 'plain');
+    const resp = await call('/source/org/site/notes.txt', { method: 'POST', body: txt });
+    assert.strictEqual(resp.status, 415);
+    assert(fetchStub.calledOnce);
+  });
+
+  it('does not forward preconditions to listing or config requests', async () => {
+    fetchStub.callsFake(async () => new Response('[]'));
+    const headers = { 'if-none-match': '"x"', 'if-match': '"y"' };
+    await call('/list/org/site', { headers });
+    fetchStub.callsFake(async () => new Response('{"data":[]}'));
+    await call('/config/org/site', { headers });
+    fetchStub.getCalls().forEach(({ args }) => {
+      assert.strictEqual(args[1].headers.get('if-none-match'), null);
+      assert.strictEqual(args[1].headers.get('if-match'), null);
+    });
+    assert(fetchStub.calledTwice);
+  });
+
+  it('returns the save envelope with 200 when the upstream answers 204', async () => {
+    fetchStub.resolves(new Response(null, { status: 204 }));
+    const resp = await call('/source/org/site/a.html', {
+      method: 'POST', body: '<main></main>', headers: { 'content-type': 'text/html' },
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual((await resp.json()).source.editUrl, 'https://da.live/edit#/org/site/a');
+  });
+
+  it('reports a saved source with an unparseable Location URL without throwing', async () => {
+    fetchStub.resolves(new Response(null, { status: 201, headers: { location: 'http://[bad' } }));
+    const resp = await call('/source/org/site/a.html', {
+      method: 'POST', body: '<main></main>', headers: { 'content-type': 'text/html' },
+    });
+    assert.strictEqual(resp.status, 502);
+    assert.match((await resp.json()).error, /do not blindly retry/);
+  });
+
+  it('falls back to the extension type for untyped file uploads', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    const form = new FormData();
+    form.set('data', new Blob(['{}']), 'a.json');
+    await call('/source/org/site/a.json', { method: 'POST', body: form });
+    assert.strictEqual(fetchStub.firstCall.args[1].headers.get('content-type'), 'application/json');
+  });
+
+  it('does not redirect a saved source envelope to another host', async () => {
+    fetchStub.resolves(new Response(null, {
+      status: 201, headers: { location: 'https://other.example/file.html' },
+    }));
+    const resp = await call('/source/org/site/a.html', {
+      method: 'POST', body: '<main></main>', headers: { 'content-type': 'text/html' },
+    });
+    assert.strictEqual(resp.status, 502);
+    assert.match((await resp.json()).error, /saved content.*do not blindly retry/);
+    assert(fetchStub.calledOnce);
+  });
+
+  it('creates bodyless folders using a slash POST', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    const resp = await call('/source/org/site/new-folder', { method: 'PUT' });
+    assert.strictEqual(fetchStub.firstCall.args[0], 'https://api.example.com/org/sites/site/source/new-folder/');
+    assert.strictEqual(fetchStub.firstCall.args[1].body, undefined);
+    assert.strictEqual(resp.status, 201);
+    assert.strictEqual((await resp.json()).source.editUrl, 'https://da.live/org/site/new-folder');
+  });
+
+  [401, 403, 413, 429, 500].forEach((status) => {
+    it(`returns upstream save failure ${status} without retry or success JSON`, async () => {
+      fetchStub.resolves(new Response('upstream error', {
+        status, headers: { 'x-error': 'receiver failure', 'retry-after': '60' },
+      }));
+      const resp = await call('/source/org/site/a.json', {
+        method: 'POST', body: '{}', headers: { 'content-type': 'application/json' },
+      });
+      assert.strictEqual(resp.status, status);
+      assert.strictEqual(await resp.text(), 'upstream error');
+      assert.strictEqual(resp.headers.get('x-error'), 'receiver failure');
+      assert.strictEqual(resp.headers.get('retry-after'), '60');
+      assert(fetchStub.calledOnce);
+    });
+  });
+
+  it('surfaces unknown mutation outcomes without replaying them', async () => {
+    fetchStub.rejects(new Error('Connection reset'));
+    const resp = await call('/source/org/site/a.json', {
+      method: 'POST', body: '{}', headers: { 'content-type': 'application/json' },
+    });
+    assert.strictEqual(resp.status, 502);
+    assert.match((await resp.json()).error, /not automatically retried/);
+    assert(fetchStub.calledOnce);
+  });
+
+  ['', 'Bearer first, Bearer second'].forEach((authorization) => {
+    it(`rejects ${authorization ? 'multiple' : 'missing'} author credentials`, async () => {
+      const resp = await call('/source/org/site/a.json', { headers: { authorization } });
+      assert.strictEqual(resp.status, authorization ? 410 : 401);
+      assert(fetchStub.notCalled);
+    });
+  });
+
+  it('rejects GUIDs instead of ignoring document identity', async () => {
+    const form = new FormData();
+    form.set('data', new Blob(['{}'], { type: 'application/json' }));
+    form.set('guid', 'old-document-uuid');
+    const resp = await call('/source/org/site/a.json', { method: 'POST', body: form });
+    assert.strictEqual(resp.status, 410);
+    assert.match((await resp.json()).error, /GUID/);
+    assert(fetchStub.notCalled);
+  });
+
+  [
+    ['/source/org/site/a.html', 'DELETE'],
+    ['/versionsource/org/site/id/version.html', 'GET'],
+    ['/versionlist/org/site/a.html', 'GET'],
+    ['/copy/org/site/a.html', 'POST'],
+    ['/move/org/site/a.html', 'POST'],
+    ['/media/org/site/a.jpg', 'POST'],
+  ].forEach(([path, method]) => {
+    it(`keeps unsupported ${method} ${path} blocked`, async () => {
+      const resp = await call(path, { method });
+      assert.strictEqual(resp.status, 410);
+      assert(fetchStub.notCalled);
+    });
+  });
+
+  it('blocks history suffixes through generic source routes', async () => {
+    const resp = await call('/source/org/site/a.html/.history');
+    assert.strictEqual(resp.status, 404);
+    assert(fetchStub.notCalled);
+  });
+
+  it('retains legacy write ACLs before an upstream save', async () => {
+    env.DA_CONFIG = {
+      get: async () => ({
+        permissions: {
+          data: [
+            { path: '/site/**', actions: 'read', groups: 'author@example.com' },
+          ],
+        },
+      }),
+    };
+    const resp = await call('/source/org/site/a.json', {
+      method: 'POST', body: '{}', headers: { 'content-type': 'application/json' },
+    });
+    assert.strictEqual(resp.status, 403);
+    assert(fetchStub.notCalled);
+  });
+
+  it('merges bridged HLX6 org sites on the first page, deduplicating by path', async () => {
+    env.HLX6_MIGRATED_SITES = ['org/site', 'org/both'];
+    const legacy = sinon.stub().resolves({
+      status: 200,
+      body: JSON.stringify([
+        { path: '/org/site', name: 'site' },
+        { path: '/org/legacy', name: 'legacy' },
+        { path: '/org/both', name: 'both' },
+        { path: '/org/both.json', name: 'both', ext: 'json' },
+        { path: '/org/notes', name: 'notes' },
+        { path: '/org/notes.json', name: 'notes', ext: 'json' },
+      ]),
+      continuationToken: 'next-page',
+    });
+    const module = await esmock('../../src/routes/hlx6.js', {
+      '../../src/routes/list.js': { default: legacy },
+    });
+    const timeout = sinon.spy(AbortSignal, 'timeout');
+    fetchStub.callsFake(async () => new Response(JSON.stringify([
+      { name: 'hlx6only/', 'content-type': 'application/folder' },
+      { name: 'both/', 'content-type': 'application/folder' },
+      { name: 'file.json' },
+      { name: '../' },
+    ])));
+    const first = await call('/list/org', {}, module.listHlx6Org);
+    assert.strictEqual(fetchStub.firstCall.args[0], 'https://api.example.com/org/source/');
+    assert.strictEqual(fetchStub.firstCall.args[1].method, 'GET');
+    assert.strictEqual(fetchStub.firstCall.args[1].headers.get('authorization'), 'Bearer caller');
+    assert(timeout.calledWith(3000));
+    assert.deepStrictEqual(await first.json(), [
+      { path: '/org/both.json', name: 'both', ext: 'json' },
+      { path: '/org/both', name: 'both' },
+      { path: '/org/legacy', name: 'legacy' },
+      { path: '/org/notes', name: 'notes' },
+      { path: '/org/notes.json', name: 'notes', ext: 'json' },
+      { path: '/org/site', name: 'site' },
+    ]);
+    assert.strictEqual(first.headers.get('da-continuation-token'), 'next-page');
+    const second = await call('/list/org', {
+      headers: { 'da-continuation-token': 'next-page' },
+    }, module.listHlx6Org);
+    assert.deepStrictEqual((await second.json()).map((item) => item.path), [
+      '/org/both.json', '/org/legacy', '/org/notes', '/org/notes.json', '/org/site',
+    ]);
+  });
+
+  [
+    () => new Response('denied', { status: 403 }),
+    () => new Response('{"not":"a listing"}'),
+    () => { throw new Error('Connection reset'); },
+  ].forEach((upstream, i) => {
+    it(`keeps the DA listing when the HLX6 org listing fails (${i})`, async () => {
+      const module = await esmock('../../src/routes/hlx6.js', {
+        '../../src/routes/list.js': {
+          default: async () => ({ status: 200, body: JSON.stringify([{ path: '/org/legacy', name: 'legacy' }]) }),
+        },
+      });
+      fetchStub.callsFake(async () => upstream());
+      const resp = await call('/list/org', {}, module.listHlx6Org);
+      assert.strictEqual(resp.status, 200);
+      assert.deepStrictEqual(await resp.json(), [{ path: '/org/legacy', name: 'legacy' }]);
+    });
+  });
+
+  it('filters HLX6 org sites by DA ACLs for descendant-only org readers', async () => {
+    env.DA_CONFIG = {
+      get: async () => ({
+        permissions: {
+          data: [
+            { path: '/site/docs/**', actions: 'read', groups: 'author@example.com' },
+          ],
+        },
+      }),
+    };
+    const module = await esmock('../../src/routes/hlx6.js', {
+      '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
+    });
+    fetchStub.resolves(new Response(JSON.stringify([{ name: 'site/' }, { name: 'hlx6only/' }])));
+    const resp = await call('/list/org', {}, module.listHlx6Org);
+    assert.deepStrictEqual(await resp.json(), [{ path: '/org/site', name: 'site' }]);
+  });
+
+  it('denies folder listings without read or descendant permission', async () => {
+    env.DA_CONFIG = {
+      get: async () => ({
+        permissions: {
+          data: [
+            { path: '/other/**', actions: 'read', groups: 'author@example.com' },
+          ],
+        },
+      }),
+    };
+    const resp = await call('/list/org/site/library');
+    assert.strictEqual(resp.status, 403);
+    assert(fetchStub.notCalled);
+  });
+
+  it('propagates legacy org-list failures', async () => {
+    const module = await esmock('../../src/routes/hlx6.js', {
+      '../../src/routes/list.js': { default: async () => ({ status: 404, body: '' }) },
+    });
+    const resp = await call('/list/org', {}, module.listHlx6Org);
+    assert.strictEqual(resp.status, 404);
+  });
+});
 
 describe('Migration route wiring', () => {
   const env = {
@@ -26,8 +547,28 @@ describe('Migration route wiring', () => {
     sinon.stub(console, 'log');
     sinon.stub(console, 'error');
   });
-
   afterEach(() => sinon.restore());
+
+  ['copy', 'move'].forEach((operation) => {
+    it(`blocks ${operation} into migrated legacy storage before modifying either site`, async () => {
+      const storage = sinon.stub().resolves({ status: 204 });
+      const route = await esmock(`../../src/routes/${operation}.js`, {
+        '../../src/utils/auth.js': { hasPermission: () => true },
+        [`../../src/storage/object/${operation}.js`]: { default: storage },
+      });
+      const req = new Request(`https://admin.da.live/${operation}/org/legacy/a.html`, {
+        method: 'POST', body: new URLSearchParams({ destination: '/org/migrated/a.html' }),
+      });
+      const resp = await route({
+        req,
+        env: { HLX6_MIGRATED_SITES: ['org/migrated'] },
+        daCtx: { org: 'org', key: 'legacy/a.html' },
+      });
+      assert.strictEqual(resp.status, 410);
+      assert(storage.notCalled);
+      assert(fetchStub.notCalled);
+    });
+  });
 
   it('records successful legacy media uploads as not propagated to hlx6', async () => {
     const postMedia = await esmock('../../src/routes/media.js', {
