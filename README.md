@@ -43,6 +43,12 @@ Browse to `http://localhost:8787/list` to ensure you see the expected buckets.
 1. You can make your own buckets tied to your own Cloudflare account or you can request a `.dev.vars` file.
 2. Cloudflare KV, which is used for org properties and session login info is locally stored when developing locally. You will need to make your own local KVs to test against.
 
+### Development requirements
+
+Every new feature or API endpoint must follow the
+[HLX6 compatibility requirements](./AGENTS.md#hlx6-compatibility): forward
+supported calls for HLX6-backed projects or return `410 Gone` when unsupported.
+
 ### Helix 6 request handling
 
 Both da-admin and da-content resolve sites through the shared `DA_SITE_BACKENDS`
