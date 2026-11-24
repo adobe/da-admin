@@ -19,7 +19,7 @@ export default async function moveRoute({ req, env, daCtx }) {
   if (details.error) return details.error;
   if (!hasPermission(daCtx, details.source, 'write')
     || !hasPermission(daCtx, details.destination, 'write')) return { status: 403 };
-  if (isHlx6Site(env, daCtx.org, details.destination.split('/')[0])) return HLX6_GONE;
+  if (await isHlx6Site(env, daCtx.org, details.destination.split('/')[0])) return HLX6_GONE;
   const resp = await moveObject(env, daCtx, details);
   syncMove({
     req, env, daCtx, details, resp,

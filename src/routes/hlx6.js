@@ -227,7 +227,7 @@ async function listSource({ req, env, daCtx }) {
 
 /**
  * Lists the org's bridged HLX6 sites: entries of `GET /{org}/source/` (caller token) that
- * are also in HLX6_MIGRATED_SITES, so every listed site opens through the bridge.
+ * resolved as HLX6 in the shared site registry, so every listed site opens through the bridge.
  * Best effort with a short timeout: failures yield no sites so DA org browsing keeps working.
  * @param {Request} req Legacy request carrying the caller credentials.
  * @param {Env} env Worker bindings and API base URL.
@@ -246,11 +246,12 @@ async function fetchHlx6OrgSites(req, env, org) {
   try {
     const items = await upstream.json();
     if (!Array.isArray(items)) throw new Error('Expected a source listing array');
-    return items
+    const sites = items
       .map((item) => item?.name)
       .filter((name) => typeof name === 'string' && /^[^/.]+\/$/.test(name))
-      .map((name) => name.slice(0, -1).toLowerCase())
-      .filter((site) => isHlx6Site(env, org, site));
+      .map((name) => name.slice(0, -1).toLowerCase());
+    const migrated = await Promise.all(sites.map((site) => isHlx6Site(env, org, site)));
+    return sites.filter((site, index) => migrated[index]);
   } catch (e) {
     console.error('[hlx6] Invalid org source listing; using DA sites only', e.message);
     return [];

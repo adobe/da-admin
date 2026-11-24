@@ -29,8 +29,9 @@ describe('Helix 6 compatibility bridge', () => {
     env = {
       AEM_API: 'https://api.example.com',
       DA_CONTENT: 'https://content.da.live',
-      HLX6_MIGRATED_SITES: ['org/site'],
+      DA_SITE_BACKENDS: { get: sinon.stub().resolves('da') },
     };
+    env.DA_SITE_BACKENDS.get.withArgs('org/site').resolves('hlx6');
     fetchStub = sinon.stub(globalThis, 'fetch');
     sinon.stub(console, 'log');
     sinon.stub(console, 'error');
@@ -429,7 +430,7 @@ describe('Helix 6 compatibility bridge', () => {
   });
 
   it('merges bridged HLX6 org sites on the first page, deduplicating by path', async () => {
-    env.HLX6_MIGRATED_SITES = ['org/site', 'org/both'];
+    env.DA_SITE_BACKENDS.get.withArgs('org/both').resolves('hlx6');
     const legacy = sinon.stub().resolves({
       status: 200,
       body: JSON.stringify([
@@ -485,11 +486,32 @@ describe('Helix 6 compatibility bridge', () => {
           default: async () => ({ status: 200, body: JSON.stringify([{ path: '/org/legacy', name: 'legacy' }]) }),
         },
       });
+
       fetchStub.callsFake(async () => upstream());
       const resp = await call('/list/org', {}, module.listHlx6Org);
       assert.strictEqual(resp.status, 200);
       assert.deepStrictEqual(await resp.json(), [{ path: '/org/legacy', name: 'legacy' }]);
     });
+  });
+
+  it('discovers and caches a cold HLX6 site while listing an org', async () => {
+    const values = new Map();
+    env.DA_SITE_BACKENDS = {
+      get: async (key) => values.get(key) ?? null,
+      put: async (key, value) => { values.set(key, value); },
+    };
+    const module = await esmock('../../src/routes/hlx6.js', {
+      '../../src/routes/list.js': { default: async () => ({ status: 200, body: '[]' }) },
+    });
+    fetchStub.withArgs('https://api.example.com/org/source/').resolves(
+      new Response(JSON.stringify([{ name: 'newsite/' }])),
+    );
+    fetchStub.withArgs('https://admin.hlx.page/ping/org/newsite').resolves(
+      new Response(null, { headers: { 'x-api-upgrade-available': 'true' } }),
+    );
+    const resp = await call('/list/org', {}, module.listHlx6Org);
+    assert.deepStrictEqual(await resp.json(), [{ path: '/org/newsite', name: 'newsite' }]);
+    assert.strictEqual(values.get('org/newsite'), 'hlx6');
   });
 
   it('filters HLX6 org sites by DA ACLs for descendant-only org readers', async () => {
@@ -561,7 +583,7 @@ describe('Migration route wiring', () => {
       });
       const resp = await route({
         req,
-        env: { HLX6_MIGRATED_SITES: ['org/migrated'] },
+        env: { DA_SITE_BACKENDS: { get: async () => 'hlx6' } },
         daCtx: { org: 'org', key: 'legacy/a.html' },
       });
       assert.strictEqual(resp.status, 410);

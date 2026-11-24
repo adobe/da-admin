@@ -97,7 +97,7 @@ export function parseDualWrites(value) {
 }
 
 let dualWriteCache = { key: undefined, map: new Map() };
-let migratedCache = { key: undefined, sites: new Set() };
+const siteLookups = new WeakMap();
 
 function getDualWrites(env) {
   const value = env?.HLX6_DUAL_WRITES;
@@ -114,23 +114,23 @@ function getDualWrites(env) {
   return dualWriteCache.map;
 }
 
-function getMigratedSites(env) {
-  const value = env?.HLX6_MIGRATED_SITES;
-  const key = JSON.stringify(value) ?? '';
-  if (migratedCache.key !== key) {
-    const sites = new Set();
-    for (const entry of toList(value, 'HLX6_MIGRATED_SITES')) {
-      const parsed = typeof entry === 'string' && !entry.includes('->') && parseOrgSite(entry);
-      if (parsed) {
-        sites.add(`${parsed.org}/${parsed.site}`);
-      } else {
-        console.error(`[hlx6] Ignoring invalid HLX6_MIGRATED_SITES entry: ${entry}`);
-      }
-    }
-    migratedCache = { key, sites };
-    log(`HLX6_MIGRATED_SITES: ${JSON.stringify([...sites])}`);
+async function detectHlx6Site(namespace, key) {
+  const cached = await namespace.get(key);
+  if (cached === 'hlx6' || cached === 'da') return cached === 'hlx6';
+  if (cached !== null) throw new Error(`Invalid site backend for ${key}`);
+
+  const path = key.split('/').map(encodeURIComponent).join('/');
+  const resp = await fetch(`https://admin.hlx.page/ping/${path}`, {
+    method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(3000),
+  });
+  await resp.body?.cancel();
+  // Unregistered DA sites return 404; transport/auth/server errors are not DA results.
+  if (!resp.ok && resp.status !== 404) {
+    throw new Error(`Site backend probe failed for ${key}: ${resp.status}`);
   }
-  return migratedCache.sites;
+  const migrated = resp.headers.has('x-api-upgrade-available');
+  await namespace.put(key, migrated ? 'hlx6' : 'da');
+  return migrated;
 }
 
 /**
@@ -139,7 +139,6 @@ function getMigratedSites(env) {
  */
 export function initHlx6(env) {
   getDualWrites(env);
-  getMigratedSites(env);
 }
 
 /**
@@ -152,25 +151,27 @@ export function getHlx6Target(env, org, site) {
 }
 
 /**
- * Detects sites that must no longer use DA storage, except during dual write.
+ * Resolves the shared site registry, probing only missing entries and excluding dual writes.
+ * Only in-flight lookups are memoized so manual KV updates are not hidden by isolate caches.
+ * @returns {Promise<boolean>} Whether this site must use HLX6 instead of DA storage.
  */
-export function isHlx6Site(env, org, site) {
+export async function isHlx6Site(env, org, site) {
   if (!org || !site) return false;
-  return getMigratedSites(env).has(`${org.toLowerCase()}/${site.toLowerCase()}`)
-    && !getHlx6Target(env, org, site);
-}
-
-/**
- * Determines whether an org listing needs HLX6 site entries, excluding dual writes.
- * @param {import('../index.js').Env} env Worker migration configuration.
- * @param {string} org DA organization name.
- * @returns {boolean} Whether any site in the org uses the compatibility bridge.
- */
-export function hasHlx6Sites(env, org) {
-  return [...getMigratedSites(env)].some((entry) => {
-    const [owner, site] = entry.split('/');
-    return owner === org?.toLowerCase() && isHlx6Site(env, owner, site);
-  });
+  if (getHlx6Target(env, org, site)) return false;
+  const namespace = env.DA_SITE_BACKENDS;
+  if (!namespace) throw new Error('Missing DA_SITE_BACKENDS binding');
+  const key = `${org}/${site}`.toLowerCase();
+  let pending = siteLookups.get(namespace);
+  if (!pending) {
+    pending = new Map();
+    siteLookups.set(namespace, pending);
+  }
+  if (!pending.has(key)) pending.set(key, detectHlx6Site(namespace, key));
+  try {
+    return await pending.get(key);
+  } finally {
+    pending.delete(key);
+  }
 }
 
 /**

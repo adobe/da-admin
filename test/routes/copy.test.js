@@ -13,6 +13,8 @@ import assert from 'node:assert';
 import esmock from 'esmock';
 
 describe('Copy Route', () => {
+  const env = { DA_SITE_BACKENDS: { get: async () => 'da' } };
+
   it('Test copyHandler with permissions', async () => {
     const copyCalled = [];
     const copyObject = (e, c, d, m) => {
@@ -62,7 +64,7 @@ describe('Copy Route', () => {
     assert.strictEqual(403, resp3.status);
     assert.strictEqual(copyCalled.length, 0);
 
-    const resp4 = await copyHandler({ req: req2, env: {}, daCtx: { org: 'myorg', key: 'my/src2.html' } });
+    const resp4 = await copyHandler({ req: req2, env, daCtx: { org: 'myorg', key: 'my/src2.html' } });
     assert.strictEqual(200, resp4.status);
     assert.strictEqual(copyCalled.length, 1);
     assert.strictEqual('my/src2.html', copyCalled[0].d.source);
@@ -121,7 +123,7 @@ describe('Copy Route', () => {
       formData: () => formdata,
     };
 
-    const resp = await copyHandler({ req, env: {}, daCtx: { org: 'myorg', key: 'my/src.html' } });
+    const resp = await copyHandler({ req, env, daCtx: { org: 'myorg', key: 'my/src.html' } });
     assert.strictEqual(resp.status, 400);
     assert.strictEqual(copyCalled.length, 0);
     const body = JSON.parse(resp.body);
@@ -150,7 +152,7 @@ describe('Copy Route', () => {
       formData: () => formdata,
     };
 
-    const resp = await copyHandler({ req, env: {}, daCtx: { org: 'myorg', key: 'my/src.html' } });
+    const resp = await copyHandler({ req, env, daCtx: { org: 'myorg', key: 'my/src.html' } });
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(copyCalled.length, 1);
     assert.strictEqual(copyCalled[0].d.destination, 'my/dest.html');
@@ -233,7 +235,7 @@ describe('Copy Route', () => {
       formData: () => formdata,
     };
 
-    const resp = await copyHandler({ req, env: {}, daCtx: { org: 'myorg', key: 'my/src.html' } });
+    const resp = await copyHandler({ req, env, daCtx: { org: 'myorg', key: 'my/src.html' } });
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(copyCalled.length, 1);
     assert.strictEqual(copyCalled[0].d.destination, 'my/my-da-versions-notes.html');

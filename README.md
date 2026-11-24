@@ -45,10 +45,20 @@ Browse to `http://localhost:8787/list` to ensure you see the expected buckets.
 
 ### Helix 6 request handling
 
-Sites listed in `HLX6_MIGRATED_SITES`, an array of `org/site` entries (or a
-JSON-encoded array or comma/newline-separated string), use a synchronous
-compatibility bridge to `AEM_API` (`https://api.aem.live` by default). The site
-check is local; no network probe is made.
+Both da-admin and da-content resolve sites through the shared `DA_SITE_BACKENDS`
+KV binding. Keys are lowercase `org/site`; values are the strings `da` or `hlx6`.
+An `hlx6` site uses a synchronous compatibility bridge to `AEM_API`
+(`https://api.aem.live` by default).
+
+On a cache miss, the worker makes an unauthenticated GET to
+`https://admin.hlx.page/ping/{org}/{site}` with a 3s timeout. Presence of
+`x-api-upgrade-available` identifies HLX6. Successful responses without that
+header, and 404s for unregistered sites, identify DA. Both results are persisted
+without expiration; cache hits do not ping. Concurrent lookups within one worker
+are coalesced, but KV does not guarantee a single probe globally.
+Redirects, auth/rate-limit/server errors, timeouts, invalid registry values, and
+KV failures fail the request rather than assuming DA or writing legacy storage.
+Only in-flight lookups are held in memory; subsequent requests read KV again.
 
 The bridge supports:
 
@@ -58,8 +68,9 @@ The bridge supports:
   filtering. HLX6 listings are unpaginated; a legacy continuation token on a
   migrated site's listing is rejected.
 - Org GET listings, merging legacy DA sites with the org's bridged HLX6 sites:
-  entries of `GET /{org}/source/` (caller token, 3s timeout) that are also in
-  `HLX6_MIGRATED_SITES`, filtered by DA ACLs. If the HLX6 listing fails
+  entries of `GET /{org}/source/` (caller token, 3s timeout) resolved as HLX6
+  through the registry, filtered by DA ACLs. Org listings also discover sites
+  not yet cached. If the HLX6 listing or site resolution fails
   (outage, timeout, missing HLX6 role), the DA listing is still returned.
   Only the first legacy page adds HLX6 sites; subsequent pages preserve the
   DA continuation token without repeating them.
@@ -89,25 +100,57 @@ limits, and empty-document restore points are not identical to DA.
 
 Org config, authentication, logout, and CORS preflight remain available locally.
 The bridge does not change the HLX6 editor's org-config inheritance behavior.
-Sites configured for dual write in `HLX6_DUAL_WRITES` retain normal DA behavior
-during migration, even if they also appear in `HLX6_MIGRATED_SITES`.
+In da-admin, sites configured for dual write in `HLX6_DUAL_WRITES` retain normal
+DA behavior during migration, even if the registry identifies them as `hlx6`.
+The dual-write override does not change the stored backend.
 
 The companion da-content change routes migrated sites through its `daadmin`
-binding before direct-R2 allowlists and asset opt-outs. Configure the same
-migration variables on both workers, and deploy the da-admin bridge first.
+binding before direct-R2 allowlists and asset opt-outs. It follows the shared
+registry only and does not read `HLX6_DUAL_WRITES`. Deploy the da-admin bridge first.
 Content path/cookie handling remains on the legacy host; no browser redirect
 or Library URL rewrite is required for supported source reads.
 
 ### Helix 6 migration (dual write)
 Sites listed in the `HLX6_DUAL_WRITES` env variable are being migrated to Helix 6. Every successful modification on those sites (source create/update/delete, folder creation, copy, move, version creation) is also propagated, in the background, to the Helix 6 source bus at `AEM_API` (`https://api.aem.live`) using the caller's IMS token. Failures are logged but do not affect the DA response.
 
-Manage both `HLX6_MIGRATED_SITES` and `HLX6_DUAL_WRITES` in the Cloudflare dashboard.
-Neither is declared in any `wrangler.toml` vars block: `keep_vars = true`
-preserves dashboard values, but an explicit declaration would override them on
-deployment. Local development can set these variables in `.dev.vars` as needed.
+Manage `HLX6_DUAL_WRITES` in the Cloudflare dashboard.
+It is not declared in any `wrangler.toml` vars block: `keep_vars = true`
+preserves its dashboard value, but an explicit declaration would override it on
+deployment. Local development can set this variable in `.dev.vars` as needed.
 Rename the previous `HLX6_MIGRATION_SITES` dashboard variable to `HLX6_DUAL_WRITES`
-when deploying this change. Moving a site out of dual write requires adding it
-to `HLX6_MIGRATED_SITES` and removing its source entry from `HLX6_DUAL_WRITES`.
+when deploying this change.
+
+#### Site registry and cutover
+
+Production uses the `DA_SITE_BACKENDS` namespace
+(`90c6a793da054676b11134d647f0aeaf`). Stage and CI use
+`DA_SITE_BACKENDS_STAGE` (`624b26551dcf4fe3bd31a08e70cda86f`).
+Both workers bind the appropriate namespace as `DA_SITE_BACKENDS`. Local dev
+and integration tests use emulated KV, not remote registry writes.
+
+Before deploying, seed any existing `HLX6_MIGRATED_SITES` entries as `hlx6`
+in the corresponding namespace, then deploy da-admin before da-content.
+The old environment variable is no longer read.
+
+Before starting dual write, explicitly set the site's registry entry to `da`.
+This keeps da-content on legacy routing even if a cold ping would identify the
+site as HLX6. Manage `HLX6_DUAL_WRITES` only on da-admin.
+
+To cut over a site, pause traffic for that site and drain in-flight requests
+(including cold probes), then update its registry entry:
+
+```sh
+npx wrangler kv key put --binding DA_SITE_BACKENDS --env production --remote "owner/site" hlx6
+```
+
+Use `--env stage` for staging. Remove the site's source entry from
+`HLX6_DUAL_WRITES` in da-admin when ending dual write. KV is eventually
+consistent: cached values and cached misses can remain visible for 60 seconds
+or more. Keep traffic paused until propagation and both workers' routing are
+verified; do not treat a successful KV write as an instantaneous cutover.
+Probes already in flight can overwrite a manual update, hence the drain step.
+Setting a value to `da` explicitly selects legacy storage. Deleting a key
+allows the next request to probe again.
 
 Entries are either:
 - `org/site`: the same org/site on Helix 6

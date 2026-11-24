@@ -19,7 +19,7 @@ export default async function copyHandler({ req, env, daCtx }) {
   if (details.error) return details.error;
   if (!hasPermission(daCtx, details.source, 'read')
     || !hasPermission(daCtx, details.destination, 'write')) return { status: 403 };
-  if (isHlx6Site(env, daCtx.org, details.destination.split('/')[0])) return HLX6_GONE;
+  if (await isHlx6Site(env, daCtx.org, details.destination.split('/')[0])) return HLX6_GONE;
   const resp = await copyObject(env, daCtx, details, false);
   syncCopy({
     req, env, daCtx, details, resp,

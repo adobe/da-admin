@@ -124,6 +124,9 @@ describe('fetch', () => {
       '../src/handlers/get.js': {
         default: async () => ({ status: 200, body: '[]', contentType: 'application/json' }),
       },
+      '../src/routes/hlx6.js': {
+        listHlx6Org: async () => new Response('[]'),
+      },
     });
 
     const resp = await hnd.fetch({ method: 'GET', url: 'http://www.example.com/list/kptdobe' }, {});
@@ -264,7 +267,8 @@ describe('Helix 6 request routing', () => {
 
   beforeEach(() => {
     users = [{ email: 'test@example.com' }];
-    env = { HLX6_MIGRATED_SITES: ['org/site'] };
+    env = { DA_SITE_BACKENDS: { get: sinon.stub().resolves('da') } };
+    env.DA_SITE_BACKENDS.get.withArgs('org/site').resolves('hlx6');
     dispatch = sinon.stub().resolves({ status: 200, body: 'legacy content' });
     bridge = sinon.stub().callsFake(({ req }) => new Response(req.method === 'HEAD' ? null : '{"source":"Helix 6"}'));
     orgList = sinon.stub().resolves(new Response('[]'));
@@ -275,7 +279,7 @@ describe('Helix 6 request routing', () => {
 
   afterEach(() => {
     sinon.restore();
-    assert(fetchStub.notCalled, 'site checks must not make network requests');
+    assert(fetchStub.notCalled, 'cached site checks must not make network requests');
   });
 
   const request = (path, method = 'GET') => new Request(`https://admin.da.live${path}`, { method });
@@ -315,20 +319,20 @@ describe('Helix 6 request routing', () => {
     });
   });
 
-  it('refreshes migrated sites when dashboard configuration changes', async () => {
-    env.HLX6_MIGRATED_SITES = [];
+  it('refreshes migrated routing when the shared registry changes', async () => {
+    env.DA_SITE_BACKENDS.get.withArgs('org/site').resolves('da');
     const req = request('/source/org/site/file.html');
     const legacy = await hnd.fetch(req, env);
     assert.strictEqual(legacy.status, 200);
     assert.strictEqual(await legacy.text(), 'legacy content');
 
-    env.HLX6_MIGRATED_SITES.push('org/site');
+    env.DA_SITE_BACKENDS.get.withArgs('org/site').resolves('hlx6');
     const upgraded = await hnd.fetch(req, env);
     assert.strictEqual(upgraded.status, 200);
     assert(bridge.calledOnce);
     assert(dispatch.calledOnce);
 
-    env.HLX6_MIGRATED_SITES = [];
+    env.DA_SITE_BACKENDS.get.withArgs('org/site').resolves('da');
     assert.strictEqual((await hnd.fetch(req, env)).status, 200);
     assert(dispatch.calledTwice);
   });
@@ -357,8 +361,9 @@ describe('Helix 6 request routing', () => {
   });
 
   it('does not exempt the target of a mapped dual-write entry', async () => {
+    env.DA_SITE_BACKENDS.get.withArgs('target/other').resolves('hlx6');
     const resp = await hnd.fetch(request('/source/target/other/file.html'), {
-      HLX6_MIGRATED_SITES: ['target/other'],
+      ...env,
       HLX6_DUAL_WRITES: ['org/site -> target/other'],
     });
     assert.strictEqual(resp.status, 200);
@@ -394,16 +399,27 @@ describe('Helix 6 request routing', () => {
     assert(dispatch.notCalled);
   });
 
-  it('serves sites not listed as migrated, including when the variable is unset', async () => {
+  it('serves sites cached as DA', async () => {
     const req = request('/source/org/site/file.html');
-    env.HLX6_MIGRATED_SITES = ['other/site', 'org/site-other'];
+    env.DA_SITE_BACKENDS.get.withArgs('org/site').resolves('da');
     assert.strictEqual((await hnd.fetch(req, env)).status, 200);
-    assert.strictEqual((await hnd.fetch(req, {})).status, 200);
-    assert(dispatch.calledTwice);
+    assert(dispatch.calledOnce);
+    assert(bridge.notCalled);
+  });
+
+  it('does not dispatch a write when registry resolution fails', async () => {
+    env.DA_SITE_BACKENDS.get.withArgs('org/site').rejects(new Error('KV unavailable'));
+    const req = request('/source/org/site/file.html', 'PUT');
+    assert.strictEqual((await hnd.fetch(req, env)).status, 500);
+    assert.strictEqual((await hnd.fetch(req, {})).status, 500);
+    assert(dispatch.notCalled);
+    assert(bridge.notCalled);
   });
 });
 
 describe('.da-versions storage guard', () => {
+  const legacyEnv = { DA_SITE_BACKENDS: { get: async () => 'da' } };
+
   // Version and audit objects live at R2 key `{org}/{repo}/.da-versions/...`, so
   // daCtx.key (org stripped) is `{repo}/.da-versions/...`. The generic
   // source/list/delete routes must not reach that storage - only the ACL-aware
@@ -494,7 +510,7 @@ describe('.da-versions storage guard', () => {
 
     const resp = await hnd.fetch(
       { method: 'GET', url: 'http://www.example.com/versionsource/org/repo/1234/5678.html' },
-      {},
+      legacyEnv,
     );
     assert.strictEqual(resp.status, 200);
   });
@@ -516,7 +532,7 @@ describe('.da-versions storage guard', () => {
 
     const resp = await hnd.fetch(
       { method: 'GET', url: 'http://www.example.com/source/org/repo/path/file.html' },
-      {},
+      legacyEnv,
     );
     assert.strictEqual(resp.status, 200);
   });
@@ -582,7 +598,7 @@ describe('.da-versions storage guard', () => {
 
     const resp = await hnd.fetch(
       { method: 'GET', url: 'http://www.example.com/source/org/repo/my-da-versions-notes/file.html' },
-      {},
+      legacyEnv,
     );
     assert.strictEqual(resp.status, 200);
   });
@@ -614,7 +630,10 @@ describe('invalid routes', () => {
   });
 
   const fetchStatus = async (path, method) => {
-    const resp = await hnd.fetch({ method, url: `http://www.sample.com${path}` }, {});
+    const resp = await hnd.fetch(
+      { method, url: `http://www.sample.com${path}` },
+      { DA_SITE_BACKENDS: { get: async () => 'da' } },
+    );
     return resp.status;
   };
 
