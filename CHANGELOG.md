@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/adobe/da-admin/compare/v1.17.0...v1.18.0) (2026-11-25)
+
+
+### Features
+
+* resolve site backends through shared KV ([#349](https://github.com/adobe/da-admin/issues/349)) ([a685e2e](https://github.com/adobe/da-admin/commit/a685e2e81a234867d935c2b5fc924d4fb4550bbe))
+
 # [1.17.0](https://github.com/adobe/da-admin/compare/v1.16.5...v1.17.0) (2026-11-24)
 
 
