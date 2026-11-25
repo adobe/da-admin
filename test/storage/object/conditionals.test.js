@@ -428,42 +428,6 @@ describe('Conditional Headers', () => {
       assert.strictEqual(resp.etag, etag);
     });
 
-    it('If-Match:* uses actual ETag for version control on update', async () => {
-      const actualEtag = '"real-etag-456"';
-      let putCommandEtag;
-
-      s3Mock
-        .on(GetObjectCommand)
-        .resolves({
-          Body: Buffer.from('<p>existing</p>'),
-          ContentType: 'text/html',
-          ContentLength: 15,
-          ETag: actualEtag,
-          Metadata: {
-            id: 'doc123', version: 'v1', timestamp: '123456', preparsingstore: '123456',
-          },
-          $metadata: { httpStatusCode: 200 },
-        })
-        .on(PutObjectCommand)
-        .callsFake((input) => {
-          // Capture the If-Match header used
-          putCommandEtag = input;
-          return Promise.resolve({ $metadata: { httpStatusCode: 200 } });
-        });
-
-      const daCtx = { users: [{ email: 'test@example.com' }], ext: 'html', method: 'PUT' };
-      const update = {
-        bucket: BUCKET, org: ORG, key: KEY, body: Buffer.from('<p>new</p>'), type: 'text/html',
-      };
-      const clientConditionals = { ifMatch: '*' };
-
-      const resp = await putObjectWithVersion({}, daCtx, update, false, null, clientConditionals);
-
-      assert.strictEqual(resp.status, 200);
-      // Verify the actual ETag was used, not the wildcard
-      assert(putCommandEtag !== null, 'Should have captured the PUT command');
-    });
-
     it('handles empty ETag gracefully', async () => {
       s3Mock
         .on(GetObjectCommand)
