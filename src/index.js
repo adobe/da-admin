@@ -16,7 +16,8 @@ import headHandler from './handlers/head.js';
 import getHandler from './handlers/get.js';
 import postHandler from './handlers/post.js';
 import deleteHandler from './handlers/delete.js';
-import { hasHlx6Sites, initHlx6, isHlx6Site } from './utils/hlx6.js';
+import { initHlx6, isHlx6Site } from './utils/hlx6.js';
+import { hasDescendantPermission } from './utils/auth.js';
 import hlx6Handler, { listHlx6Org } from './routes/hlx6.js';
 
 export default {
@@ -55,13 +56,11 @@ export default {
     const anon = users.some((user) => user.email === 'anonymous');
     if (anon) return daResp({ status: 401 });
 
-    // `authorized` only reflects permission on the exact requested path. A user
-    // granted permission on some deeper descendant only (e.g. /folder2/a/b/c)
-    // is not "authorized" for a listing of an ancestor folder by that measure,
-    // but should still be able to list it to reach their descendant. The list
-    // route itself knows how to fall back to descendant permission, so this
-    // blanket gate must not shadow it.
-    if (!authorized && api !== 'list') return daResp({ status: 403 });
+    // Listings can traverse readable descendants, but must pass that permission
+    // check before any backend lookup or probe.
+    if (!authorized && (api !== 'list' || !hasDescendantPermission(daCtx, key, 'read'))) {
+      return daResp({ status: 403 });
+    }
 
     // `key` is org-stripped (daCtx.key), so version storage appears as the
     // segment `{repo}/.da-versions/...`, not a leading `.da-versions`. Block the
@@ -76,10 +75,10 @@ export default {
     try {
       // The key also identifies bare site roots, where daCtx.site is undefined.
       const [site] = (key || '').split('/');
-      if (api !== 'login' && api !== 'logout' && isHlx6Site(env, org, site)) {
+      if (api !== 'login' && api !== 'logout' && await isHlx6Site(env, org, site)) {
         return await hlx6Handler({ req, env, daCtx });
       }
-      if (api === 'list' && org && !key && req.method === 'GET' && hasHlx6Sites(env, org)) {
+      if (api === 'list' && org && !key && req.method === 'GET') {
         return await listHlx6Org({ req, env, daCtx });
       }
 

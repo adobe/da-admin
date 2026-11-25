@@ -12,7 +12,7 @@
 import assert from 'node:assert';
 import sinon from 'sinon';
 import {
-  parseDualWrites, getHlx6Target, isHlx6Site, syncSourcePut, syncSourceDelete,
+  parseDualWrites, getHlx6Target, isHlx6Site, hasHlx6Sites, syncSourcePut, syncSourceDelete,
   syncCopy, syncMove, syncVersion, initHlx6, logMediaMigration,
 } from '../../src/utils/hlx6.js';
 
@@ -26,6 +26,7 @@ describe('hlx6 propagation', () => {
   let savedFetch;
   let calls;
   let fetchStatus;
+  let fetchHeaders;
   let logs;
   let errors;
 
@@ -33,13 +34,14 @@ describe('hlx6 propagation', () => {
     savedFetch = globalThis.fetch;
     calls = [];
     fetchStatus = () => 200;
+    fetchHeaders = {};
     logs = sinon.stub(console, 'log');
     errors = sinon.stub(console, 'error');
     sinon.stub(console, 'warn');
     globalThis.fetch = async (url, opts) => {
       calls.push({ url: url.toString(), opts });
       const status = fetchStatus(url.toString(), opts);
-      return new Response(null, { status });
+      return new Response(null, { status, headers: fetchHeaders });
     };
   });
 
@@ -463,29 +465,215 @@ describe('hlx6 propagation', () => {
     });
   });
 
-  describe('isHlx6Site', () => {
-    [[' MyOrg/MySite '], '[" MyOrg/MySite "]'].forEach((value) => {
-      it(`checks migrated ${typeof value === 'string' ? 'JSON' : 'array'} entries without fetching`, () => {
-        const config = { HLX6_MIGRATED_SITES: value };
-        assert.strictEqual(isHlx6Site(config, 'MYORG', 'MySite'), true);
-        assert.strictEqual(isHlx6Site(config, 'myorg', 'other'), false);
-        assert.strictEqual(isHlx6Site(config, 'other', 'mysite'), false);
-        assert.strictEqual(isHlx6Site(config, 'myorg'), false);
+  describe('site backend registry', () => {
+    let values;
+    let registry;
+    let config;
+
+    beforeEach(() => {
+      values = new Map();
+      registry = {
+        get: sinon.stub().callsFake(async (key) => (Array.isArray(key)
+          ? new Map(key.map((name) => [name, values.get(name) ?? null]))
+          : values.get(key) ?? null)),
+        put: sinon.stub().callsFake(async (key, value) => { values.set(key, value); }),
+        list: sinon.stub().callsFake(async ({ prefix }) => ({
+          keys: [...values.keys()]
+            .filter((name) => name.startsWith(prefix)).map((name) => ({ name })),
+          list_complete: true,
+        })),
+      };
+      config = { DA_SITE_BACKENDS: registry };
+    });
+
+    it('reads both cached backends with normalized keys and observes manual changes', async () => {
+      values.set('myorg/mysite', ' HLX6\n');
+      assert.strictEqual(await isHlx6Site(config, 'MYORG', 'MySite'), true);
+      values.set('myorg/mysite', ' DA\n');
+      assert.strictEqual(await isHlx6Site(config, 'myorg', 'mysite'), false);
+      values.set('myorg/mysite', 'hlx6');
+      assert.strictEqual(await isHlx6Site(config, 'myorg', 'mysite'), true);
+      assert.strictEqual(calls.length, 0);
+      assert(registry.put.notCalled);
+    });
+
+    it('probes once on a miss and persists the positive result without an expiry', async () => {
+      const timeout = sinon.spy(AbortSignal, 'timeout');
+      fetchHeaders = { 'x-api-upgrade-available': 'true' };
+      assert.strictEqual(await isHlx6Site(config, 'MYORG', 'MySite'), true);
+      assert.strictEqual(await isHlx6Site(config, 'myorg', 'mysite'), true);
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].url, 'https://admin.hlx.page/ping/myorg/mysite');
+      assert.strictEqual(calls[0].opts.method, 'GET');
+      assert.strictEqual(calls[0].opts.redirect, 'manual');
+      assert(calls[0].opts.signal instanceof AbortSignal);
+      assert(timeout.calledOnceWithExactly(3000));
+      assert.strictEqual(calls[0].opts.headers, undefined);
+      assert.deepStrictEqual(registry.put.firstCall.args, ['myorg/mysite', 'hlx6', undefined]);
+      assert(registry.put.calledOnce);
+    });
+
+    [200, 404].forEach((status) => {
+      it(`persists a negative ping result (${status}) instead of probing it again`, async () => {
+        fetchStatus = () => status;
+        assert.strictEqual(await isHlx6Site(config, 'myorg', 'mysite'), false);
+        assert.strictEqual(await isHlx6Site(config, 'myorg', 'mysite'), false);
+        assert.strictEqual(calls.length, 1);
+        assert.strictEqual(values.get('myorg/mysite'), 'da');
+        assert.deepStrictEqual(
+          registry.put.firstCall.args[2],
+          status === 404 ? { expirationTtl: 300 } : undefined,
+        );
+      });
+    });
+
+    it('keeps concurrent cold requests independent when one probe is cancelled', async () => {
+      fetchHeaders = { 'x-api-upgrade-available': 'true' };
+      fetchStatus = () => {
+        if (calls.length === 1) throw new Error('First request cancelled');
+        return 200;
+      };
+      const results = await Promise.allSettled([
+        isHlx6Site(config, 'myorg', 'mysite'),
+        isHlx6Site(config, 'MYORG', 'MYSITE'),
+      ]);
+      assert.strictEqual(results[0].status, 'rejected');
+      assert.deepStrictEqual(results[1], { status: 'fulfilled', value: true });
+      assert.strictEqual(calls.length, 2);
+      assert(registry.put.calledOnce);
+    });
+
+    it('uses the configured probe base URL', async () => {
+      config.HLX_ADMIN = 'https://ping.example.com/';
+      assert.strictEqual(await isHlx6Site(config, 'myorg', 'mysite'), false);
+      assert.strictEqual(calls[0].url, 'https://ping.example.com/ping/myorg/mysite');
+    });
+
+    it('uses a known probe result and logs a failed KV write', async () => {
+      fetchHeaders = { 'x-api-upgrade-available': 'true' };
+      registry.put.rejects(new Error('KV write limit'));
+      assert.strictEqual(await isHlx6Site(config, 'myorg', 'mysite'), true);
+      assert(errors.calledWith('[hlx6] Failed to cache site backend', 'myorg/mysite', 'KV write limit'));
+      assert.strictEqual(values.size, 0);
+    });
+
+    ['myorg/mysite', 'myorg/mysite -> other/target'].forEach((entry) => {
+      it(`keeps dual-write source ${entry} on DA without consulting the registry`, async () => {
+        config.HLX6_DUAL_WRITES = [entry];
+        assert.strictEqual(await isHlx6Site(config, 'MYORG', 'MySite'), false);
+        assert(registry.get.notCalled);
         assert.strictEqual(calls.length, 0);
       });
     });
 
-    it('logs and ignores malformed migrated entries instead of treating them as mappings', () => {
-      const config = {
-        HLX6_MIGRATED_SITES: ['invalid', 'myorg/mysite -> other/target', 'myorg/mysite/path', 42],
-      };
-      assert.strictEqual(isHlx6Site(config, 'myorg', 'mysite'), false);
-      assert.strictEqual(errors.callCount, 4);
-      assert(errors.getCalls().every(({ args }) => args[0].includes('HLX6_MIGRATED_SITES')));
+    [302, 401, 403, 429, 500].forEach((status) => {
+      it(`does not cache a failed probe (${status}) and permits a later retry`, async () => {
+        fetchStatus = () => status;
+        await assert.rejects(isHlx6Site(config, 'myorg', 'mysite'), /Site backend probe failed/);
+        assert(registry.put.notCalled);
+        fetchStatus = () => 200;
+        fetchHeaders = { 'x-api-upgrade-available': 'true' };
+        assert.strictEqual(await isHlx6Site(config, 'myorg', 'mysite'), true);
+      });
+    });
 
-      config.HLX6_MIGRATED_SITES = '[invalid';
-      assert.strictEqual(isHlx6Site(config, 'myorg', 'mysite'), false);
-      assert.strictEqual(errors.lastCall.args[0], '[hlx6] Invalid JSON in HLX6_MIGRATED_SITES');
+    it('surfaces transport and timeout failures without caching a DA result', async () => {
+      fetchStatus = () => {
+        throw new DOMException('Timed out', 'TimeoutError');
+      };
+      await assert.rejects(isHlx6Site(config, 'myorg', 'mysite'), { name: 'TimeoutError' });
+      assert(registry.put.notCalled);
+    });
+
+    it('rejects missing bindings, invalid entries and KV read failures instead of assuming DA', async () => {
+      await assert.rejects(isHlx6Site({}, 'myorg', 'mysite'), /Missing DA_SITE_BACKENDS/);
+      values.set('myorg/mysite', 'true');
+      await assert.rejects(isHlx6Site(config, 'myorg', 'mysite'), /Invalid site backend/);
+      registry.get.rejects(new Error('KV read failed'));
+      await assert.rejects(isHlx6Site(config, 'myorg', 'mysite'), /KV read failed/);
+      assert.strictEqual(calls.length, 0);
+    });
+
+    it('gates DA-only and empty orgs without probing or considering other orgs', async () => {
+      values.set('myorg/mysite', 'da');
+      values.set('other/site', 'hlx6');
+      assert.strictEqual(await hasHlx6Sites(config, 'MYORG'), false);
+      assert.strictEqual(await hasHlx6Sites(config, 'empty'), false);
+      assert.strictEqual(calls.length, 0);
+      assert.deepStrictEqual(registry.put.args, [
+        ['org:myorg', 'da', { expirationTtl: 300 }],
+        ['org:empty', 'da', { expirationTtl: 300 }],
+      ]);
+    });
+
+    ['da', 'hlx6'].forEach((backend) => {
+      it(`caches the ${backend} org gate for 300 seconds without rescanning on hits`, async () => {
+        values.set('myorg/mysite', backend);
+        assert.strictEqual(await hasHlx6Sites(config, 'MYORG'), backend === 'hlx6');
+        assert.deepStrictEqual(registry.put.firstCall.args, [
+          'org:myorg', backend, { expirationTtl: 300 },
+        ]);
+        registry.list.resetHistory();
+        registry.get.resetHistory();
+        assert.strictEqual(await hasHlx6Sites(config, 'myorg'), backend === 'hlx6');
+        assert(registry.get.calledOnceWithExactly('org:myorg'));
+        assert(registry.list.notCalled);
+        assert(registry.put.calledOnce);
+        assert.strictEqual(calls.length, 0);
+      });
+
+      it(`keeps the known ${backend} org result when caching it fails`, async () => {
+        values.set('myorg/mysite', backend);
+        registry.put.rejects(new Error('KV write limit'));
+        assert.strictEqual(await hasHlx6Sites(config, 'myorg'), backend === 'hlx6');
+        assert(errors.calledWith(
+          '[hlx6] Failed to cache org discovery',
+          'org:myorg',
+          'KV write limit',
+        ));
+      });
+    });
+
+    it('refreshes discovery after the derived org cache entry is removed', async () => {
+      values.set('org:myorg', 'da');
+      values.set('myorg/migrated', 'hlx6');
+      assert.strictEqual(await hasHlx6Sites(config, 'myorg'), false);
+      assert(registry.list.notCalled);
+      values.delete('org:myorg');
+      assert.strictEqual(await hasHlx6Sites(config, 'myorg'), true);
+      assert(registry.list.calledOnce);
+      assert.strictEqual(values.get('org:myorg'), 'hlx6');
+    });
+
+    it('rejects invalid cached org gates instead of silently rescanning', async () => {
+      values.set('org:myorg', 'invalid');
+      await assert.rejects(hasHlx6Sites(config, 'myorg'), /Invalid site backend for org:myorg/);
+      assert(registry.list.notCalled);
+      assert(registry.put.notCalled);
+    });
+
+    it('finds a cached HLX6 site across bounded registry pages', async () => {
+      values.set('myorg/legacy', 'da');
+      values.set('myorg/migrated', ' HLX6\n');
+      registry.list.onFirstCall().resolves({
+        keys: [{ name: 'myorg/legacy' }], list_complete: false, cursor: 'next-page',
+      });
+      registry.list.onSecondCall().resolves({
+        keys: [{ name: 'myorg/migrated' }], list_complete: true,
+      });
+      assert.strictEqual(await hasHlx6Sites(config, 'MYORG'), true);
+      assert.deepStrictEqual(registry.list.firstCall.args, [{ prefix: 'myorg/', limit: 100, cursor: undefined }]);
+      assert.deepStrictEqual(registry.list.secondCall.args, [{ prefix: 'myorg/', limit: 100, cursor: 'next-page' }]);
+      assert(registry.get.calledWith(['myorg/legacy']));
+      assert(registry.get.calledWith(['myorg/migrated']));
+      assert.strictEqual(calls.length, 0);
+    });
+
+    it('excludes dual-write sources and expired entries from the org gate', async () => {
+      values.set('myorg/mysite', 'hlx6');
+      values.set('myorg/expired', null);
+      config.HLX6_DUAL_WRITES = ['myorg/mysite'];
+      assert.strictEqual(await hasHlx6Sites(config, 'myorg'), false);
       assert.strictEqual(calls.length, 0);
     });
   });

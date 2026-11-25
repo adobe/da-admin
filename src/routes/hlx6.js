@@ -10,7 +10,9 @@
  * governing permissions and limitations under the License.
  */
 import daResp from '../utils/daResp.js';
-import { DEFAULT_AEM_API, HLX6_GONE, isHlx6Site } from '../utils/hlx6.js';
+import {
+  DEFAULT_AEM_API, HLX6_GONE, hasHlx6Sites, isHlx6Site,
+} from '../utils/hlx6.js';
 import { hasDescendantPermission, hasPermission } from '../utils/auth.js';
 import { FORM_TYPES } from '../utils/constants.js';
 import { sourceRespObject } from '../helpers/source.js';
@@ -227,14 +229,21 @@ async function listSource({ req, env, daCtx }) {
 
 /**
  * Lists the org's bridged HLX6 sites: entries of `GET /{org}/source/` (caller token) that
- * are also in HLX6_MIGRATED_SITES, so every listed site opens through the bridge.
+ * resolved as HLX6 in the shared site registry, so every listed site opens through the bridge.
  * Best effort with a short timeout: failures yield no sites so DA org browsing keeps working.
  * @param {Request} req Legacy request carrying the caller credentials.
  * @param {Env} env Worker bindings and API base URL.
- * @param {string} org DA organization name.
+ * @param {DaCtx} daCtx DA organization and listing permissions.
  * @returns {Promise<string[]>} Lowercase bridged site names.
  */
-async function fetchHlx6OrgSites(req, env, org) {
+async function fetchHlx6OrgSites(req, env, daCtx) {
+  const { org } = daCtx;
+  try {
+    if (!await hasHlx6Sites(env, org)) return [];
+  } catch (e) {
+    console.error('[hlx6] Org site registry unavailable; using DA sites only', e.message);
+    return [];
+  }
   const upstream = await requestHlx6(req, env, `${encodeURIComponent(org)}/source/`, {
     method: 'GET', timeout: ORG_LIST_TIMEOUT,
   });
@@ -246,11 +255,21 @@ async function fetchHlx6OrgSites(req, env, org) {
   try {
     const items = await upstream.json();
     if (!Array.isArray(items)) throw new Error('Expected a source listing array');
-    return items
+    const sites = items
       .map((item) => item?.name)
       .filter((name) => typeof name === 'string' && /^[^/.]+\/$/.test(name))
       .map((name) => name.slice(0, -1).toLowerCase())
-      .filter((site) => isHlx6Site(env, org, site));
+      .filter((site) => hasPermission(daCtx, site, 'read')
+        || hasDescendantPermission(daCtx, site, 'read'));
+    const migrated = await Promise.allSettled(sites.map((site) => isHlx6Site(env, org, site)));
+    return sites.filter((site, index) => {
+      const result = migrated[index];
+      if (result.status === 'rejected') {
+        console.error('[hlx6] Org site lookup failed; omitting site', org, site, result.reason);
+        return false;
+      }
+      return result.value;
+    });
   } catch (e) {
     console.error('[hlx6] Invalid org source listing; using DA sites only', e.message);
     return [];
@@ -267,7 +286,7 @@ async function fetchHlx6OrgSites(req, env, org) {
 export async function listHlx6Org({ req, env, daCtx }) {
   const legacy = await getList({ env, daCtx });
   if (legacy.status !== 200) return daResp(legacy, daCtx);
-  const hlx6Sites = new Set(await fetchHlx6OrgSites(req, env, daCtx.org));
+  const hlx6Sites = new Set(await fetchHlx6OrgSites(req, env, daCtx));
   let items = JSON.parse(legacy.body).filter((item) => item.ext || !hlx6Sites.has(item.name));
   if (!daCtx.continuationToken) {
     const sites = [...hlx6Sites].map((site) => ({ path: `/${daCtx.org}/${site}`, name: site }));

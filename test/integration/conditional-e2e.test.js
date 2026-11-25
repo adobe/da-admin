@@ -23,9 +23,14 @@ const s3Mock = mockClient(S3Client);
 
 describe('Conditional Headers End-to-End', () => {
   let handler;
+  let env;
 
   beforeEach(async () => {
     s3Mock.reset();
+    env = {
+      AEM_BUCKET_NAME: 'test-bucket',
+      DA_SITE_BACKENDS: { get: async () => 'da' },
+    };
     handler = await esmock(
       '../../src/index.js',
       {
@@ -75,7 +80,6 @@ describe('Conditional Headers End-to-End', () => {
       },
     };
 
-    const env = { AEM_BUCKET_NAME: 'test-bucket' };
     const resp = await handler.default.fetch(req, env);
 
     assert.strictEqual(resp.status, 304);
@@ -107,11 +111,8 @@ describe('Conditional Headers End-to-End', () => {
       formData: async () => formData,
     };
 
-    const env = {
-      AEM_BUCKET_NAME: 'test-bucket',
-      dacollab: {
-        fetch: async () => ({ status: 200, body: { cancel: () => {} } }),
-      },
+    env.dacollab = {
+      fetch: async () => ({ status: 200, body: { cancel: () => {} } }),
     };
     const resp = await handler.default.fetch(req, env);
 
@@ -148,7 +149,6 @@ describe('Conditional Headers End-to-End', () => {
       formData: async () => formData,
     };
 
-    const env = { AEM_BUCKET_NAME: 'test-bucket' };
     const resp = await handler.default.fetch(req, env);
 
     assert.strictEqual(resp.status, 412);

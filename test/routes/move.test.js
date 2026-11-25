@@ -13,6 +13,8 @@ import assert from 'node:assert';
 import esmock from 'esmock';
 
 describe('Move Route', () => {
+  const env = { DA_SITE_BACKENDS: { get: async () => 'da' } };
+
   it('Test moveRoute with permissions', async () => {
     const moCalled = [];
     const moveObject = (e, c, d) => {
@@ -62,7 +64,7 @@ describe('Move Route', () => {
     assert.strictEqual(403, resp3.status);
     assert.strictEqual(0, moCalled.length);
 
-    await moveRoute({ req: req2, env: {}, daCtx: { org: 'someorg', key: 'zzz.html' } });
+    await moveRoute({ req: req2, env, daCtx: { org: 'someorg', key: 'zzz.html' } });
     assert.strictEqual(1, moCalled.length);
     assert.strictEqual('zzz.html', moCalled[0].d.source);
     assert.strictEqual('someotherdest', moCalled[0].d.destination);
@@ -89,7 +91,7 @@ describe('Move Route', () => {
       formData: () => formdata,
     };
 
-    const resp = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'abc.html' } });
+    const resp = await moveRoute({ req, env, daCtx: { org: 'someorg', key: 'abc.html' } });
     assert.strictEqual(resp.status, 400);
     assert.strictEqual(0, moCalled.length);
     const body = JSON.parse(resp.body);
@@ -118,7 +120,7 @@ describe('Move Route', () => {
       formData: () => formdata,
     };
 
-    const resp = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'abc.html' } });
+    const resp = await moveRoute({ req, env, daCtx: { org: 'someorg', key: 'abc.html' } });
     assert.strictEqual(resp.status, 204);
     assert.strictEqual(1, moCalled.length);
     assert.strictEqual('somedest', moCalled[0].d.destination);
@@ -175,7 +177,7 @@ describe('Move Route', () => {
       formData: () => formdata,
     };
 
-    const resp = await moveRoute({ req, env: {}, daCtx: { org: 'someorg', key: 'abc.html' } });
+    const resp = await moveRoute({ req, env, daCtx: { org: 'someorg', key: 'abc.html' } });
     assert.strictEqual(resp.status, 204);
     assert.strictEqual(1, moCalled.length);
     assert.strictEqual(moCalled[0].d.destination, 'my/my-da-versions-notes.html');
