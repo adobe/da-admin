@@ -138,7 +138,7 @@ export async function getUsers(req, env) {
       }
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.log('IMS token offline verification failed', e);
+      console.warn('IMS token offline verification failed:', e.code || e.name, e.message);
       return { email: 'anonymous' };
     }
 
@@ -539,21 +539,10 @@ export function hasPermission(daCtx, path, action, keywordPath = false) {
 
   // is it the path from the context? then return the cached value
   if (k === p) {
-    const perm = daCtx.aclCtx.actionSet.has(action);
-    if (!perm) {
-      // eslint-disable-next-line no-console
-      console.log(`User ${daCtx.users.map((u) => u.email)} doesn't have permission to ${action} ${path}`);
-    }
-    return perm;
+    return daCtx.aclCtx.actionSet.has(action);
   }
 
   // The path is a sub-path which can happen during bulk operations
-
-  const permission = daCtx.users
+  return daCtx.users
     .every((u) => getUserActions(daCtx.aclCtx.pathLookup, u, p).actions.has(action));
-  if (!permission && !isKeyword) {
-    // eslint-disable-next-line no-console
-    console.warn(`User ${daCtx.users.map((u) => u.email)} does not have permission to ${action} ${path}`);
-  }
-  return permission;
 }
