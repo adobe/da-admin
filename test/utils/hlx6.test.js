@@ -679,19 +679,15 @@ describe('hlx6 propagation', () => {
   });
 
   describe('getHlx6Target', () => {
-    it('logs setup once per configuration and refreshes changed mappings', () => {
+    it('refreshes changed mappings without logging the configuration', () => {
       const config = { HLX6_DUAL_WRITES: ['setup/site -> target/one'] };
       initHlx6(config);
       assert.deepStrictEqual(getHlx6Target(config, 'setup', 'site'), { org: 'target', site: 'one' });
-      const count = logs.callCount;
-      initHlx6(config);
-      assert.strictEqual(logs.callCount, count);
-      assert(logs.getCalls().some(({ args }) => args.join(' ').includes('setup/site -> target/one')));
 
       config.HLX6_DUAL_WRITES = ['setup/site -> target/two'];
       initHlx6(config);
       assert.deepStrictEqual(getHlx6Target(config, 'setup', 'site'), { org: 'target', site: 'two' });
-      assert(logs.callCount > count);
+      assert.strictEqual(logs.callCount, 0);
     });
 
     it('returns target for migrated sites only', () => {
@@ -778,7 +774,7 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(calls.length, 0);
     });
 
-    it('logs the entire successful response body and location', async () => {
+    it('audits the successful response body and location without prose logs', async () => {
       const body = JSON.stringify({ copied: [{ src: '/a.html', dst: '/b.html' }] });
       globalThis.fetch = async () => new Response(body, {
         status: 201, headers: { location: '/myorg/sites/mysite/source/a.html' },
@@ -790,10 +786,11 @@ describe('hlx6 propagation', () => {
         obj: { data: '<body></body>' },
         resp: { status: 201 },
       });
-      const output = logs.getCalls().map(({ args }) => args.join(' ')).join('\n');
-      assert(output.includes(`body: ${body}`));
-      assert(output.includes('location: /myorg/sites/mysite/source/a.html'));
-      assert(output.includes(': 201 in '));
+      const completed = events().find(({ event }) => event === 'request_completed');
+      assert.strictEqual(completed.responseBody, body);
+      assert.strictEqual(completed.location, '/myorg/sites/mysite/source/a.html');
+      assert.strictEqual(completed.status, 201);
+      assert(logs.getCalls().every(({ args }) => args[0] === '[hlx6:event]'));
       assert.strictEqual(errors.callCount, 0);
     });
 
@@ -817,7 +814,8 @@ describe('hlx6 propagation', () => {
       assert.strictEqual(waited[0], promise);
       await promise;
       assert(response.text.calledOnce);
-      assert(logs.getCalls().some(({ args }) => args.join(' ').includes('body: (empty)')));
+      const completed = events().find(({ event }) => event === 'request_completed');
+      assert.strictEqual(completed.bodyReadError, 'body stream interrupted');
     });
 
     it('posts a file with the user token and registers with waitUntil', async () => {

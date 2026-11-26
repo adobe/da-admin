@@ -40,11 +40,6 @@ function retryDelay(value, attempt) {
   return backoff;
 }
 
-function log(...args) {
-  // eslint-disable-next-line no-console
-  console.log('[hlx6]', ...args);
-}
-
 function parseOrgSite(str) {
   const parts = str.trim().toLowerCase().split('/').filter((p) => p);
   if (parts.length !== 2) return undefined;
@@ -103,12 +98,6 @@ function getDualWrites(env) {
   const key = JSON.stringify(value) ?? '';
   if (dualWriteCache.key !== key) {
     dualWriteCache = { key, map: parseDualWrites(value) };
-    const type = Array.isArray(value) ? 'array' : typeof value;
-    log(`HLX6_DUAL_WRITES (${type}): ${JSON.stringify(value)}`);
-    const sites = [...dualWriteCache.map.entries()]
-      .map(([from, to]) => `${from} -> ${to.org}/${to.site}`);
-    log(`${sites.length} site(s) in migration${sites.length ? `: ${sites.join(', ')}` : ''}`);
-    log(`AEM_API: ${env?.AEM_API || `${DEFAULT_AEM_API} (default)`}`);
   }
   return dualWriteCache.map;
 }
@@ -245,8 +234,6 @@ async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
   const size = typeof opts.body === 'string'
     ? new TextEncoder().encode(opts.body).byteLength : opts.body?.byteLength;
   const type = opts.headers?.['content-type'];
-  const details = [type, size !== undefined ? `${size} bytes` : undefined].filter((d) => d);
-  log(`-> ${opts.method} ${url}${details.length ? ` (${details.join(', ')})` : ''}`);
   const start = Date.now();
   const request = {
     ...metadata,
@@ -339,11 +326,7 @@ async function hlx6FetchAttempt(url, opts, audit, metadata, deadline, attempt) {
     ...(alreadyAbsent ? { outcome: 'already_absent' } : {}),
   });
 
-  if (alreadyAbsent) {
-    log(`<- ${opts.method} ${url}: already absent (404) in ${duration}ms${detailsSuffix}`);
-  } else if (resp.ok) {
-    log(`<- ${opts.method} ${url}: ${resp.status} in ${duration}ms${detailsSuffix}`);
-  } else {
+  if (!alreadyAbsent && !resp.ok) {
     // eslint-disable-next-line no-console
     console.error(`[hlx6] <- ${opts.method} ${url} failed: ${resp.status} in ${duration}ms${detailsSuffix}`);
     const error = new Error(`hlx6 ${opts.method} ${url} returned ${resp.status}`);
@@ -404,7 +387,6 @@ function schedule(daCtx, label, fn, audit, deadline) {
   const background = typeof daCtx.waitUntil === 'function';
   const start = Date.now();
   audit('operation_started', { background });
-  log(`${label}: propagating${background ? ' (background)' : ' (no waitUntil, not awaited)'}`);
   const promise = (async () => {
     let timer;
     try {
@@ -418,7 +400,6 @@ function schedule(daCtx, label, fn, audit, deadline) {
       const result = await Promise.race([fn(), timeout]);
       const outcome = result === false ? 'failed' : 'succeeded';
       audit('operation_completed', { outcome, durationMs: Date.now() - start });
-      log(`${label}: ${outcome}`);
     } catch (e) {
       audit('operation_completed', {
         outcome: 'failed',
@@ -477,7 +458,6 @@ function checkSync(label, {
   const skip = (reason) => audit('operation_skipped', { reason });
   if (!SUCCESS.includes(resp?.status)) {
     skip('da_unsuccessful');
-    log(`${label}: skipped, DA status ${resp?.status}`);
     return undefined;
   }
   const headers = getAuthHeaders(req);
@@ -552,7 +532,6 @@ export function syncSourcePut({
   if (!sync) return undefined;
   if (!path) {
     sync.skip('site_root');
-    log(`${label}: skipped, site root`);
     return undefined;
   }
 
@@ -563,7 +542,6 @@ export function syncSourcePut({
     return sync.schedule(() => sync.fetch(sourceUrl(env, target, path, true), { method: 'POST' }));
   }
   sync.skip('missing_data');
-  log(`${label}: skipped, no data in request`);
   return undefined;
 }
 
@@ -583,12 +561,10 @@ export function syncSourceDelete({
   if (!sync) return undefined;
   if (details?.continuationToken) {
     sync.skip('continuation');
-    log(`${label}: skipped, continuation request (already propagated)`);
     return undefined;
   }
   if (!path) {
     sync.skip('site_root');
-    log(`${label}: skipped, site root`);
     return undefined;
   }
 
@@ -611,7 +587,6 @@ function sameTarget(a, b) {
 async function copyOnHlx6(env, daCtx, sync, src, dest) {
   const isFolder = !daCtx.isFile;
   if (sameTarget(src.target, dest.target)) {
-    log(`server side ${isFolder ? 'folder' : 'file'} copy ${src.path} -> ${dest.path} on ${fmtTarget(dest.target)}`);
     const url = sourceUrl(env, dest.target, dest.path, isFolder);
     url.searchParams.set('source', isFolder ? `${src.path}/` : src.path);
     url.searchParams.set('collision', 'overwrite');
@@ -639,7 +614,6 @@ async function copyOnHlx6(env, daCtx, sync, src, dest) {
     return false;
   }
   const key = `${daCtx.org}/${dest.site}${dest.path}`;
-  log(`cross-site file copy: re-uploading ${key} from DA to ${fmtTarget(dest.target)}`);
   const obj = await env.AEM_CONTENT.get(key);
   if (!obj) {
     sync.audit('propagation_failed', { reason: 'da_object_missing', key });
@@ -682,12 +656,10 @@ export function syncCopy({
   if (!sync) return undefined;
   if (details?.continuationToken) {
     sync.skip('continuation');
-    log(`${label}: skipped, continuation request (already propagated)`);
     return undefined;
   }
   if (!src.path || !dest.path) {
     sync.skip('site_root');
-    log(`${label}: skipped, site root`);
     return undefined;
   }
 
@@ -709,12 +681,10 @@ export function syncMove({
   if (!sync) return undefined;
   if (details?.continuationToken || resp?.status === 206) {
     sync.skip('partial_move');
-    log(`${label}: skipped, partial DA move requires reconciliation`);
     return undefined;
   }
   if (!src.path || !dest.path) {
     sync.skip('site_root');
-    log(`${label}: skipped, site root`);
     return undefined;
   }
 
@@ -722,7 +692,8 @@ export function syncMove({
     if (dest.target) {
       const copied = await copyOnHlx6(env, daCtx, sync, src, dest);
       if (!copied) {
-        log(`${label}: copy failed, source not deleted on hlx6`);
+        // eslint-disable-next-line no-console
+        console.warn(`[hlx6] ${label}: copy failed, source not deleted on hlx6`);
         return false;
       }
     }
@@ -754,7 +725,6 @@ export function syncVersion({
   if (!sync) return undefined;
   if (!path) {
     sync.skip('site_root');
-    log(`${label}: skipped, site root`);
     return undefined;
   }
 
