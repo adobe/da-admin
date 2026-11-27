@@ -1127,6 +1127,138 @@ describe('DA auth', () => {
     );
   });
 
+  it('exact page grant also covers the page\'s dot asset folder', () => {
+    const patharr = [
+      { path: '/site/promotions', actions: ['write'] },
+      { path: '/site/terms.html', actions: ['write'] },
+      { path: '/site/about.us.html', actions: ['write'] },
+      { path: '/site/redirects.json', actions: ['write'] },
+      { path: '/site', actions: ['write'] },
+      { path: '/site/+**', actions: ['read'] },
+    ];
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', patharr);
+    pathlookup.forEach((value) => value.sort(pathSorter));
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/promotions.html').actions]);
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/.promotions/banner.png').actions]);
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/.terms/logo.png').actions]);
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/.terms/ab').actions]);
+    assert.deepStrictEqual(['write'], [...getUserActions(pathlookup, user, '/site/.about.us/x.png').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.promotionsx/banner.png').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/promotions/sub.html').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.redirects.json/x.png').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/.site/x.png').actions]);
+  });
+
+  it('a rule on the asset folder beats an exact .html page rule there', () => {
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', [
+      { path: '/site/foo.html', actions: ['read'] },
+      { path: '/site/.foo/+**', actions: ['read', 'write'] },
+      { path: '/site/bar.html', actions: ['read', 'write'] },
+      { path: '/site/.bar/+**', actions: [] },
+      { path: '/site/baz.html', actions: ['read'] },
+      { path: '/site/baz/**', actions: ['read', 'write'] },
+    ]);
+    pathlookup.forEach((value) => value.sort(pathSorter));
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual(['read', 'write'], [...getUserActions(pathlookup, user, '/site/.foo/banner.png').actions]);
+    assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/site/.bar/banner.png').actions]);
+    assert.deepStrictEqual(['read', 'write'], [...getUserActions(pathlookup, user, '/site/bar.html').actions]);
+    assert.deepStrictEqual(['read', 'write'], [...getUserActions(pathlookup, user, '/site/.baz/banner.png').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/baz.html').actions]);
+  });
+
+  it('an exact site rule does not cover a dot folder next to the site', () => {
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', [{ path: '/site', actions: ['read', 'write'] }]);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/.site/x.png').actions]);
+  });
+
+  it('page and folder rules don\'t cover reserved dot folders like .da', () => {
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', [
+      { path: '/site/sub/da.html', actions: ['read', 'write'] },
+      { path: '/site/da.html', actions: ['read', 'write'] },
+      { path: '/site/trash', actions: ['read', 'write'] },
+      { path: '/site/snapshots/+**', actions: ['read', 'write'] },
+      { path: '/site/+**', actions: ['read'] },
+    ]);
+    pathlookup.forEach((value) => value.sort(pathSorter));
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual(['read', 'write'], [...getUserActions(pathlookup, user, '/site/da.html').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.da/translate.json').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/sub/.da/media-insights/x.json').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.trash/old.html').actions]);
+    assert.deepStrictEqual(['read'], [...getUserActions(pathlookup, user, '/site/.snapshots/s1/index.html').actions]);
+  });
+
+  it('an exact rule with no page name doesn\'t cover a dot folder', () => {
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', [
+      { path: '/site/foo/.html', actions: ['read', 'write'] },
+      { path: '/site/.html', actions: ['read', 'write'] },
+    ]);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/site/.foo/x.png').actions]);
+    assert.deepStrictEqual([], [...getUserActions(pathlookup, user, '/.site/x.png').actions]);
+  });
+
+  it('an exact .html page rule sorts ahead of the same page without .html', () => {
+    const rules = [
+      { path: '/site/foo', actions: ['write'] },
+      { path: '/site/foo.html', actions: ['read'] },
+    ];
+    rules.sort(pathSorter);
+    assert.deepStrictEqual(['/site/foo.html', '/site/foo'], rules.map(({ path }) => path));
+  });
+
+  it('exact page deny also covers the page\'s dot asset folder', () => {
+    const patharr = [
+      { path: '/site/promotions', actions: [] },
+      { path: '/site/+**', actions: ['write'] },
+    ];
+    const pathlookup = new Map();
+    pathlookup.set('joe@acme.com', patharr);
+
+    const user = {
+      email: 'joe@acme.com',
+      ident: 'AAAA@bbb.e',
+    };
+
+    assert.deepStrictEqual(
+      [],
+      [...getUserActions(pathlookup, user, '/site/.promotions/banner.png').actions],
+    );
+  });
+
   it('test logout', async () => {
     const deleteCalled = [];
     const deleteFunc = async (id) => {

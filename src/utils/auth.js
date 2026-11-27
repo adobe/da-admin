@@ -197,13 +197,18 @@ function getIdents(user) {
 }
 
 // A page's assets live in a dot-folder next to it (e.g. `foo.html`'s images live under
-// `.foo/`). A recursive grant on `foo` or `foo/**` must also cover `.foo/**` so uploading
-// to a page's asset folder doesn't require a separate ACL entry.
+// `.foo/`). A grant on `foo`, `foo.html`, `foo/**` or `foo/+**` must also cover `.foo/**` so
+// uploading to a page's asset folder doesn't require a separate ACL entry. DA's own dot folders
+// (`.da/`, `.trash/`, ...) are never a page's asset folder.
+const RESERVED_DOT_FOLDERS = ['da', 'da-versions', 'helix', 'snapshots', 'trash', 'versions'];
+
 function dotFolderVariant(prefix) {
   const trimmed = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
   const slashIdx = trimmed.lastIndexOf('/');
   const lastSegment = trimmed.slice(slashIdx + 1);
-  if (!lastSegment || lastSegment.startsWith('.')) return null;
+  if (!lastSegment || lastSegment.startsWith('.') || RESERVED_DOT_FOLDERS.includes(lastSegment)) {
+    return null;
+  }
   return `${trimmed.slice(0, slashIdx + 1)}.${lastSegment}/`;
 }
 
@@ -227,12 +232,19 @@ export function getUserActions(pathLookup, user, target) {
         return target.startsWith(prefix) || target === path.slice(0, -4)
           || (dotPrefix && target.startsWith(dotPrefix));
       }
-      if (target.length < path.length) return false;
       if (path.endsWith('/**')) {
+        if (target.length < path.length) return false;
         const prefix = path.slice(0, -2);
         const dotPrefix = dotFolderVariant(prefix);
         return target.startsWith(prefix) || (dotPrefix && target.startsWith(dotPrefix));
       }
+      const isHtml = path.endsWith('.html');
+      const page = isHtml ? path.slice(0, -5) : path;
+      const slashIdx = page.lastIndexOf('/');
+      const name = page.slice(slashIdx + 1);
+      const isPage = slashIdx > 0 && name && (isHtml || !name.includes('.'));
+      const dotPrefix = isPage && dotFolderVariant(page);
+      if (dotPrefix && target.startsWith(dotPrefix)) return true;
       if (target.endsWith('.html')) return target.slice(0, -5) === path || target === path;
       return target === path;
     }))
@@ -250,13 +262,15 @@ export function getUserActions(pathLookup, user, target) {
 function prepPathForSort(path) {
   if (path.endsWith('/+**')) return path.slice(0, -3);
   if (path.endsWith('/**')) return path.slice(0, -2);
+  // An exact page rule also matches the page's dot folder, so rules on that folder must win.
+  if (path.endsWith('.html')) return path.slice(0, -5);
   return path;
 }
 
 export function pathSorter({ path: path1 }, { path: path2 }) {
   const sp1 = prepPathForSort(path1);
   const sp2 = prepPathForSort(path2);
-  return sp2.length - sp1.length;
+  return sp2.length - sp1.length || path2.endsWith('.html') - path1.endsWith('.html');
 }
 
 /**
