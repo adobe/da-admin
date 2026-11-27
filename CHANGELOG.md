@@ -1,3 +1,10 @@
+## [1.18.1](https://github.com/adobe/da-admin/compare/v1.18.0...v1.18.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* exact page grants also cover the page's dot asset folder ([#338](https://github.com/adobe/da-admin/issues/338)) ([2e64b29](https://github.com/adobe/da-admin/commit/2e64b2978f3696de76709b93c4482806a2034e39))
+
 # [1.18.0](https://github.com/adobe/da-admin/compare/v1.17.0...v1.18.0) (2026-11-25)
 
 
