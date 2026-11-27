@@ -12,15 +12,18 @@
 
 import { hasPermission } from '../utils/auth.js';
 import { MEDIA_TYPES } from '../utils/constants.js';
-import { getFileBody, putHelper } from '../helpers/source.js';
+import { getFileBody, putHelper, sanitizeOrReject } from '../helpers/source.js';
 import { logMediaMigration } from '../utils/hlx6.js';
 
 export default async function postMedia({ req, env, daCtx }) {
   if (!hasPermission(daCtx, daCtx.key, 'write')) return { status: 403 };
 
-  const obj = await putHelper(req, env, daCtx);
-  if (!obj?.data) return { status: 400 };
-  const { body, type: contentType } = await getFileBody(obj.data);
+  const upload = await putHelper(req, env, daCtx);
+  if (!upload?.data) return { status: 400 };
+  // Media is typed by its content type; only SVG is script-capable among MEDIA_TYPES.
+  const sanitized = await sanitizeOrReject(upload, {}, env);
+  if (sanitized.error) return sanitized.error;
+  const { body, type: contentType } = await getFileBody(sanitized.obj.data);
 
   if (!MEDIA_TYPES.includes(contentType)) return { status: 400 };
 

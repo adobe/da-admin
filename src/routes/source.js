@@ -14,7 +14,7 @@ import putObject from '../storage/object/put.js';
 import deleteObjects from '../storage/object/delete.js';
 import { notifyCollab } from '../storage/utils/object.js';
 
-import { putHelper } from '../helpers/source.js';
+import { putHelper, sanitizeOrReject } from '../helpers/source.js';
 import deleteHelper from '../helpers/delete.js';
 import { hasPermission } from '../utils/auth.js';
 import { syncSourceDelete, syncSourcePut } from '../utils/hlx6.js';
@@ -39,7 +39,13 @@ export async function postSource({ req, env, daCtx }) {
     daCtx.users = daCtx.users.map((user) => ({ ...user, isAgentic: true }));
   }
 
-  const obj = await putHelper(req, env, daCtx);
+  const sanitized = await sanitizeOrReject(await putHelper(req, env, daCtx), daCtx, env);
+  if (sanitized.error) return sanitized.error;
+  const { obj } = sanitized;
+  if (sanitized.changed && initiator === 'collab') {
+    // Editor output should already be clean; collab is not reset to avoid losing live edits.
+    console.warn(`[sanitize] Collab write to ${daCtx.org}/${daCtx.key} contained disallowed markup`);
+  }
   const resp = await putObject(env, daCtx, obj);
 
   if (resp.status === 201 || resp.status === 200) {

@@ -11,6 +11,7 @@
  */
 import { FORM_TYPES, SUPPORTED_TYPES, MEDIA_TYPES } from '../utils/constants.js';
 import normalizeCharset from '../utils/charset.js';
+import { SanitizeError, sanitizeUpload } from '../utils/sanitize.js';
 
 /**
  * Builds a source response
@@ -88,6 +89,19 @@ export async function putHelper(req, env, daCtx) {
 export async function getFileBody(data) {
   await data.text();
   return { body: data, type: normalizeCharset(data.type) };
+}
+
+/**
+ * Sanitises an upload parsed by `putHelper`, mapping rejections to a response object.
+ * @returns {Promise<{obj?: Object, changed?: boolean, error?: Object}>}
+ */
+export async function sanitizeOrReject(obj, daCtx, env) {
+  try {
+    return await sanitizeUpload(obj, daCtx, env);
+  } catch (e) {
+    if (!(e instanceof SanitizeError)) throw e;
+    return { error: { status: e.status, body: JSON.stringify({ error: e.message }) } };
+  }
 }
 
 export function getObjectBody(data) {

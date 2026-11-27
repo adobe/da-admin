@@ -15,6 +15,9 @@ import {
 } from '../utils/hlx6.js';
 import { hasDescendantPermission, hasPermission } from '../utils/auth.js';
 import { FORM_TYPES } from '../utils/constants.js';
+import {
+  SanitizeError, getSanitizeKind, isSanitizeEnabled, sanitizeText,
+} from '../utils/sanitize.js';
 import { sourceRespObject } from '../helpers/source.js';
 import formatList from '../storage/utils/list.js';
 import { filterUnauthorized } from '../storage/object/list.js';
@@ -411,6 +414,19 @@ async function saveSource({ req, env, daCtx }) {
   const empty = body.byteLength === 0 || body === '';
   if (empty && daCtx.isFile) return errorResponse(400, 'Missing source content.');
   if (!empty && !daCtx.isFile) return errorResponse(410, 'Extensionless file writes are not supported. Use https://api.aem.live instead.');
+  if (!empty && isSanitizeEnabled(env)) {
+    try {
+      const kind = getSanitizeKind(daCtx.ext, type);
+      if (kind) {
+        const text = typeof body === 'string' ? body : new TextDecoder().decode(body);
+        const sanitized = sanitizeText(kind, text, { type });
+        if (sanitized.changed) body = sanitized.text;
+      }
+    } catch (e) {
+      if (!(e instanceof SanitizeError)) throw e;
+      return errorResponse(e.status, e.message);
+    }
+  }
   const upstream = await requestHlx6(req, env, siteSourcePath(daCtx, empty), {
     method: 'POST', body: empty ? undefined : body, type: empty ? undefined : type, conditional: true,
   });

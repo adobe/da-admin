@@ -27,6 +27,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
+    "@adobe/da-parser": "2.2.1",
     "@adobe/eslint-config-helix": "3.0.30",
     "@redocly/cli": "2.44.1",
     "@semantic-release/changelog": "7.0.0",
@@ -46,7 +47,8 @@
     "semantic-release-slack-bot": "4.0.2",
     "sinon": "22.1.0",
     "tree-kill": "1.2.2",
-    "wrangler": "4.119.0"
+    "wrangler": "4.119.0",
+    "yjs": "13.6.33"
   },
   "lint-staged": {
     "*.js": "eslint",
@@ -58,6 +60,10 @@
     "@aws-sdk/s3-request-presigner": "^3.468.0",
     "@cloudflare/workers-types": "5.20260804.1",
     "@ssttevee/cfw-formdata-polyfill": "0.2.1",
-    "jose": "6.2.8"
+    "hast-util-from-html": "2.0.3",
+    "hast-util-sanitize": "5.0.2",
+    "hast-util-to-html": "9.0.5",
+    "jose": "6.2.8",
+    "property-information": "7.1.0"
   }
 }

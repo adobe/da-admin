@@ -136,6 +136,54 @@ describe('Source Route', () => {
     }
   });
 
+  it('Test postSource sanitises HTML before storing and does not reset collab', async () => {
+    const stored = [];
+    const { postSource } = await esmock('../../src/routes/source.js', {
+      '../../src/storage/object/put.js': {
+        default: async (e, c, o) => {
+          stored.push(o);
+          return { status: 201 };
+        },
+      },
+    });
+
+    const savedFetch = globalThis.fetch;
+    const savedWarn = console.warn;
+    try {
+      const callbacks = [];
+      globalThis.fetch = async (url) => callbacks.push(url);
+      console.warn = () => {};
+      const req = new Request('http://localhost:8787/source/a/b/mydoc.html', {
+        method: 'POST',
+        headers: { 'content-type': 'text/html', 'x-da-initiator': 'collab' },
+        body: '<body><main><div><p onclick="alert(1)">hi</p><script>alert(1)</script></div></main></body>',
+      });
+      const daCtx = { key: '/a/b/mydoc.html', ext: 'html', aclCtx: { pathLookup: new Map() } };
+
+      const resp = await postSource({ req, env: { DA_COLLAB: 'http://localhost:1234' }, daCtx });
+      assert.equal(201, resp.status);
+      assert.equal(await stored[0].data.text(), '<body><main><div><p>hi</p></div></main></body>');
+      assert.equal(0, callbacks.length);
+    } finally {
+      globalThis.fetch = savedFetch;
+      console.warn = savedWarn;
+    }
+  });
+
+  it('Test postSource rejects HTML uploaded as SVG without storing', async () => {
+    const stored = [];
+    const { postSource } = await esmock('../../src/routes/source.js', {
+      '../../src/storage/object/put.js': { default: async (e, c, o) => stored.push(o) },
+    });
+    const body = new FormData();
+    body.append('data', new File(['<script>alert(1)</script>'], 'x', { type: 'text/html' }));
+    const req = new Request('http://localhost:8787/source/a/icon.svg', { method: 'POST', body });
+
+    const resp = await postSource({ req, env: {}, daCtx: { key: '/a/icon.svg', ext: 'svg', aclCtx: { pathLookup: new Map() } } });
+    assert.equal(415, resp.status);
+    assert.equal(0, stored.length);
+  });
+
   it('Test failing postSource does not trigger callback', async () => {
     const { postSource } = await esmock('../../src/routes/source.js', {
       '../../src/storage/object/put.js': {

@@ -41,6 +41,13 @@ source:
       target already has a stored identifier that differs from `guid`, the request is rejected with
       a 409 response. When omitted, the service generates a UUID.
 
+      HTML (`.html` or `text/html`) and SVG (`.svg` or `image/svg+xml`) content is sanitised before it
+      is stored. Markup outside the DA document format (scripts, event handlers, styles, unsafe URLs,
+      unknown elements and attributes) is removed silently. HTML is normalised to the DA structure
+      (`header`, `main` with section `div`s, `footer`, optional `da-metadata`), and content that is
+      already clean is stored byte for byte. A file extension that does not match the content type
+      is rejected with a 415 response; HTML over 10 MB or SVG over 5 MB is rejected with a 413 response.
+
       **Important:** For files, the `path` parameter must include the file extension (e.g., `myfile.html`, `data.json`).
       For folders, omit the extension (e.g., `myfolder`).
     parameters:
@@ -72,6 +79,10 @@ source:
         $ref: "./responses.yaml#/401"
       '409':
         $ref: "./responses.yaml#/409"
+      '413':
+        description: The HTML or SVG content exceeds the size limit.
+      '415':
+        description: The content type does not match the file extension.
       '500':
         $ref: "./responses.yaml#/500"
   post:
@@ -90,6 +101,13 @@ source:
       It must be a UUID. A `guid` that is not a UUID is rejected with a 400 response. When the
       target already has a stored identifier that differs from `guid`, the request is rejected with
       a 409 response. When omitted, the service generates a UUID.
+
+      HTML (`.html` or `text/html`) and SVG (`.svg` or `image/svg+xml`) content is sanitised before it
+      is stored. Markup outside the DA document format (scripts, event handlers, styles, unsafe URLs,
+      unknown elements and attributes) is removed silently. HTML is normalised to the DA structure
+      (`header`, `main` with section `div`s, `footer`, optional `da-metadata`), and content that is
+      already clean is stored byte for byte. A file extension that does not match the content type
+      is rejected with a 415 response; HTML over 10 MB or SVG over 5 MB is rejected with a 413 response.
 
       **Important:** For files, the `path` parameter must include the file extension (e.g., `myfile.html`, `data.json`).
       For folders, omit the extension (e.g., `myfolder`).
@@ -125,6 +143,10 @@ source:
         $ref: "./responses.yaml#/401"
       '409':
         $ref: "./responses.yaml#/409"
+      '413':
+        description: The HTML or SVG content exceeds the size limit.
+      '415':
+        description: The content type does not match the file extension.
       '500':
         $ref: "./responses.yaml#/500"
   delete:

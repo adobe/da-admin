@@ -30,6 +30,8 @@ export interface Env {
   // sites dual-writing to hlx6, as "org/site" or "org/site -> org2/site2".
   // Modifications on these sites are propagated to the hlx6 source bus.
   HLX6_DUAL_WRITES?: string[] | string;
+  // "off" disables sanitising of uploaded HTML/SVG (emergency kill switch; default on)
+  DA_SANITIZE?: string;
 
   DA_AUTH: KVNamespace,
   DA_CONFIG: KVNamespace,

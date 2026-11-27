@@ -37,6 +37,14 @@ describe('DA Resp', () => {
     assert(resp.headers.get('X-da-acltrace') === null);
   });
 
+  it('prevents stored sources from rendering as active content', () => {
+    [200, 404, 500].forEach((status) => {
+      const resp = daResp({ status, body: '<script>alert(1)</script>', contentType: 'text/html' });
+      assert.strictEqual(resp.headers.get('Content-Security-Policy'), "default-src 'none'; img-src 'self' https: data:; sandbox");
+      assert.strictEqual(resp.headers.get('X-Content-Type-Options'), 'nosniff');
+    });
+  });
+
   it('test 404 acltrace', () => {
     const actionTrace = { trace: 'value' };
     const aclCtx = { actionSet: ['read'], pathLookup: new Map(), actionTrace };

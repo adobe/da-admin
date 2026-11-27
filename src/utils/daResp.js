@@ -38,6 +38,9 @@ export default function daResp({
   headers.append('Access-Control-Allow-Headers', '*');
   headers.append('Access-Control-Expose-Headers', 'X-da-actions, X-da-child-actions, X-da-acltrace, X-da-id, da-continuation-token, ETag, x-error');
   headers.append('Content-Type', normalizeCharset(contentType));
+  // Stored sources must never render as an active document on this origin.
+  headers.append('Content-Security-Policy', "default-src 'none'; img-src 'self' https: data:; sandbox");
+  headers.append('X-Content-Type-Options', 'nosniff');
   if (contentLength) {
     headers.append('Content-Length', contentLength);
   }

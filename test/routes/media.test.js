@@ -141,6 +141,33 @@ describe('Media Route', () => {
     }
   });
 
+  it('sanitises SVG before forwarding it', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchCalls = [];
+    globalThis.fetch = async (url, options) => {
+      fetchCalls.push({ url, options });
+      return { ok: true, json: async () => ({}) };
+    };
+    try {
+      const postMedia = await esmock('../../src/routes/media.js', {
+        '../../src/utils/auth.js': { hasPermission: () => true },
+      });
+      const body = new FormData();
+      body.append('data', new File(['<svg onload="alert(1)"><circle r="1"/></svg>'], 'i.svg', { type: 'image/svg+xml' }));
+      const req = new Request('https://admin.da.live/media/org/test/i.svg', { method: 'POST', body });
+      const daCtx = {
+        key: '/test/i.svg', org: 'org', site: 'test', aemPathname: '/i.svg',
+      };
+
+      const resp = await postMedia.default({ req, env: { AEM_ADMIN_MEDIA_API: 'https://api.example.com/media' }, daCtx });
+      assert.strictEqual(resp.status, 200);
+      assert.strictEqual(fetchCalls[0].options.headers['Content-Type'], 'image/svg+xml');
+      assert.strictEqual(await fetchCalls[0].options.body.text(), '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1" /></svg>');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('handles API error responses', async () => {
     const hasPermission = () => true;
     const putHelper = async () => ({ data: { type: 'image/png' } });

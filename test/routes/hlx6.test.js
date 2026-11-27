@@ -283,6 +283,27 @@ describe('Helix 6 compatibility bridge', () => {
     assert.strictEqual(resp.headers.get('location'), null);
   });
 
+  it('forwards sanitised HTML and SVG and rejects invalid uploads without forwarding', async () => {
+    fetchStub.resolves(new Response(null, { status: 201 }));
+    await call('/source/org/site/page.html', {
+      method: 'POST', headers: { 'content-type': 'text/html' }, body: '<main><div><img src=x onerror=alert(1)></div></main>',
+    });
+    assert.strictEqual(fetchStub.firstCall.args[1].body, '<body><main><div><img src="x"></div></main></body>');
+    const clean = '<body><header></header><main><div><p>ok</p></div></main><footer></footer></body>';
+    await call('/source/org/site/clean.html', { method: 'POST', headers: { 'content-type': 'text/html' }, body: clean });
+    assert.strictEqual(new TextDecoder().decode(fetchStub.secondCall.args[1].body), clean);
+    const svg = new FormData();
+    svg.set('data', new File(['<svg><script>alert(1)</script></svg>'], 'i.svg', { type: 'image/svg+xml' }));
+    await call('/source/org/site/icon.svg', { method: 'POST', body: svg });
+    assert.strictEqual(fetchStub.thirdCall.args[1].body, '<svg xmlns="http://www.w3.org/2000/svg" />');
+
+    const mismatch = new FormData();
+    mismatch.set('data', new File(['<p>x</p>'], 'i.svg', { type: 'text/html' }));
+    const resp = await call('/source/org/site/icon.svg', { method: 'POST', body: mismatch });
+    assert.strictEqual(resp.status, 415);
+    assert(fetchStub.calledThrice);
+  });
+
   it('labels string SVG uploads and rejects unknown text extensions', async () => {
     fetchStub.resolves(new Response(null, { status: 201 }));
     const svg = new FormData();
